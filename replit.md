@@ -1,10 +1,11 @@
-# Foresight - Financial Modeling & Scenario Planning
+# Foresight - Wall Street-Grade Financial Modeling & Valuation Platform
 
 ## Overview
-Financial modeling and scenario planning application for solo founders and analysts. Replaces spreadsheet workflows with interactive dashboards, assumption-based forecasting, variance analysis, and shareable reports.
+Comprehensive financial modeling and valuation application covering 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. All data is simulated demo data.
 
 ## Recent Changes
-- 2026-02-09: Full MVP implementation - schema, backend routes, frontend pages, seed data, calculation engine
+- 2026-02-09: Complete rebuild - 12 database tables, full API layer, 9 frontend pages, comprehensive seed data, DCF/WACC/valuation calculation engine
+- 2026-02-09: Removed old pages (models.tsx, scenarios.tsx, actuals.tsx, reports.tsx) - replaced by new financial statement pages
 
 ## Architecture
 
@@ -15,42 +16,68 @@ Financial modeling and scenario planning application for solo founders and analy
 - **Charts**: Recharts
 - **Routing**: wouter (frontend)
 
-### Database Schema (6 tables)
-- `financial_models` - Core model with name, years, currency
-- `assumptions` - Revenue growth, churn, ARPU, cost structure (linked to model or scenario)
-- `scenarios` - Base/optimistic/pessimistic variants
-- `actuals` - Real performance data by period
-- `reports` - Snapshot reports with JSON data
-- `market_data` - Ticker data for benchmarks
+### Database Schema (12 tables)
+- `financial_models` - Core model with name, years, currency, shares outstanding
+- `revenue_line_items` - Revenue streams (Subscription, Services, Marketplace, Usage)
+- `revenue_periods` - Quarterly revenue data per line item
+- `income_statement_lines` - Annual P&L with all cost lines and margins
+- `balance_sheet_lines` - Assets, liabilities, equity with % of revenue
+- `cash_flow_lines` - Operating/investing/financing flows and FCF
+- `dcf_valuations` - WACC inputs, NPV, terminal value, target price
+- `valuation_comparisons` - P/R, P/E PEG, DCF bull/base/bear targets
+- `portfolio_positions` - 15 stock positions with 40+ fields each
+- `macro_indicators` - 16 economic indicators (rates, inflation, growth, labor)
+- `market_indices` - 12 global indices (US, Europe, Asia) with returns
+- `portfolio_red_flags` - Risk checklist items
+- `scenarios` - Bull/bear case scenario variants
+- `assumptions` - Model assumptions (growth, margins, costs)
 
 ### Key Files
 - `shared/schema.ts` - Drizzle schema + Zod validators + TypeScript types
-- `client/src/lib/calculations.ts` - Forecast engine, annual summaries, variance analysis
+- `client/src/lib/calculations.ts` - DCF/WACC, valuation multiples, portfolio metrics, sensitivity analysis
 - `server/routes.ts` - All API endpoints
 - `server/storage.ts` - DatabaseStorage class (IStorage interface)
-- `server/seed.ts` - Demo data seeder
-- `client/src/App.tsx` - Main app with sidebar layout
-- `client/src/pages/` - Dashboard, Models, Scenarios, Actuals, Reports, Market Data
-- `client/src/components/app-sidebar.tsx` - Navigation sidebar
-- `client/src/components/metric-card.tsx` - Reusable metric display card
+- `server/seed.ts` - Comprehensive demo data seeder (5 years financial data, 15 stocks, 16 macro, 12 indices)
+- `client/src/App.tsx` - Main app with sidebar layout, 9 routes
+- `client/src/components/app-sidebar.tsx` - Navigation sidebar with all modules
+
+### Frontend Pages (9 total)
+- `dashboard.tsx` - Financial overview, portfolio KPIs, sector allocation, macro data, top movers
+- `revenue-forecast.tsx` - Revenue streams table, quarterly breakdown, growth rates, charts
+- `income-statement.tsx` - Full P&L table with margins, YoY growth, margin analysis chart
+- `balance-sheet.tsx` - Assets/liabilities/equity with balance validation, stacked bar chart
+- `cash-flow.tsx` - Operating/investing/financing flows, FCF trend chart
+- `dcf-valuation.tsx` - WACC calculation panel, DCF results, 5x5 sensitivity table
+- `valuation-comparison.tsx` - P/R, P/E, DCF methods with bull/base/bear scenarios
+- `portfolio.tsx` - 15 positions table, analytics, risk/red flags, macro/indices tabs
+- `market-data.tsx` - Global indices tables, macro indicators by category, YTD performance chart
 
 ### API Routes
-- `GET/POST/DELETE /api/models` - CRUD for financial models
-- `GET/POST/PATCH /api/assumptions` - Manage assumptions
-- `GET/POST/DELETE /api/scenarios` - Scenario management
-- `GET/POST/DELETE /api/actuals` - Actual data tracking
-- `GET/POST/DELETE /api/reports` - Report snapshots
-- `GET/POST/DELETE /api/market-data` - Market data entries
+- `GET/POST/DELETE /api/models` - Financial models CRUD
+- `GET/POST /api/models/:id/revenue-line-items` - Revenue streams
+- `GET/POST /api/models/:id/revenue-periods` - Quarterly revenue data
+- `GET/POST /api/models/:id/income-statement` - Income statement lines
+- `GET/POST /api/models/:id/balance-sheet` - Balance sheet lines
+- `GET/POST /api/models/:id/cash-flow` - Cash flow lines
+- `GET/POST /api/models/:id/dcf` - DCF valuation data
+- `GET/POST /api/models/:id/valuation-comparison` - Multi-method valuation
+- `GET/POST/DELETE /api/portfolio` - Portfolio positions
+- `GET/POST /api/portfolio-red-flags` - Risk flags
+- `GET/POST /api/macro-indicators` - Macro economic data
+- `GET/POST /api/market-indices` - Global market indices
 
 ### Design Decisions
 - Dark mode default with theme toggle
 - Calculation logic runs client-side for responsiveness
-- Models auto-create base assumptions on creation
-- Scenarios auto-create associated assumptions
-- Seed data provides immediate demo experience
-- Market data uses simulated data (no external API dependency for MVP)
+- Seed data provides immediate Wall Street-grade demo experience
+- All data is simulated (no external API dependency)
+- Portfolio tracks 40+ fields per position (price, volume, moving averages, beta, P/E, etc.)
+- Technical indicators: MA50, MA200, golden cross detection
+- Risk analysis: stop-loss tracking, concentration risk, red flags checklist
+- Schema uses real (float) columns for financial data
 
 ## User Preferences
 - Dark mode preferred
 - Clean, professional UI with proper spacing
 - Comprehensive chart visualizations
+- Wall Street-grade data density
