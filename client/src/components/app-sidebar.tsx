@@ -1,10 +1,13 @@
 import { useLocation, Link } from "wouter";
 import {
   LayoutDashboard,
+  DollarSign,
   FileSpreadsheet,
-  GitBranch,
   BarChart3,
-  FileText,
+  Wallet,
+  Calculator,
+  Scale,
+  Briefcase,
   TrendingUp,
 } from "lucide-react";
 import {
@@ -19,12 +22,18 @@ import {
   SidebarHeader,
 } from "@/components/ui/sidebar";
 
-const navItems = [
+const modelingItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Models", url: "/models", icon: FileSpreadsheet },
-  { title: "Scenarios", url: "/scenarios", icon: GitBranch },
-  { title: "Actuals", url: "/actuals", icon: BarChart3 },
-  { title: "Reports", url: "/reports", icon: FileText },
+  { title: "Revenue Forecast", url: "/revenue", icon: DollarSign },
+  { title: "Income Statement", url: "/income-statement", icon: FileSpreadsheet },
+  { title: "Balance Sheet", url: "/balance-sheet", icon: BarChart3 },
+  { title: "Cash Flow", url: "/cash-flow", icon: Wallet },
+  { title: "DCF Valuation", url: "/dcf", icon: Calculator },
+  { title: "Valuation Compare", url: "/valuation", icon: Scale },
+];
+
+const portfolioItems = [
+  { title: "Portfolio", url: "/portfolio", icon: Briefcase },
   { title: "Market Data", url: "/market-data", icon: TrendingUp },
 ];
 
@@ -46,10 +55,30 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>Financial Model</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => {
+              {modelingItems.map((item) => {
+                const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s/g, "-")}`}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Portfolio & Markets</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {portfolioItems.map((item) => {
                 const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
                 return (
                   <SidebarMenuItem key={item.title}>

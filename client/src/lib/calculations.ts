@@ -1,139 +1,163 @@
-import type { Assumptions, ForecastRow, Actual, VarianceRow } from "@shared/schema";
+export function formatCurrency(val: number, decimals = 0): string {
+  if (Math.abs(val) >= 1e9) return `$${(val / 1e9).toFixed(1)}B`;
+  if (Math.abs(val) >= 1e6) return `$${(val / 1e6).toFixed(1)}M`;
+  if (Math.abs(val) >= 1e3) return `$${(val / 1e3).toFixed(decimals > 0 ? decimals : 1)}K`;
+  return `$${val.toFixed(decimals)}`;
+}
 
-export function generateForecast(assumptions: Assumptions, startYear: number, endYear: number): ForecastRow[] {
-  const rows: ForecastRow[] = [];
-  let cashBalance = Number(assumptions.initialCash || 100000);
-  let customers = assumptions.initialCustomers || 100;
-  const growthRate = Number(assumptions.revenueGrowthRate || 0.10);
-  const churnRate = Number(assumptions.churnRate || 0.05);
-  const arpu = Number(assumptions.avgRevenuePerUnit || 100);
-  const cogsP = Number(assumptions.cogsPercent || 0.30);
-  const smP = Number(assumptions.salesMarketingPercent || 0.20);
-  const rdP = Number(assumptions.rdPercent || 0.15);
-  const gaP = Number(assumptions.gaPercent || 0.10);
-  const taxR = Number(assumptions.taxRate || 0.25);
+export function formatPercent(val: number, decimals = 1): string {
+  return `${(val * 100).toFixed(decimals)}%`;
+}
 
-  for (let year = startYear; year <= endYear; year++) {
-    for (let month = 1; month <= 12; month++) {
-      const monthIndex = (year - startYear) * 12 + (month - 1);
-      if (monthIndex > 0) {
-        const monthlyGrowth = Math.pow(1 + growthRate, 1 / 12) - 1;
-        const monthlyChurn = churnRate / 12;
-        customers = Math.round(customers * (1 + monthlyGrowth - monthlyChurn));
-      }
+export function formatNumber(val: number, decimals = 0): string {
+  return val.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
 
-      const revenue = customers * arpu / 12;
-      const cogs = revenue * cogsP;
-      const grossProfit = revenue - cogs;
-      const salesMarketing = revenue * smP;
-      const rd = revenue * rdP;
-      const ga = revenue * gaP;
-      const totalOpex = salesMarketing + rd + ga;
-      const ebitda = grossProfit - totalOpex;
-      const taxableIncome = ebitda;
-      const taxes = taxableIncome > 0 ? taxableIncome * taxR : 0;
-      const netIncome = taxableIncome - taxes;
-      const cashFlow = netIncome;
-      cashBalance += cashFlow;
+export function formatLargeCurrency(val: number): string {
+  if (Math.abs(val) >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
+  if (Math.abs(val) >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
+  if (Math.abs(val) >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
+  if (Math.abs(val) >= 1e3) return `$${(val / 1e3).toFixed(2)}K`;
+  return `$${val.toFixed(2)}`;
+}
 
-      const monthlyBurn = cashFlow < 0 ? Math.abs(cashFlow) : 0;
-      const runway = monthlyBurn > 0 ? cashBalance / monthlyBurn : null;
+export function calcYoYGrowth(current: number, prior: number): number | null {
+  if (!prior || prior === 0) return null;
+  return (current - prior) / Math.abs(prior);
+}
 
-      const period = `${year}-${String(month).padStart(2, "0")}`;
+export function calcQoQGrowth(current: number, prior: number): number | null {
+  if (!prior || prior === 0) return null;
+  return (current - prior) / Math.abs(prior);
+}
 
-      rows.push({
-        period,
-        year,
-        month,
-        revenue: Math.round(revenue),
-        cogs: Math.round(cogs),
-        grossProfit: Math.round(grossProfit),
-        salesMarketing: Math.round(salesMarketing),
-        rd: Math.round(rd),
-        ga: Math.round(ga),
-        totalOpex: Math.round(totalOpex),
-        ebitda: Math.round(ebitda),
-        netIncome: Math.round(netIncome),
-        cashFlow: Math.round(cashFlow),
-        cashBalance: Math.round(cashBalance),
-        customers,
-        runway: runway !== null ? Math.round(runway * 10) / 10 : null,
-      });
-    }
+export function calcCostOfEquity(riskFreeRate: number, beta: number, marketReturn: number): number {
+  return riskFreeRate + beta * (marketReturn - riskFreeRate);
+}
+
+export function calcWACC(
+  costOfEquity: number, equityWeight: number,
+  costOfDebt: number, debtWeight: number, taxRate: number
+): number {
+  return costOfEquity * equityWeight + costOfDebt * (1 - taxRate) * debtWeight;
+}
+
+export function calcDCFTargetPrice(
+  fcfProjections: number[], wacc: number, longTermGrowth: number,
+  totalDebt: number, sharesOutstanding: number
+): {
+  npv: number; terminalValue: number; terminalValueDiscounted: number;
+  targetEquityValue: number; targetPricePerShare: number;
+} {
+  let npv = 0;
+  for (let i = 0; i < fcfProjections.length; i++) {
+    npv += fcfProjections[i] / Math.pow(1 + wacc, i + 1);
   }
-  return rows;
+
+  const lastFCF = fcfProjections[fcfProjections.length - 1] || 0;
+  const terminalValue = (lastFCF * (1 + longTermGrowth)) / (wacc - longTermGrowth);
+  const terminalValueDiscounted = terminalValue / Math.pow(1 + wacc, fcfProjections.length);
+  const targetEquityValue = npv + terminalValueDiscounted - totalDebt;
+  const targetPricePerShare = sharesOutstanding > 0 ? targetEquityValue / sharesOutstanding : 0;
+
+  return { npv, terminalValue, terminalValueDiscounted, targetEquityValue, targetPricePerShare };
 }
 
-export function generateAnnualSummary(rows: ForecastRow[]) {
-  const yearMap = new Map<number, ForecastRow[]>();
-  rows.forEach((r) => {
-    if (!yearMap.has(r.year)) yearMap.set(r.year, []);
-    yearMap.get(r.year)!.push(r);
-  });
+export function calcSensitivityTable(
+  fcfProjections: number[], baseLTG: number, baseWACC: number,
+  totalDebt: number, sharesOutstanding: number
+): { waccRange: number[]; ltgRange: number[]; values: number[][] } {
+  const waccDeltas = [-0.02, -0.01, 0, 0.01, 0.02];
+  const ltgDeltas = [-0.01, -0.005, 0, 0.005, 0.01];
+  const waccRange = waccDeltas.map(d => baseWACC + d);
+  const ltgRange = ltgDeltas.map(d => baseLTG + d);
 
-  return Array.from(yearMap.entries()).map(([year, months]) => ({
-    year,
-    revenue: months.reduce((s, m) => s + m.revenue, 0),
-    cogs: months.reduce((s, m) => s + m.cogs, 0),
-    grossProfit: months.reduce((s, m) => s + m.grossProfit, 0),
-    totalOpex: months.reduce((s, m) => s + m.totalOpex, 0),
-    ebitda: months.reduce((s, m) => s + m.ebitda, 0),
-    netIncome: months.reduce((s, m) => s + m.netIncome, 0),
-    cashFlow: months.reduce((s, m) => s + m.cashFlow, 0),
-    cashBalance: months[months.length - 1].cashBalance,
-    customers: months[months.length - 1].customers,
-    runway: months[months.length - 1].runway,
-  }));
+  const values = waccRange.map(w =>
+    ltgRange.map(g => {
+      if (w <= g) return 0;
+      const result = calcDCFTargetPrice(fcfProjections, w, g, totalDebt, sharesOutstanding);
+      return result.targetPricePerShare;
+    })
+  );
+
+  return { waccRange, ltgRange, values };
 }
 
-export function calculateVariance(
-  forecast: ForecastRow[],
-  actualsData: Actual[]
-): VarianceRow[] {
-  const actualsMap = new Map<string, Actual>();
-  actualsData.forEach((a) => actualsMap.set(a.period, a));
-
-  return forecast.map((f) => {
-    const actual = actualsMap.get(f.period);
-    const actualRev = actual?.revenue ? Number(actual.revenue) : null;
-    const actualNI = actual?.netIncome ? Number(actual.netIncome) : null;
-    const actualCash = actual?.cashBalance ? Number(actual.cashBalance) : null;
-
-    return {
-      period: f.period,
-      forecastRevenue: f.revenue,
-      actualRevenue: actualRev,
-      revenueVariance: actualRev !== null ? actualRev - f.revenue : null,
-      revenueVariancePercent: actualRev !== null && f.revenue !== 0 ? ((actualRev - f.revenue) / f.revenue) * 100 : null,
-      forecastNetIncome: f.netIncome,
-      actualNetIncome: actualNI,
-      netIncomeVariance: actualNI !== null ? actualNI - f.netIncome : null,
-      forecastCash: f.cashBalance,
-      actualCash: actualCash,
-      cashVariance: actualCash !== null ? actualCash - f.cashBalance : null,
-    };
-  });
+export function calcPRValuation(
+  revenue: number, sharesOutstanding: number,
+  bullMultiple: number, baseMultiple: number, bearMultiple: number
+): { bull: number; base: number; bear: number } {
+  const rps = sharesOutstanding > 0 ? revenue / sharesOutstanding : 0;
+  return {
+    bull: rps * bullMultiple,
+    base: rps * baseMultiple,
+    bear: rps * bearMultiple,
+  };
 }
 
-export function formatCurrency(value: number, compact = false): string {
-  if (compact) {
-    const abs = Math.abs(value);
-    if (abs >= 1e9) return `$${(value / 1e9).toFixed(1)}B`;
-    if (abs >= 1e6) return `$${(value / 1e6).toFixed(1)}M`;
-    if (abs >= 1e3) return `$${(value / 1e3).toFixed(1)}K`;
+export function calcPEValuation(
+  eps: number, earningsGrowth: number,
+  bullPEG: number, basePEG: number, bearPEG: number
+): { bull: number; base: number; bear: number } {
+  const growthPct = earningsGrowth * 100;
+  return {
+    bull: eps * growthPct * bullPEG,
+    base: eps * growthPct * basePEG,
+    bear: eps * growthPct * bearPEG,
+  };
+}
+
+export function calcGoldenCross(ma50: number, ma200: number): boolean {
+  return ma50 > ma200;
+}
+
+export function calcGainLoss(currentPrice: number, purchasePrice: number, shares: number): {
+  gainLossPercent: number; gainLossDollar: number; positionValue: number;
+} {
+  const gainLossPercent = purchasePrice > 0 ? (currentPrice - purchasePrice) / purchasePrice : 0;
+  const gainLossDollar = (currentPrice - purchasePrice) * shares;
+  const positionValue = currentPrice * shares;
+  return { gainLossPercent, gainLossDollar, positionValue };
+}
+
+export function calcPortfolioMetrics(positions: Array<{
+  currentPrice: number; purchasePrice: number; sharesHeld: number;
+  beta: number; sector: string; dailyChangePercent: number;
+}>) {
+  let totalValue = 0;
+  let totalCost = 0;
+  let weightedBeta = 0;
+  const sectorMap: Record<string, number> = {};
+
+  for (const p of positions) {
+    const pv = p.currentPrice * p.sharesHeld;
+    totalValue += pv;
+    totalCost += p.purchasePrice * p.sharesHeld;
   }
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
-export function formatPercent(value: number): string {
-  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
-}
+  for (const p of positions) {
+    const pv = p.currentPrice * p.sharesHeld;
+    const weight = totalValue > 0 ? pv / totalValue : 0;
+    weightedBeta += p.beta * weight;
+    const sector = p.sector || "Other";
+    sectorMap[sector] = (sectorMap[sector] || 0) + pv;
+  }
 
-export function formatNumber(value: number): string {
-  return new Intl.NumberFormat("en-US").format(value);
+  const totalGainLoss = totalValue - totalCost;
+  const totalGainLossPercent = totalCost > 0 ? totalGainLoss / totalCost : 0;
+
+  const sectorAllocation = Object.entries(sectorMap).map(([sector, value]) => ({
+    sector,
+    value,
+    percent: totalValue > 0 ? value / totalValue : 0,
+  })).sort((a, b) => b.value - a.value);
+
+  const topConcentration = sectorAllocation.length > 0 ? sectorAllocation[0].percent : 0;
+  const concentrationRisk = topConcentration > 0.25 ? "High" : topConcentration > 0.15 ? "Medium" : "Low";
+
+  return {
+    totalValue, totalCost, totalGainLoss, totalGainLossPercent,
+    weightedBeta, sectorAllocation, concentrationRisk,
+    positionCount: positions.length,
+  };
 }

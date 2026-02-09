@@ -1,9 +1,18 @@
 import type { Express, Request, Response } from "express";
-import type { Server } from "http";
+import { Server } from "http";
 import { storage } from "./storage";
-import { insertFinancialModelSchema, insertAssumptionsSchema, insertScenarioSchema, insertActualsSchema, insertReportSchema, insertMarketDataSchema } from "@shared/schema";
+import {
+  insertFinancialModelSchema, insertRevenueLineItemSchema,
+  insertRevenuePeriodSchema, insertIncomeStatementLineSchema,
+  insertBalanceSheetLineSchema, insertCashFlowLineSchema,
+  insertDcfValuationSchema, insertValuationComparisonSchema,
+  insertPortfolioPositionSchema, insertMacroIndicatorSchema,
+  insertMarketIndexSchema, insertPortfolioRedFlagSchema,
+  insertScenarioSchema, insertAssumptionsSchema,
+  insertActualsSchema, insertReportSchema,
+} from "@shared/schema";
 
-export function registerRoutes(server: Server, app: Express) {
+export async function registerRoutes(server: Server, app: Express) {
   app.get("/api/models", async (_req: Request, res: Response) => {
     const models = await storage.getModels();
     res.json(models);
@@ -16,23 +25,15 @@ export function registerRoutes(server: Server, app: Express) {
   });
 
   app.post("/api/models", async (req: Request, res: Response) => {
-    try {
-      const { assumptions: assumptionData, ...modelData } = req.body;
-      const parsed = insertFinancialModelSchema.parse(modelData);
-      const model = await storage.createModel(parsed);
+    const parsed = insertFinancialModelSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const model = await storage.createModel(parsed.data);
+    res.json(model);
+  });
 
-      if (assumptionData) {
-        const assumptionParsed = insertAssumptionsSchema.parse({
-          ...assumptionData,
-          modelId: model.id,
-        });
-        await storage.createAssumptions(assumptionParsed);
-      }
-
-      res.status(201).json(model);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message || "Invalid model data" });
-    }
+  app.patch("/api/models/:id", async (req: Request, res: Response) => {
+    const model = await storage.updateModel(req.params.id, req.body);
+    res.json(model);
   });
 
   app.delete("/api/models/:id", async (req: Request, res: Response) => {
@@ -40,87 +41,223 @@ export function registerRoutes(server: Server, app: Express) {
     res.json({ success: true });
   });
 
-  app.get("/api/assumptions", async (_req: Request, res: Response) => {
-    const all = await storage.getAssumptions();
-    res.json(all);
+  app.get("/api/models/:modelId/revenue-line-items", async (req: Request, res: Response) => {
+    const items = await storage.getRevenueLineItems(req.params.modelId);
+    res.json(items);
   });
 
-  app.get("/api/assumptions/model/:modelId", async (req: Request, res: Response) => {
-    const all = await storage.getAssumptionsByModel(req.params.modelId);
-    res.json(all);
+  app.post("/api/revenue-line-items", async (req: Request, res: Response) => {
+    const parsed = insertRevenueLineItemSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const item = await storage.createRevenueLineItem(parsed.data);
+    res.json(item);
   });
 
-  app.post("/api/assumptions", async (req: Request, res: Response) => {
-    try {
-      const parsed = insertAssumptionsSchema.parse(req.body);
-      const result = await storage.createAssumptions(parsed);
-      res.status(201).json(result);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message || "Invalid assumptions data" });
+  app.delete("/api/revenue-line-items/:id", async (req: Request, res: Response) => {
+    await storage.deleteRevenueLineItem(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.get("/api/models/:modelId/revenue-periods", async (req: Request, res: Response) => {
+    const periods = await storage.getRevenuePeriods(req.params.modelId);
+    res.json(periods);
+  });
+
+  app.post("/api/revenue-periods", async (req: Request, res: Response) => {
+    const parsed = insertRevenuePeriodSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const period = await storage.createRevenuePeriod(parsed.data);
+    res.json(period);
+  });
+
+  app.post("/api/revenue-periods/bulk", async (req: Request, res: Response) => {
+    const periods = await storage.upsertRevenuePeriods(req.body);
+    res.json(periods);
+  });
+
+  app.patch("/api/revenue-periods/:id", async (req: Request, res: Response) => {
+    const period = await storage.updateRevenuePeriod(req.params.id, req.body);
+    res.json(period);
+  });
+
+  app.get("/api/models/:modelId/income-statement", async (req: Request, res: Response) => {
+    const lines = await storage.getIncomeStatementLines(req.params.modelId);
+    res.json(lines);
+  });
+
+  app.post("/api/income-statement", async (req: Request, res: Response) => {
+    const line = await storage.upsertIncomeStatementLine(req.body);
+    res.json(line);
+  });
+
+  app.post("/api/income-statement/bulk", async (req: Request, res: Response) => {
+    const results = [];
+    for (const item of req.body) {
+      const line = await storage.upsertIncomeStatementLine(item);
+      results.push(line);
     }
+    res.json(results);
   });
 
-  app.patch("/api/assumptions/:id", async (req: Request, res: Response) => {
-    const result = await storage.updateAssumptions(req.params.id, req.body);
-    if (!result) return res.status(404).json({ message: "Assumptions not found" });
-    res.json(result);
+  app.delete("/api/models/:modelId/income-statement", async (req: Request, res: Response) => {
+    await storage.deleteIncomeStatementLines(req.params.modelId);
+    res.json({ success: true });
   });
 
-  app.get("/api/scenarios", async (_req: Request, res: Response) => {
-    const all = await storage.getScenarios();
-    res.json(all);
+  app.get("/api/models/:modelId/balance-sheet", async (req: Request, res: Response) => {
+    const lines = await storage.getBalanceSheetLines(req.params.modelId);
+    res.json(lines);
   });
 
-  app.get("/api/scenarios/model/:modelId", async (req: Request, res: Response) => {
-    const all = await storage.getScenariosByModel(req.params.modelId);
-    res.json(all);
+  app.post("/api/balance-sheet", async (req: Request, res: Response) => {
+    const line = await storage.upsertBalanceSheetLine(req.body);
+    res.json(line);
+  });
+
+  app.post("/api/balance-sheet/bulk", async (req: Request, res: Response) => {
+    const results = [];
+    for (const item of req.body) {
+      const line = await storage.upsertBalanceSheetLine(item);
+      results.push(line);
+    }
+    res.json(results);
+  });
+
+  app.get("/api/models/:modelId/cash-flow", async (req: Request, res: Response) => {
+    const lines = await storage.getCashFlowLines(req.params.modelId);
+    res.json(lines);
+  });
+
+  app.post("/api/cash-flow", async (req: Request, res: Response) => {
+    const line = await storage.upsertCashFlowLine(req.body);
+    res.json(line);
+  });
+
+  app.post("/api/cash-flow/bulk", async (req: Request, res: Response) => {
+    const results = [];
+    for (const item of req.body) {
+      const line = await storage.upsertCashFlowLine(item);
+      results.push(line);
+    }
+    res.json(results);
+  });
+
+  app.get("/api/models/:modelId/dcf", async (req: Request, res: Response) => {
+    const val = await storage.getDcfValuation(req.params.modelId);
+    res.json(val || null);
+  });
+
+  app.post("/api/dcf", async (req: Request, res: Response) => {
+    const val = await storage.upsertDcfValuation(req.body);
+    res.json(val);
+  });
+
+  app.get("/api/models/:modelId/valuation-comparison", async (req: Request, res: Response) => {
+    const val = await storage.getValuationComparison(req.params.modelId);
+    res.json(val || null);
+  });
+
+  app.post("/api/valuation-comparison", async (req: Request, res: Response) => {
+    const val = await storage.upsertValuationComparison(req.body);
+    res.json(val);
+  });
+
+  app.get("/api/portfolio", async (_req: Request, res: Response) => {
+    const positions = await storage.getPortfolioPositions();
+    res.json(positions);
+  });
+
+  app.post("/api/portfolio", async (req: Request, res: Response) => {
+    const parsed = insertPortfolioPositionSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const pos = await storage.createPortfolioPosition(parsed.data);
+    res.json(pos);
+  });
+
+  app.patch("/api/portfolio/:id", async (req: Request, res: Response) => {
+    const pos = await storage.updatePortfolioPosition(req.params.id, req.body);
+    res.json(pos);
+  });
+
+  app.delete("/api/portfolio/:id", async (req: Request, res: Response) => {
+    await storage.deletePortfolioPosition(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.get("/api/macro-indicators", async (_req: Request, res: Response) => {
+    const indicators = await storage.getMacroIndicators();
+    res.json(indicators);
+  });
+
+  app.post("/api/macro-indicators", async (req: Request, res: Response) => {
+    const ind = await storage.upsertMacroIndicator(req.body);
+    res.json(ind);
+  });
+
+  app.get("/api/market-indices", async (_req: Request, res: Response) => {
+    const indices = await storage.getMarketIndices();
+    res.json(indices);
+  });
+
+  app.post("/api/market-indices", async (req: Request, res: Response) => {
+    const idx = await storage.upsertMarketIndex(req.body);
+    res.json(idx);
+  });
+
+  app.get("/api/portfolio-red-flags", async (_req: Request, res: Response) => {
+    const flags = await storage.getPortfolioRedFlags();
+    res.json(flags);
+  });
+
+  app.post("/api/portfolio-red-flags", async (req: Request, res: Response) => {
+    const flag = await storage.upsertPortfolioRedFlag(req.body);
+    res.json(flag);
+  });
+
+  app.get("/api/models/:modelId/scenarios", async (req: Request, res: Response) => {
+    const s = await storage.getScenarios(req.params.modelId);
+    res.json(s);
   });
 
   app.post("/api/scenarios", async (req: Request, res: Response) => {
-    try {
-      const { assumptions: assumptionData, ...scenarioData } = req.body;
-      const parsed = insertScenarioSchema.parse(scenarioData);
-      const scenario = await storage.createScenario(parsed);
-
-      if (assumptionData) {
-        const assumptionParsed = insertAssumptionsSchema.parse({
-          ...assumptionData,
-          modelId: scenario.modelId,
-          scenarioId: scenario.id,
-        });
-        await storage.createAssumptions(assumptionParsed);
-      }
-
-      res.status(201).json(scenario);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message || "Invalid scenario data" });
-    }
+    const parsed = insertScenarioSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const s = await storage.createScenario(parsed.data);
+    res.json(s);
   });
 
   app.delete("/api/scenarios/:id", async (req: Request, res: Response) => {
-    await storage.deleteAssumptionsByScenario(req.params.id);
     await storage.deleteScenario(req.params.id);
     res.json({ success: true });
   });
 
-  app.get("/api/actuals", async (_req: Request, res: Response) => {
-    const all = await storage.getActuals();
-    res.json(all);
+  app.get("/api/models/:modelId/assumptions", async (req: Request, res: Response) => {
+    const a = await storage.getAssumptions(req.params.modelId);
+    res.json(a);
   });
 
-  app.get("/api/actuals/model/:modelId", async (req: Request, res: Response) => {
-    const all = await storage.getActualsByModel(req.params.modelId);
-    res.json(all);
+  app.post("/api/assumptions", async (req: Request, res: Response) => {
+    const parsed = insertAssumptionsSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const a = await storage.createAssumptions(parsed.data);
+    res.json(a);
+  });
+
+  app.patch("/api/assumptions/:id", async (req: Request, res: Response) => {
+    const a = await storage.updateAssumptions(req.params.id, req.body);
+    res.json(a);
+  });
+
+  app.get("/api/models/:modelId/actuals", async (req: Request, res: Response) => {
+    const a = await storage.getActuals(req.params.modelId);
+    res.json(a);
   });
 
   app.post("/api/actuals", async (req: Request, res: Response) => {
-    try {
-      const parsed = insertActualsSchema.parse(req.body);
-      const result = await storage.createActual(parsed);
-      res.status(201).json(result);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message || "Invalid actuals data" });
-    }
+    const parsed = insertActualsSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const a = await storage.createActual(parsed.data);
+    res.json(a);
   });
 
   app.delete("/api/actuals/:id", async (req: Request, res: Response) => {
@@ -128,71 +265,20 @@ export function registerRoutes(server: Server, app: Express) {
     res.json({ success: true });
   });
 
-  app.get("/api/reports", async (_req: Request, res: Response) => {
-    const all = await storage.getReports();
-    res.json(all);
-  });
-
-  app.get("/api/reports/:id", async (req: Request, res: Response) => {
-    const report = await storage.getReport(req.params.id);
-    if (!report) return res.status(404).json({ message: "Report not found" });
-    res.json(report);
+  app.get("/api/models/:modelId/reports", async (req: Request, res: Response) => {
+    const r = await storage.getReports(req.params.modelId);
+    res.json(r);
   });
 
   app.post("/api/reports", async (req: Request, res: Response) => {
-    try {
-      const parsed = insertReportSchema.parse(req.body);
-      const result = await storage.createReport(parsed);
-      res.status(201).json(result);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message || "Invalid report data" });
-    }
+    const parsed = insertReportSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const r = await storage.createReport(parsed.data);
+    res.json(r);
   });
 
   app.delete("/api/reports/:id", async (req: Request, res: Response) => {
     await storage.deleteReport(req.params.id);
-    res.json({ success: true });
-  });
-
-  app.get("/api/market-data", async (_req: Request, res: Response) => {
-    const all = await storage.getMarketData();
-    res.json(all);
-  });
-
-  app.post("/api/market-data/fetch", async (req: Request, res: Response) => {
-    try {
-      const { modelId, ticker } = req.body;
-      if (!modelId || !ticker) {
-        return res.status(400).json({ message: "modelId and ticker are required" });
-      }
-
-      const mockMarketData: Record<string, any> = {
-        "AAPL": { price: 237.45, changePercent: 1.23, volume: 54200000, marketCap: 3640000000000 },
-        "MSFT": { price: 425.80, changePercent: 0.87, volume: 22100000, marketCap: 3160000000000 },
-        "GOOGL": { price: 185.30, changePercent: -0.45, volume: 18700000, marketCap: 2280000000000 },
-        "AMZN": { price: 219.15, changePercent: 2.10, volume: 42300000, marketCap: 2290000000000 },
-        "TSLA": { price: 342.60, changePercent: -1.82, volume: 98500000, marketCap: 1100000000000 },
-        "META": { price: 615.20, changePercent: 0.95, volume: 15400000, marketCap: 1560000000000 },
-        "NVDA": { price: 138.50, changePercent: 3.21, volume: 312000000, marketCap: 3390000000000 },
-      };
-
-      const data = mockMarketData[ticker] || { price: (Math.random() * 200 + 50).toFixed(2), changePercent: (Math.random() * 6 - 3).toFixed(2), volume: Math.floor(Math.random() * 50000000) };
-
-      const parsed = insertMarketDataSchema.parse({
-        modelId,
-        ticker,
-        dataType: "price",
-        data,
-      });
-      const result = await storage.createMarketData(parsed);
-      res.status(201).json(result);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message || "Failed to fetch market data" });
-    }
-  });
-
-  app.delete("/api/market-data/:id", async (req: Request, res: Response) => {
-    await storage.deleteMarketData(req.params.id);
     res.json({ success: true });
   });
 }

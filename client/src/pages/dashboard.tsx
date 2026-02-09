@@ -1,297 +1,268 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MetricCard } from "@/components/metric-card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { DollarSign, Users, TrendingUp, Clock, ArrowUpRight, ArrowDownRight } from "lucide-react";
-import { formatCurrency, formatNumber, generateForecast, generateAnnualSummary } from "@/lib/calculations";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from "recharts";
-import type { FinancialModel, Assumptions, Scenario, Actual } from "@shared/schema";
+import { Badge } from "@/components/ui/badge";
+import { formatCurrency, formatPercent, calcPortfolioMetrics } from "@/lib/calculations";
+import type { FinancialModel, IncomeStatementLine, PortfolioPosition, MacroIndicator, MarketIndex } from "@shared/schema";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { TrendingUp, TrendingDown, DollarSign, Briefcase, Activity } from "lucide-react";
 
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[...Array(4)].map((_, i) => (
-          <Card key={i}><CardContent className="p-4"><Skeleton className="h-16 w-full" /></CardContent></Card>
-        ))}
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {[...Array(2)].map((_, i) => (
-          <Card key={i}><CardContent className="p-6"><Skeleton className="h-64 w-full" /></CardContent></Card>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-const chartColors = {
-  revenue: "hsl(var(--chart-1))",
-  netIncome: "hsl(var(--chart-2))",
-  cashBalance: "hsl(var(--chart-3))",
-  customers: "hsl(var(--chart-4))",
-  forecast: "hsl(var(--chart-1))",
-  actual: "hsl(var(--chart-5))",
-};
-
-function CustomTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="rounded-md border bg-popover p-3 text-popover-foreground shadow-md">
-      <p className="text-xs font-medium text-muted-foreground mb-1">{label}</p>
-      {payload.map((entry: any, i: number) => (
-        <p key={i} className="text-sm font-semibold" style={{ color: entry.color }}>
-          {entry.name}: {typeof entry.value === "number" && entry.name !== "Customers"
-            ? formatCurrency(entry.value, true)
-            : formatNumber(entry.value)}
-        </p>
-      ))}
-    </div>
-  );
-}
+const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
 export default function Dashboard() {
-  const { data: models, isLoading: modelsLoading } = useQuery<FinancialModel[]>({
-    queryKey: ["/api/models"],
+  const { data: models } = useQuery<FinancialModel[]>({ queryKey: ["/api/models"] });
+  const { data: portfolio } = useQuery<PortfolioPosition[]>({ queryKey: ["/api/portfolio"] });
+  const { data: macro } = useQuery<MacroIndicator[]>({ queryKey: ["/api/macro-indicators"] });
+  const { data: indices } = useQuery<MarketIndex[]>({ queryKey: ["/api/market-indices"] });
+
+  const model = models?.[0];
+  const { data: incomeData } = useQuery<IncomeStatementLine[]>({
+    queryKey: ["/api/models", model?.id, "income-statement"],
+    enabled: !!model,
   });
 
-  const { data: allAssumptions, isLoading: assumpLoading } = useQuery<Assumptions[]>({
-    queryKey: ["/api/assumptions"],
-  });
+  const portfolioMetrics = portfolio?.length ? calcPortfolioMetrics(
+    portfolio.map(p => ({
+      currentPrice: p.currentPrice || 0,
+      purchasePrice: p.purchasePrice || 0,
+      sharesHeld: p.sharesHeld || 0,
+      beta: p.beta || 1,
+      sector: p.sector || "Other",
+      dailyChangePercent: p.dailyChangePercent || 0,
+    }))
+  ) : null;
 
-  const { data: allScenarios } = useQuery<Scenario[]>({
-    queryKey: ["/api/scenarios"],
-  });
+  const revenueChartData = incomeData?.map(d => ({
+    year: d.year,
+    Revenue: (d.revenue || 0) / 1e6,
+    "Net Income": (d.netIncome || 0) / 1e6,
+    EBITDA: (d.ebitda || 0) / 1e6,
+  })) || [];
 
-  const { data: allActuals } = useQuery<Actual[]>({
-    queryKey: ["/api/actuals"],
-  });
-
-  const isLoading = modelsLoading || assumpLoading;
-
-  if (isLoading) {
-    return (
-      <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-1">Overview of your financial models and forecasts</p>
-        </div>
-        <DashboardSkeleton />
-      </div>
-    );
-  }
-
-  const activeModel = models?.[0];
-  const modelAssumptions = allAssumptions?.filter(a => a.modelId === activeModel?.id && !a.scenarioId);
-  const baseAssumption = modelAssumptions?.[0];
-
-  let forecast: ReturnType<typeof generateForecast> = [];
-  let annualSummary: ReturnType<typeof generateAnnualSummary> = [];
-
-  if (activeModel && baseAssumption) {
-    forecast = generateForecast(baseAssumption, activeModel.startYear, activeModel.endYear);
-    annualSummary = generateAnnualSummary(forecast);
-  }
-
-  const currentMonth = forecast[forecast.length - 1];
-  const firstMonth = forecast[0];
-  const scenarios = allScenarios?.filter(s => s.modelId === activeModel?.id) || [];
-  const actualsForModel = allActuals?.filter(a => a.modelId === activeModel?.id) || [];
-
-  const totalRevenue = annualSummary.reduce((s, y) => s + y.revenue, 0);
-  const endCash = currentMonth?.cashBalance || 0;
-  const endCustomers = currentMonth?.customers || 0;
-  const runwayMonths = currentMonth?.runway;
-
-  const revenueChartData = annualSummary.map(y => ({
-    name: String(y.year),
-    Revenue: y.revenue,
-    "Net Income": y.netIncome,
-  }));
-
-  const cashChartData = forecast.filter((_, i) => i % 3 === 0).map(r => ({
-    name: r.period,
-    "Cash Balance": r.cashBalance,
-    Customers: r.customers,
-  }));
+  const interestRates = macro?.filter(m => m.category === "Interest Rates") || [];
+  const inflation = macro?.filter(m => m.category === "Inflation") || [];
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {activeModel ? `Viewing: ${activeModel.name}` : "Create a model to get started"}
-        </p>
+    <div className="p-4 space-y-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold" data-testid="text-page-title">Financial Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Overview of your financial model and portfolio</p>
+        </div>
+        {model && <Badge variant="outline" data-testid="badge-model-name">{model.name}</Badge>}
       </div>
 
-      {!activeModel ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <TrendingUp className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No Models Yet</h3>
-            <p className="text-sm text-muted-foreground text-center max-w-md">
-              Create your first financial model to see projections, scenarios, and performance metrics here.
-            </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card data-testid="card-total-revenue">
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Revenue (Latest)</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{incomeData?.length ? formatCurrency(incomeData[incomeData.length - 1].revenue || 0) : "--"}</div>
+            {incomeData && incomeData.length >= 2 && (
+              <p className="text-xs text-muted-foreground">
+                {formatPercent(((incomeData[incomeData.length - 1].revenue || 0) - (incomeData[incomeData.length - 2].revenue || 0)) / Math.abs(incomeData[incomeData.length - 2].revenue || 1))} YoY
+              </p>
+            )}
           </CardContent>
         </Card>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <MetricCard
-              title="Projected Revenue"
-              value={formatCurrency(totalRevenue, true)}
-              subtitle={`${activeModel.startYear}-${activeModel.endYear}`}
-              icon={DollarSign}
-            />
-            <MetricCard
-              title="End Cash Balance"
-              value={formatCurrency(endCash, true)}
-              subtitle="At forecast end"
-              icon={TrendingUp}
-              trend={firstMonth && endCash > Number(baseAssumption?.initialCash || 0) ? ((endCash - Number(baseAssumption?.initialCash || 0)) / Number(baseAssumption?.initialCash || 1)) * 100 : undefined}
-            />
-            <MetricCard
-              title="Customers"
-              value={formatNumber(endCustomers)}
-              subtitle="Projected at end"
-              icon={Users}
-            />
-            <MetricCard
-              title="Runway"
-              value={runwayMonths !== null && runwayMonths !== undefined ? `${runwayMonths} mo` : "Profitable"}
-              subtitle={runwayMonths !== null && runwayMonths !== undefined ? "Months of cash left" : "Cash flow positive"}
-              icon={Clock}
-            />
-          </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                <CardTitle className="text-base font-semibold">Revenue & Net Income</CardTitle>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full" style={{ background: chartColors.revenue }} />
-                    Revenue
+        <Card data-testid="card-portfolio-value">
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Portfolio Value</CardTitle>
+            <Briefcase className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{portfolioMetrics ? formatCurrency(portfolioMetrics.totalValue) : "--"}</div>
+            {portfolioMetrics && (
+              <p className={`text-xs ${portfolioMetrics.totalGainLossPercent >= 0 ? "text-green-500" : "text-red-500"}`}>
+                {formatPercent(portfolioMetrics.totalGainLossPercent)} total return
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-portfolio-beta">
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Portfolio Beta</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{portfolioMetrics ? portfolioMetrics.weightedBeta.toFixed(2) : "--"}</div>
+            <p className="text-xs text-muted-foreground">{portfolioMetrics?.positionCount || 0} positions</p>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-sp500">
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">S&P 500 YTD</CardTitle>
+            {indices?.[0]?.ytdReturn && indices[0].ytdReturn >= 0 ? (
+              <TrendingUp className="h-4 w-4 text-green-500" />
+            ) : (
+              <TrendingDown className="h-4 w-4 text-red-500" />
+            )}
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{indices?.[0] ? formatPercent(indices[0].ytdReturn || 0) : "--"}</div>
+            <p className="text-xs text-muted-foreground">{indices?.[0] ? `${indices[0].currentValue?.toLocaleString()}` : ""}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card data-testid="card-revenue-chart">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Revenue & Profitability ($M)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={revenueChartData}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="year" className="text-xs" />
+                  <YAxis className="text-xs" />
+                  <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} />
+                  <Bar dataKey="Revenue" fill="hsl(var(--chart-1))" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="EBITDA" fill="hsl(var(--chart-2))" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="Net Income" fill="hsl(var(--chart-3))" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-sector-allocation">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Sector Allocation</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              {portfolioMetrics && (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={portfolioMetrics.sectorAllocation}
+                      dataKey="percent"
+                      nameKey="sector"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={80}
+                      label={({ sector, percent }: { sector: string; percent: number }) => `${sector} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {portfolioMetrics.sectorAllocation.map((_: unknown, i: number) => (
+                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => formatPercent(v)} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card data-testid="card-macro-rates">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Interest Rates</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {interestRates.map(r => (
+                <div key={r.id} className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">{r.name}</span>
+                  <span className="text-sm font-medium">{(r.value * 100).toFixed(2)}%</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-macro-inflation">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Inflation Metrics</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {inflation.map(r => (
+                <div key={r.id} className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">{r.name}</span>
+                  <span className="text-sm font-medium">{(r.value * 100).toFixed(1)}%</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-global-indices">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Global Indices YTD</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {indices?.slice(0, 8).map(idx => (
+                <div key={idx.id} className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">{idx.ticker}</span>
+                  <span className={`text-sm font-medium ${(idx.ytdReturn || 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
+                    {formatPercent(idx.ytdReturn || 0)}
                   </span>
-                  <span className="flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full" style={{ background: chartColors.netIncome }} />
-                    Net Income
-                  </span>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64" data-testid="chart-revenue">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={revenueChartData}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis dataKey="name" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                      <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => formatCurrency(v, true)} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="Revenue" fill={chartColors.revenue} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="Net Income" fill={chartColors.netIncome} radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                <CardTitle className="text-base font-semibold">Cash Balance Trend</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64" data-testid="chart-cash">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={cashChartData}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis dataKey="name" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                      <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => formatCurrency(v, true)} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <defs>
-                        <linearGradient id="cashGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={chartColors.cashBalance} stopOpacity={0.3} />
-                          <stop offset="95%" stopColor={chartColors.cashBalance} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <Area type="monotone" dataKey="Cash Balance" stroke={chartColors.cashBalance} fill="url(#cashGrad)" strokeWidth={2} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base font-semibold">Key Assumptions</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {baseAssumption && (
-                  <div className="space-y-3">
-                    {[
-                      { label: "Revenue Growth", value: `${(Number(baseAssumption.revenueGrowthRate) * 100).toFixed(0)}%` },
-                      { label: "Churn Rate", value: `${(Number(baseAssumption.churnRate) * 100).toFixed(1)}%` },
-                      { label: "ARPU", value: formatCurrency(Number(baseAssumption.avgRevenuePerUnit)) },
-                      { label: "Gross Margin", value: `${((1 - Number(baseAssumption.cogsPercent)) * 100).toFixed(0)}%` },
-                      { label: "Initial Cash", value: formatCurrency(Number(baseAssumption.initialCash), true) },
-                    ].map((item) => (
-                      <div key={item.label} className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">{item.label}</span>
-                        <span className="text-sm font-medium" data-testid={`text-assumption-${item.label.toLowerCase().replace(/\s/g, "-")}`}>{item.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base font-semibold">Scenarios</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {scenarios.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">No scenarios created yet</p>
-                ) : (
-                  <div className="space-y-3">
-                    {scenarios.map((s) => (
-                      <div key={s.id} className="flex items-center gap-3">
-                        <span className="h-3 w-3 rounded-full shrink-0" style={{ background: s.color }} />
-                        <span className="text-sm font-medium">{s.name}</span>
-                        <span className="ml-auto text-xs text-muted-foreground capitalize">{s.type}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base font-semibold">Actuals Tracking</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {actualsForModel.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">No actuals entered yet</p>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Periods tracked</span>
-                      <span className="text-sm font-medium">{actualsForModel.length}</span>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card data-testid="card-top-movers">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Top Daily Movers</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {portfolio
+                ?.sort((a, b) => Math.abs(b.dailyChangePercent || 0) - Math.abs(a.dailyChangePercent || 0))
+                .slice(0, 6)
+                .map(p => (
+                  <div key={p.id} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{p.ticker}</span>
+                      <span className="text-xs text-muted-foreground">${p.currentPrice?.toFixed(2)}</span>
                     </div>
-                    {actualsForModel.slice(-3).map((a) => (
-                      <div key={a.id} className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">{a.period}</span>
-                        <span className="font-medium">{a.revenue ? formatCurrency(Number(a.revenue), true) : "---"}</span>
-                      </div>
-                    ))}
+                    <Badge variant={(p.dailyChangePercent || 0) >= 0 ? "default" : "destructive"}>
+                      {(p.dailyChangePercent || 0) >= 0 ? "+" : ""}{((p.dailyChangePercent || 0) * 100).toFixed(2)}%
+                    </Badge>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </>
-      )}
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-top-gainers">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Top P&L Positions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {portfolio
+                ?.sort((a, b) => (b.gainLossDollar || 0) - (a.gainLossDollar || 0))
+                .slice(0, 6)
+                .map(p => (
+                  <div key={p.id} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{p.ticker}</span>
+                      <span className="text-xs text-muted-foreground">{p.sharesHeld} shares</span>
+                    </div>
+                    <span className={`text-sm font-medium ${(p.gainLossDollar || 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
+                      {formatCurrency(p.gainLossDollar || 0)}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

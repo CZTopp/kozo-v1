@@ -9,20 +9,26 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
-import ModelsPage from "@/pages/models";
-import ScenariosPage from "@/pages/scenarios";
-import ActualsPage from "@/pages/actuals";
-import ReportsPage from "@/pages/reports";
+import RevenueForecast from "@/pages/revenue-forecast";
+import IncomeStatement from "@/pages/income-statement";
+import BalanceSheet from "@/pages/balance-sheet";
+import CashFlow from "@/pages/cash-flow";
+import DCFValuation from "@/pages/dcf-valuation";
+import ValuationComparison from "@/pages/valuation-comparison";
+import Portfolio from "@/pages/portfolio";
 import MarketDataPage from "@/pages/market-data";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
-      <Route path="/models" component={ModelsPage} />
-      <Route path="/scenarios" component={ScenariosPage} />
-      <Route path="/actuals" component={ActualsPage} />
-      <Route path="/reports" component={ReportsPage} />
+      <Route path="/revenue" component={RevenueForecast} />
+      <Route path="/income-statement" component={IncomeStatement} />
+      <Route path="/balance-sheet" component={BalanceSheet} />
+      <Route path="/cash-flow" component={CashFlow} />
+      <Route path="/dcf" component={DCFValuation} />
+      <Route path="/valuation" component={ValuationComparison} />
+      <Route path="/portfolio" component={Portfolio} />
       <Route path="/market-data" component={MarketDataPage} />
       <Route component={NotFound} />
     </Switch>
