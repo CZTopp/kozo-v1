@@ -1,14 +1,23 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency, formatPercent } from "@/lib/calculations";
-import type { FinancialModel, IncomeStatementLine } from "@shared/schema";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { FinancialModel, IncomeStatementLine, Assumptions } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line } from "recharts";
-import { TrendingUp, TrendingDown } from "lucide-react";
+import { TrendingUp, TrendingDown, Save, RefreshCw, ArrowRight, ArrowDown } from "lucide-react";
 
 export default function IncomeStatement() {
+  const { toast } = useToast();
+  const [editMode, setEditMode] = useState(false);
+  const [editedAssumptions, setEditedAssumptions] = useState<Record<string, string>>({});
+
   const { data: models, isLoading } = useQuery<FinancialModel[]>({ queryKey: ["/api/models"] });
   const model = models?.[0];
 
@@ -17,22 +26,60 @@ export default function IncomeStatement() {
     enabled: !!model,
   });
 
-  if (isLoading) {
-    return <div className="p-4 text-muted-foreground">Loading...</div>;
-  }
+  const { data: assumptionsData } = useQuery<Assumptions[]>({
+    queryKey: ["/api/models", model?.id, "assumptions"],
+    enabled: !!model,
+  });
 
-  if (!model) {
-    return <div className="p-4 text-muted-foreground">No financial model found.</div>;
-  }
+  const baseAssumptions = assumptionsData?.find(a => !a.scenarioId);
+
+  const recalcMutation = useMutation({
+    mutationFn: async () => {
+      if (Object.keys(editedAssumptions).length > 0) {
+        await apiRequest("PATCH", `/api/models/${model!.id}/assumptions`, editedAssumptions);
+      }
+      await apiRequest("POST", `/api/models/${model!.id}/recalculate`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "income-statement"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "balance-sheet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "cash-flow"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "dcf"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "valuation-comparison"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "assumptions"] });
+      setEditMode(false);
+      setEditedAssumptions({});
+      toast({ title: "Model recalculated", description: "Cost assumptions updated. All downstream statements recalculated." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
+  if (!model) return <div className="p-4 text-muted-foreground">No financial model found.</div>;
 
   const annualData = incomeData?.filter(d => !d.quarter).sort((a, b) => a.year - b.year) || [];
 
+  const assumptionFields = [
+    { key: "cogsPercent", label: "COGS %", dbKey: "cogsPercent" },
+    { key: "salesMarketingPercent", label: "Sales & Marketing %", dbKey: "salesMarketingPercent" },
+    { key: "rdPercent", label: "R&D %", dbKey: "rdPercent" },
+    { key: "gaPercent", label: "G&A %", dbKey: "gaPercent" },
+    { key: "depreciationPercent", label: "Depreciation %", dbKey: "depreciationPercent" },
+    { key: "taxRate", label: "Tax Rate", dbKey: "taxRate" },
+  ];
+
+  const getAssumptionValue = (key: string): string => {
+    if (editedAssumptions[key] !== undefined) return editedAssumptions[key];
+    if (baseAssumptions) return (baseAssumptions as any)[key] || "0";
+    return "0";
+  };
+
   const rows: Array<{
-    label: string;
-    key: keyof IncomeStatementLine;
-    percentKey?: keyof IncomeStatementLine;
-    isBold?: boolean;
-    isSubtotal?: boolean;
+    label: string; key: keyof IncomeStatementLine;
+    percentKey?: keyof IncomeStatementLine; isBold?: boolean; isSubtotal?: boolean;
   }> = [
     { label: "Revenue", key: "revenue", isBold: true },
     { label: "COGS", key: "cogs", percentKey: "cogsPercent" },
@@ -82,10 +129,59 @@ export default function IncomeStatement() {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Income Statement</h1>
-          <p className="text-sm text-muted-foreground">Profit & Loss analysis</p>
+          <p className="text-sm text-muted-foreground">
+            Profit & Loss analysis
+            <span className="ml-2 text-xs">
+              <ArrowDown className="h-3 w-3 inline" /> Derived from Revenue
+            </span>
+          </p>
         </div>
-        <Badge variant="outline" data-testid="badge-model-name">{model.name}</Badge>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant="outline" data-testid="badge-model-name">{model.name}</Badge>
+          {editMode ? (
+            <>
+              <Button variant="outline" onClick={() => { setEditMode(false); setEditedAssumptions({}); }} data-testid="button-cancel">Cancel</Button>
+              <Button onClick={() => recalcMutation.mutate()} disabled={recalcMutation.isPending} data-testid="button-save-recalculate">
+                {recalcMutation.isPending ? <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Recalculating...</> : <><Save className="h-4 w-4 mr-1" /> Save & Recalculate</>}
+              </Button>
+            </>
+          ) : (
+            <Button variant="outline" onClick={() => setEditMode(true)} data-testid="button-edit-assumptions">Edit Assumptions</Button>
+          )}
+        </div>
       </div>
+
+      {editMode && (
+        <Card className="border-dashed">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-1">
+              <ArrowRight className="h-4 w-4" /> Cost Assumptions (% of Revenue)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              {assumptionFields.map(f => (
+                <div key={f.key}>
+                  <label className="text-xs text-muted-foreground">{f.label}</label>
+                  <Input
+                    type="text"
+                    value={(parseFloat(getAssumptionValue(f.key)) * 100).toFixed(1)}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value) / 100;
+                      if (!isNaN(v)) setEditedAssumptions(prev => ({ ...prev, [f.key]: v.toString() }));
+                    }}
+                    className="h-8 text-sm"
+                    data-testid={`input-assumption-${f.key}`}
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Changes cascade: Revenue x Assumptions = P&L, which feeds Balance Sheet, Cash Flow, DCF, and Valuation.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <Card data-testid="card-revenue">
@@ -95,9 +191,7 @@ export default function IncomeStatement() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{latestData ? formatCurrency(latestData.revenue || 0) : "--"}</div>
-            {latestRevenueGrowth !== null && (
-              <p className="text-xs text-muted-foreground">{formatPercent(latestRevenueGrowth)} YoY</p>
-            )}
+            {latestRevenueGrowth !== null && <p className="text-xs text-muted-foreground">{formatPercent(latestRevenueGrowth)} YoY</p>}
           </CardContent>
         </Card>
         <Card data-testid="card-gross-profit">
@@ -106,9 +200,7 @@ export default function IncomeStatement() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{latestData ? formatCurrency(latestData.grossProfit || 0) : "--"}</div>
-            <p className="text-xs text-muted-foreground">
-              {latestData?.revenue ? formatPercent((latestData.grossProfit || 0) / latestData.revenue) : "--"} margin
-            </p>
+            <p className="text-xs text-muted-foreground">{latestData?.revenue ? formatPercent((latestData.grossProfit || 0) / latestData.revenue) : "--"} margin</p>
           </CardContent>
         </Card>
         <Card data-testid="card-operating-income">
@@ -117,25 +209,17 @@ export default function IncomeStatement() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{latestData ? formatCurrency(latestData.operatingIncome || 0) : "--"}</div>
-            <p className="text-xs text-muted-foreground">
-              {latestData?.revenue ? formatPercent((latestData.operatingIncome || 0) / latestData.revenue) : "--"} margin
-            </p>
+            <p className="text-xs text-muted-foreground">{latestData?.revenue ? formatPercent((latestData.operatingIncome || 0) / latestData.revenue) : "--"} margin</p>
           </CardContent>
         </Card>
         <Card data-testid="card-net-income">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Net Income</CardTitle>
-            {latestData && (latestData.netIncome || 0) >= 0 ? (
-              <TrendingUp className="h-4 w-4 text-green-500" />
-            ) : (
-              <TrendingDown className="h-4 w-4 text-red-500" />
-            )}
+            {latestData && (latestData.netIncome || 0) >= 0 ? <TrendingUp className="h-4 w-4 text-green-500" /> : <TrendingDown className="h-4 w-4 text-red-500" />}
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{latestData ? formatCurrency(latestData.netIncome || 0) : "--"}</div>
-            <p className="text-xs text-muted-foreground">
-              {latestData?.revenue ? formatPercent((latestData.netIncome || 0) / latestData.revenue) : "--"} margin
-            </p>
+            <p className="text-xs text-muted-foreground">{latestData?.revenue ? formatPercent((latestData.netIncome || 0) / latestData.revenue) : "--"} margin</p>
           </CardContent>
         </Card>
       </div>
@@ -154,9 +238,7 @@ export default function IncomeStatement() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Line Item</TableHead>
-                    {annualData.map(d => (
-                      <TableHead key={d.year} className="text-right">{d.year}</TableHead>
-                    ))}
+                    {annualData.map(d => <TableHead key={d.year} className="text-right">{d.year}</TableHead>)}
                     <TableHead className="text-right">% of Rev</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -188,9 +270,7 @@ export default function IncomeStatement() {
 
         <TabsContent value="margins">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Margin Analysis (%)</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-sm font-medium">Margin Analysis (%)</CardTitle></CardHeader>
             <CardContent>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
@@ -213,9 +293,7 @@ export default function IncomeStatement() {
 
         <TabsContent value="growth">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">YoY Growth Rates (%)</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-sm font-medium">YoY Growth Rates (%)</CardTitle></CardHeader>
             <CardContent>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">

@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCurrency } from "@/lib/calculations";
 import type { FinancialModel, CashFlowLine } from "@shared/schema";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { TrendingUp, TrendingDown, DollarSign } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, ArrowDown } from "lucide-react";
 
 export default function CashFlow() {
   const { data: models, isLoading } = useQuery<FinancialModel[]>({ queryKey: ["/api/models"] });
@@ -17,23 +17,18 @@ export default function CashFlow() {
     enabled: !!model,
   });
 
-  if (isLoading) {
-    return <div className="p-4 text-muted-foreground">Loading...</div>;
-  }
-
-  if (!model) {
-    return <div className="p-4 text-muted-foreground">No financial model found.</div>;
-  }
+  if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
+  if (!model) return <div className="p-4 text-muted-foreground">No financial model found.</div>;
 
   const annualData = cfData?.filter(d => !d.quarter).sort((a, b) => a.year - b.year) || [];
 
-  const operatingRows: Array<{ label: string; key: keyof CashFlowLine; isBold?: boolean; isSubtotal?: boolean; isSection?: boolean; prefix?: string }> = [
+  const operatingRows: Array<{ label: string; key: keyof CashFlowLine; isBold?: boolean; isSubtotal?: boolean; isSection?: boolean }> = [
     { label: "OPERATING ACTIVITIES", key: "operatingCashFlow", isSection: true },
     { label: "Net Income", key: "netIncome" },
-    { label: "+ Depreciation", key: "depreciationAdd", prefix: "+" },
-    { label: "- A/R Change", key: "arChange", prefix: "-" },
-    { label: "- Inventory Change", key: "inventoryChange", prefix: "-" },
-    { label: "+ A/P Change", key: "apChange", prefix: "+" },
+    { label: "+ Depreciation", key: "depreciationAdd" },
+    { label: "- A/R Change", key: "arChange" },
+    { label: "- Inventory Change", key: "inventoryChange" },
+    { label: "+ A/P Change", key: "apChange" },
     { label: "Operating Cash Flow", key: "operatingCashFlow", isBold: true, isSubtotal: true },
   ];
 
@@ -59,7 +54,6 @@ export default function CashFlow() {
   ];
 
   const allRows = [...operatingRows, ...investingRows, ...financingRows, ...summaryRows];
-
   const latestData = annualData[annualData.length - 1];
 
   const fcfChartData = annualData.map(d => ({
@@ -75,10 +69,24 @@ export default function CashFlow() {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Cash Flow Statement</h1>
-          <p className="text-sm text-muted-foreground">Operating, investing, and financing activities</p>
+          <p className="text-sm text-muted-foreground">
+            Operating, investing, and financing activities
+            <span className="ml-2 text-xs">
+              <ArrowDown className="h-3 w-3 inline" /> Auto-derived from Income Statement & Balance Sheet
+            </span>
+          </p>
         </div>
         <Badge variant="outline" data-testid="badge-model-name">{model.name}</Badge>
       </div>
+
+      <Card className="border-dashed">
+        <CardContent className="pt-4 pb-3">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <ArrowDown className="h-4 w-4 flex-shrink-0" />
+            <span>This statement is automatically calculated from the Income Statement (Net Income, Depreciation) and Balance Sheet (working capital changes, CapEx). Edit inputs on those pages to update.</span>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <Card data-testid="card-operating-cf">
@@ -109,16 +117,10 @@ export default function CashFlow() {
         <Card data-testid="card-fcf">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Free Cash Flow</CardTitle>
-            {latestData && (latestData.freeCashFlow || 0) >= 0 ? (
-              <TrendingUp className="h-4 w-4 text-green-500" />
-            ) : (
-              <TrendingDown className="h-4 w-4 text-red-500" />
-            )}
+            {latestData && (latestData.freeCashFlow || 0) >= 0 ? <TrendingUp className="h-4 w-4 text-green-500" /> : <TrendingDown className="h-4 w-4 text-red-500" />}
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-fcf">
-              {latestData ? formatCurrency(latestData.freeCashFlow || 0) : "--"}
-            </div>
+            <div className="text-2xl font-bold" data-testid="text-fcf">{latestData ? formatCurrency(latestData.freeCashFlow || 0) : "--"}</div>
           </CardContent>
         </Card>
       </div>
@@ -137,9 +139,7 @@ export default function CashFlow() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Line Item</TableHead>
-                    {annualData.map(d => (
-                      <TableHead key={d.year} className="text-right">{d.year}</TableHead>
-                    ))}
+                    {annualData.map(d => <TableHead key={d.year} className="text-right">{d.year}</TableHead>)}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -147,19 +147,13 @@ export default function CashFlow() {
                     if ("isSection" in row && row.isSection) {
                       return (
                         <TableRow key={`section-${row.label}-${idx}`} className="bg-muted/50">
-                          <TableCell colSpan={annualData.length + 1} className="font-bold text-sm">
-                            {row.label}
-                          </TableCell>
+                          <TableCell colSpan={annualData.length + 1} className="font-bold text-sm">{row.label}</TableCell>
                         </TableRow>
                       );
                     }
                     const isHighlight = "isHighlight" in row && row.isHighlight;
                     return (
-                      <TableRow
-                        key={`${row.key}-${idx}`}
-                        className={`${row.isSubtotal ? "border-t-2" : ""} ${isHighlight ? "bg-muted/30" : ""}`}
-                        data-testid={`row-${row.key}`}
-                      >
+                      <TableRow key={`${row.key}-${idx}`} className={`${row.isSubtotal ? "border-t-2" : ""} ${isHighlight ? "bg-muted/30" : ""}`} data-testid={`row-${row.key}`}>
                         <TableCell className={row.isBold ? "font-bold" : "pl-8"}>{row.label}</TableCell>
                         {annualData.map(d => (
                           <TableCell key={d.year} className={`text-right ${row.isBold ? "font-bold" : ""} ${isHighlight ? "text-green-600 dark:text-green-400 font-bold" : ""}`}>
@@ -177,9 +171,7 @@ export default function CashFlow() {
 
         <TabsContent value="chart">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Free Cash Flow Trend ($M)</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-sm font-medium">Free Cash Flow Trend ($M)</CardTitle></CardHeader>
             <CardContent>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
@@ -199,9 +191,7 @@ export default function CashFlow() {
 
         <TabsContent value="breakdown">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Cash Flow Breakdown ($M)</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-sm font-medium">Cash Flow Breakdown ($M)</CardTitle></CardHeader>
             <CardContent>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">

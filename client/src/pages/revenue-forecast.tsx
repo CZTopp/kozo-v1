@@ -1,16 +1,25 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency, formatPercent } from "@/lib/calculations";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { FinancialModel, RevenueLineItem, RevenuePeriod } from "@shared/schema";
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { TrendingUp, DollarSign } from "lucide-react";
+import { TrendingUp, DollarSign, Save, RefreshCw, ArrowRight } from "lucide-react";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
 export default function RevenueForecast() {
+  const { toast } = useToast();
+  const [editMode, setEditMode] = useState(false);
+  const [editedPeriods, setEditedPeriods] = useState<Record<string, number>>({});
+
   const { data: models, isLoading: modelsLoading } = useQuery<FinancialModel[]>({ queryKey: ["/api/models"] });
   const model = models?.[0];
 
@@ -24,26 +33,60 @@ export default function RevenueForecast() {
     enabled: !!model,
   });
 
-  if (modelsLoading) {
-    return <div className="p-4 text-muted-foreground">Loading...</div>;
-  }
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const updates = Object.entries(editedPeriods).map(([id, amount]) =>
+        apiRequest("PATCH", `/api/revenue-periods/${id}`, { amount })
+      );
+      await Promise.all(updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model?.id, "revenue-periods"] });
+      setEditedPeriods({});
+      toast({ title: "Revenue saved", description: "Revenue periods updated successfully." });
+    },
+  });
 
-  if (!model) {
-    return <div className="p-4 text-muted-foreground">No financial model found.</div>;
-  }
+  const recalcMutation = useMutation({
+    mutationFn: async () => {
+      await saveMutation.mutateAsync();
+      await apiRequest("POST", `/api/models/${model!.id}/recalculate`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "revenue-periods"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "revenue-line-items"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "income-statement"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "balance-sheet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "cash-flow"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "dcf"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "valuation-comparison"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "assumptions"] });
+      setEditMode(false);
+      toast({ title: "Model recalculated", description: "All financial statements have been updated from your revenue changes." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
 
-  const years = model ? Array.from({ length: model.endYear - model.startYear + 1 }, (_, i) => model.startYear + i) : [];
+  if (modelsLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
+  if (!model) return <div className="p-4 text-muted-foreground">No financial model found.</div>;
 
-  const getAmount = (lineItemId: string, year: number, quarter?: number) => {
-    if (!periods) return 0;
-    const match = periods.find(p =>
-      p.lineItemId === lineItemId && p.year === year && (quarter ? p.quarter === quarter : !p.quarter)
-    );
-    return match?.amount || 0;
+  const years = Array.from({ length: model.endYear - model.startYear + 1 }, (_, i) => model.startYear + i);
+
+  const getPeriod = (lineItemId: string, year: number, quarter: number): RevenuePeriod | undefined => {
+    return periods?.find(p => p.lineItemId === lineItemId && p.year === year && p.quarter === quarter);
+  };
+
+  const getEditedAmount = (periodId: string, original: number): number => {
+    return editedPeriods[periodId] !== undefined ? editedPeriods[periodId] : original;
   };
 
   const getQuarterlyAmount = (lineItemId: string, year: number, quarter: number) => {
-    return getAmount(lineItemId, year, quarter);
+    const p = getPeriod(lineItemId, year, quarter);
+    if (!p) return 0;
+    return getEditedAmount(p.id, p.amount || 0);
   };
 
   const getAnnualTotal = (lineItemId: string, year: number) => {
@@ -51,8 +94,7 @@ export default function RevenueForecast() {
     for (let q = 1; q <= 4; q++) {
       total += getQuarterlyAmount(lineItemId, year, q);
     }
-    const annualDirect = getAmount(lineItemId, year);
-    return annualDirect > 0 ? annualDirect : total;
+    return total;
   };
 
   const getTotalRevenue = (year: number) => {
@@ -67,11 +109,16 @@ export default function RevenueForecast() {
     return (current - prior) / Math.abs(prior);
   };
 
+  const handleEdit = (periodId: string, value: string) => {
+    const num = parseFloat(value.replace(/,/g, "")) || 0;
+    setEditedPeriods(prev => ({ ...prev, [periodId]: num }));
+  };
+
+  const hasEdits = Object.keys(editedPeriods).length > 0;
+
   const annualChartData = years.map(year => {
     const entry: Record<string, number | string> = { year };
-    lineItems?.forEach(li => {
-      entry[li.name] = getAnnualTotal(li.id, year);
-    });
+    lineItems?.forEach(li => { entry[li.name] = getAnnualTotal(li.id, year); });
     return entry;
   });
 
@@ -79,13 +126,7 @@ export default function RevenueForecast() {
   years.forEach(year => {
     for (let q = 1; q <= 4; q++) {
       const entry: Record<string, number | string> = { period: `${year} Q${q}` };
-      let total = 0;
-      lineItems?.forEach(li => {
-        const amt = getQuarterlyAmount(li.id, year, q);
-        entry[li.name] = amt;
-        total += amt;
-      });
-      entry["Total"] = total;
+      lineItems?.forEach(li => { entry[li.name] = getQuarterlyAmount(li.id, year, q); });
       quarterlyChartData.push(entry);
     }
   });
@@ -97,8 +138,47 @@ export default function RevenueForecast() {
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Revenue Forecast</h1>
           <p className="text-sm text-muted-foreground">Revenue streams with quarterly breakdown</p>
         </div>
-        <Badge variant="outline" data-testid="badge-model-name">{model.name}</Badge>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant="outline" data-testid="badge-model-name">{model.name}</Badge>
+          {editMode ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => { setEditMode(false); setEditedPeriods({}); }}
+                data-testid="button-cancel-edit"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => recalcMutation.mutate()}
+                disabled={!hasEdits || recalcMutation.isPending}
+                data-testid="button-save-recalculate"
+              >
+                {recalcMutation.isPending ? (
+                  <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Recalculating...</>
+                ) : (
+                  <><Save className="h-4 w-4 mr-1" /> Save & Recalculate</>
+                )}
+              </Button>
+            </>
+          ) : (
+            <Button variant="outline" onClick={() => setEditMode(true)} data-testid="button-edit-revenue">
+              Edit Revenue
+            </Button>
+          )}
+        </div>
       </div>
+
+      {editMode && (
+        <Card className="border-dashed">
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <ArrowRight className="h-4 w-4" />
+              <span>Edit quarterly revenue values below. Changes will cascade through Income Statement, Balance Sheet, Cash Flow, DCF, and Valuation.</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {years.slice(-3).map(year => (
@@ -120,12 +200,79 @@ export default function RevenueForecast() {
         ))}
       </div>
 
-      <Tabs defaultValue="table" data-testid="tabs-revenue">
+      <Tabs defaultValue="quarterly" data-testid="tabs-revenue">
         <TabsList>
-          <TabsTrigger value="table" data-testid="tab-table">Table</TabsTrigger>
+          <TabsTrigger value="quarterly" data-testid="tab-quarterly">Quarterly Detail</TabsTrigger>
+          <TabsTrigger value="table" data-testid="tab-table">Annual Summary</TabsTrigger>
           <TabsTrigger value="annual-chart" data-testid="tab-annual-chart">Annual Chart</TabsTrigger>
           <TabsTrigger value="quarterly-chart" data-testid="tab-quarterly-chart">Quarterly Trend</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="quarterly">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="overflow-x-auto">
+                <Table data-testid="table-quarterly-revenue">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="min-w-[160px]">Revenue Stream</TableHead>
+                      {years.map(year => (
+                        [1, 2, 3, 4].map(q => (
+                          <TableHead key={`${year}-Q${q}`} className="text-right text-xs min-w-[90px]">
+                            {year} Q{q}
+                          </TableHead>
+                        ))
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {lineItems?.map(li => (
+                      <TableRow key={li.id} data-testid={`row-revenue-${li.id}`}>
+                        <TableCell className="font-medium text-sm">{li.name}</TableCell>
+                        {years.map(year =>
+                          [1, 2, 3, 4].map(q => {
+                            const period = getPeriod(li.id, year, q);
+                            const amt = period ? getEditedAmount(period.id, period.amount || 0) : 0;
+                            const isEdited = period && editedPeriods[period.id] !== undefined;
+                            return (
+                              <TableCell key={`${year}-Q${q}`} className="text-right p-1">
+                                {editMode && period ? (
+                                  <Input
+                                    type="text"
+                                    value={Math.round(amt).toLocaleString()}
+                                    onChange={(e) => handleEdit(period.id, e.target.value)}
+                                    className={`h-7 text-xs text-right ${isEdited ? "border-blue-500" : ""}`}
+                                    data-testid={`input-revenue-${li.id}-${year}-Q${q}`}
+                                  />
+                                ) : (
+                                  <span className="text-xs">{formatCurrency(amt)}</span>
+                                )}
+                              </TableCell>
+                            );
+                          })
+                        )}
+                      </TableRow>
+                    ))}
+                    <TableRow className="font-bold border-t-2">
+                      <TableCell>Total</TableCell>
+                      {years.map(year =>
+                        [1, 2, 3, 4].map(q => {
+                          let total = 0;
+                          lineItems?.forEach(li => { total += getQuarterlyAmount(li.id, year, q); });
+                          return (
+                            <TableCell key={`total-${year}-Q${q}`} className="text-right text-xs">
+                              {formatCurrency(total)}
+                            </TableCell>
+                          );
+                        })
+                      )}
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="table">
           <Card>
@@ -141,7 +288,7 @@ export default function RevenueForecast() {
                 </TableHeader>
                 <TableBody>
                   {lineItems?.map(li => (
-                    <TableRow key={li.id} data-testid={`row-revenue-${li.id}`}>
+                    <TableRow key={li.id}>
                       <TableCell className="font-medium">{li.name}</TableCell>
                       {years.map(year => (
                         <TableCell key={year} className="text-right">

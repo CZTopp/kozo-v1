@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCurrency, formatPercent } from "@/lib/calculations";
 import type { FinancialModel, ValuationComparison } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
-import { TrendingUp, TrendingDown, Target } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, ArrowDown } from "lucide-react";
 
 export default function ValuationComparisonPage() {
   const { data: models, isLoading } = useQuery<FinancialModel[]>({ queryKey: ["/api/models"] });
@@ -16,16 +16,10 @@ export default function ValuationComparisonPage() {
     enabled: !!model,
   });
 
-  if (isLoading) {
-    return <div className="p-4 text-muted-foreground">Loading...</div>;
-  }
-
-  if (!model) {
-    return <div className="p-4 text-muted-foreground">No financial model found.</div>;
-  }
+  if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
+  if (!model) return <div className="p-4 text-muted-foreground">No financial model found.</div>;
 
   const val = valData?.[0];
-
   const currentPrice = val?.currentSharePrice || 0;
   const averageTarget = val?.averageTarget || 0;
   const percentToTarget = val?.percentToTarget || (currentPrice > 0 ? (averageTarget - currentPrice) / currentPrice : 0);
@@ -72,14 +66,16 @@ export default function ValuationComparisonPage() {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Valuation Comparison</h1>
-          <p className="text-sm text-muted-foreground">Multi-method valuation analysis</p>
+          <p className="text-sm text-muted-foreground">
+            Multi-method valuation analysis
+            <span className="ml-2 text-xs">
+              <ArrowDown className="h-3 w-3 inline" /> Auto-derived from Revenue, Earnings & DCF
+            </span>
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="outline" data-testid="badge-model-name">{model.name}</Badge>
-          <Badge
-            variant={percentToTarget >= 0 ? "default" : "destructive"}
-            data-testid="badge-percent-to-target"
-          >
+          <Badge variant={percentToTarget >= 0 ? "default" : "destructive"} data-testid="badge-percent-to-target">
             {percentToTarget >= 0 ? (
               <span className="flex items-center gap-1"><TrendingUp className="h-3 w-3" /> {formatPercent(percentToTarget)} to Target</span>
             ) : (
@@ -88,6 +84,15 @@ export default function ValuationComparisonPage() {
           </Badge>
         </div>
       </div>
+
+      <Card className="border-dashed">
+        <CardContent className="pt-4 pb-3">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <ArrowDown className="h-4 w-4 flex-shrink-0" />
+            <span>This page is the final output of the cascading model. Price targets are computed from Revenue (P/R method), Earnings (PEG method), and DCF. Edit upstream inputs to see how valuations change.</span>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Card data-testid="card-current-price">
@@ -136,23 +141,17 @@ export default function ValuationComparisonPage() {
                 </TableHeader>
                 <TableBody>
                   <TableRow data-testid={`row-${m.name}-bull`}>
-                    <TableCell>
-                      <Badge variant="default">Bull</Badge>
-                    </TableCell>
+                    <TableCell><Badge variant="default">Bull</Badge></TableCell>
                     <TableCell className="text-right">{m.bullMultiple}</TableCell>
                     <TableCell className="text-right font-medium">${m.bullTarget.toFixed(2)}</TableCell>
                   </TableRow>
                   <TableRow data-testid={`row-${m.name}-base`}>
-                    <TableCell>
-                      <Badge variant="secondary">Base</Badge>
-                    </TableCell>
+                    <TableCell><Badge variant="secondary">Base</Badge></TableCell>
                     <TableCell className="text-right">{m.baseMultiple}</TableCell>
                     <TableCell className="text-right font-medium">${m.baseTarget.toFixed(2)}</TableCell>
                   </TableRow>
                   <TableRow data-testid={`row-${m.name}-bear`}>
-                    <TableCell>
-                      <Badge variant="destructive">Bear</Badge>
-                    </TableCell>
+                    <TableCell><Badge variant="destructive">Bear</Badge></TableCell>
                     <TableCell className="text-right">{m.bearMultiple}</TableCell>
                     <TableCell className="text-right font-medium">${m.bearTarget.toFixed(2)}</TableCell>
                   </TableRow>
@@ -164,9 +163,7 @@ export default function ValuationComparisonPage() {
       </div>
 
       <Card data-testid="card-comparison-chart">
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">Valuation Methods Comparison</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="text-sm font-medium">Valuation Methods Comparison</CardTitle></CardHeader>
         <CardContent>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">

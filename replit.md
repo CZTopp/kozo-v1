@@ -4,8 +4,11 @@
 Comprehensive financial modeling and valuation application covering 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. All data is simulated demo data.
 
 ## Recent Changes
+- 2026-02-09: Added cascading recalculation engine (server/recalculate.ts) - Revenue → IS → BS → CF → DCF → Valuation
+- 2026-02-09: Added editable pages: Revenue (quarterly amounts), Income Statement (cost %), Balance Sheet (working capital %), DCF (WACC params)
+- 2026-02-09: Cash Flow and Valuation Comparison are auto-derived read-only pages with cascade indicators
+- 2026-02-09: New API endpoints: PATCH /api/revenue-periods/:id, PATCH /api/models/:id/assumptions, PATCH /api/models/:id/dcf-params, POST /api/models/:id/recalculate
 - 2026-02-09: Complete rebuild - 12 database tables, full API layer, 9 frontend pages, comprehensive seed data, DCF/WACC/valuation calculation engine
-- 2026-02-09: Removed old pages (models.tsx, scenarios.tsx, actuals.tsx, reports.tsx) - replaced by new financial statement pages
 
 ## Architecture
 
@@ -37,6 +40,7 @@ Comprehensive financial modeling and valuation application covering 10 core modu
 - `client/src/lib/calculations.ts` - DCF/WACC, valuation multiples, portfolio metrics, sensitivity analysis
 - `server/routes.ts` - All API endpoints
 - `server/storage.ts` - DatabaseStorage class (IStorage interface)
+- `server/recalculate.ts` - Cascading recalculation engine (Revenue → IS → BS → CF → DCF → Valuation)
 - `server/seed.ts` - Comprehensive demo data seeder (5 years financial data, 15 stocks, 16 macro, 12 indices)
 - `client/src/App.tsx` - Main app with sidebar layout, 9 routes
 - `client/src/components/app-sidebar.tsx` - Navigation sidebar with all modules

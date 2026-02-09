@@ -1,13 +1,22 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency, formatPercent, calcCostOfEquity, calcWACC, calcDCFTargetPrice, calcSensitivityTable } from "@/lib/calculations";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { FinancialModel, DcfValuation, CashFlowLine } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { TrendingUp, TrendingDown, Target } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, Save, RefreshCw, ArrowDown, ArrowRight } from "lucide-react";
 
 export default function DcfValuationPage() {
+  const { toast } = useToast();
+  const [editMode, setEditMode] = useState(false);
+  const [editedDcf, setEditedDcf] = useState<Record<string, number>>({});
+
   const { data: models, isLoading } = useQuery<FinancialModel[]>({ queryKey: ["/api/models"] });
   const model = models?.[0];
 
@@ -21,30 +30,50 @@ export default function DcfValuationPage() {
     enabled: !!model,
   });
 
-  if (isLoading) {
-    return <div className="p-4 text-muted-foreground">Loading...</div>;
-  }
+  const recalcMutation = useMutation({
+    mutationFn: async () => {
+      if (Object.keys(editedDcf).length > 0 && dcfData?.[0]) {
+        await apiRequest("PATCH", `/api/models/${model!.id}/dcf-params`, editedDcf);
+      }
+      await apiRequest("POST", `/api/models/${model!.id}/recalculate`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "dcf"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "valuation-comparison"] });
+      setEditMode(false);
+      setEditedDcf({});
+      toast({ title: "DCF recalculated", description: "WACC parameters updated. Target price and valuation recalculated." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
 
-  if (!model) {
-    return <div className="p-4 text-muted-foreground">No financial model found.</div>;
-  }
+  if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
+  if (!model) return <div className="p-4 text-muted-foreground">No financial model found.</div>;
 
   const dcf = dcfData?.[0];
   const annualCF = cfData?.filter(d => !d.quarter).sort((a, b) => a.year - b.year) || [];
 
-  const costOfEquity = dcf ? calcCostOfEquity(dcf.riskFreeRate, dcf.beta, dcf.marketReturn) : 0;
-  const wacc = dcf ? calcWACC(costOfEquity, dcf.equityWeight, dcf.costOfDebt, dcf.debtWeight, dcf.taxRate) : 0;
+  const getDcfVal = (key: string): number => {
+    if (editedDcf[key] !== undefined) return editedDcf[key];
+    return (dcf as any)?.[key] ?? 0;
+  };
+
+  const costOfEquity = calcCostOfEquity(getDcfVal("riskFreeRate"), getDcfVal("beta"), getDcfVal("marketReturn"));
+  const wacc = calcWACC(costOfEquity, getDcfVal("equityWeight"), getDcfVal("costOfDebt"), getDcfVal("debtWeight"), getDcfVal("taxRate"));
 
   const fcfProjections = annualCF.map(d => d.freeCashFlow || 0);
-  const dcfResult = dcf && fcfProjections.length > 0
-    ? calcDCFTargetPrice(fcfProjections, wacc, dcf.longTermGrowth, dcf.totalDebt || 0, dcf.sharesOutstanding || 0)
+  const dcfResult = fcfProjections.length > 0
+    ? calcDCFTargetPrice(fcfProjections, wacc, getDcfVal("longTermGrowth"), getDcfVal("totalDebt"), dcf?.sharesOutstanding || model.sharesOutstanding || 50000000)
     : null;
 
-  const sensitivity = dcf && fcfProjections.length > 0
-    ? calcSensitivityTable(fcfProjections, dcf.longTermGrowth, wacc, dcf.totalDebt || 0, dcf.sharesOutstanding || 0)
+  const sensitivity = fcfProjections.length > 0
+    ? calcSensitivityTable(fcfProjections, getDcfVal("longTermGrowth"), wacc, getDcfVal("totalDebt"), dcf?.sharesOutstanding || model.sharesOutstanding || 50000000)
     : null;
 
-  const currentPrice = dcf?.currentSharePrice || 0;
+  const currentPrice = getDcfVal("currentSharePrice");
   const targetPrice = dcfResult?.targetPricePerShare || dcf?.targetPricePerShare || 0;
   const upside = currentPrice > 0 ? (targetPrice - currentPrice) / currentPrice : 0;
 
@@ -53,17 +82,18 @@ export default function DcfValuationPage() {
     "FCF": (d.freeCashFlow || 0) / 1e6,
   }));
 
-  const waccParams = dcf ? [
-    { label: "Risk-Free Rate", value: formatPercent(dcf.riskFreeRate) },
-    { label: "Beta", value: dcf.beta.toFixed(2) },
-    { label: "Market Return", value: formatPercent(dcf.marketReturn) },
-    { label: "Cost of Equity (CAPM)", value: formatPercent(costOfEquity) },
-    { label: "Cost of Debt", value: formatPercent(dcf.costOfDebt) },
-    { label: "Tax Rate", value: formatPercent(dcf.taxRate) },
-    { label: "Equity Weight", value: formatPercent(dcf.equityWeight) },
-    { label: "Debt Weight", value: formatPercent(dcf.debtWeight) },
-    { label: "WACC", value: formatPercent(wacc) },
-  ] : [];
+  const waccParams = [
+    { label: "Risk-Free Rate", value: formatPercent(getDcfVal("riskFreeRate")), editKey: "riskFreeRate", isPercent: true },
+    { label: "Beta", value: getDcfVal("beta").toFixed(2), editKey: "beta", isPercent: false },
+    { label: "Market Return", value: formatPercent(getDcfVal("marketReturn")), editKey: "marketReturn", isPercent: true },
+    { label: "Cost of Equity (CAPM)", value: formatPercent(costOfEquity), editKey: null, isPercent: true },
+    { label: "Cost of Debt", value: formatPercent(getDcfVal("costOfDebt")), editKey: "costOfDebt", isPercent: true },
+    { label: "Tax Rate", value: formatPercent(getDcfVal("taxRate")), editKey: "taxRate", isPercent: true },
+    { label: "Equity Weight", value: formatPercent(getDcfVal("equityWeight")), editKey: "equityWeight", isPercent: true },
+    { label: "Debt Weight", value: formatPercent(getDcfVal("debtWeight")), editKey: "debtWeight", isPercent: true },
+    { label: "Long-Term Growth", value: formatPercent(getDcfVal("longTermGrowth")), editKey: "longTermGrowth", isPercent: true },
+    { label: "WACC", value: formatPercent(wacc), editKey: null, isPercent: true },
+  ];
 
   const dcfParams = dcfResult ? [
     { label: "NPV of FCFs", value: formatCurrency(dcfResult.npv) },
@@ -78,20 +108,32 @@ export default function DcfValuationPage() {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">DCF Valuation</h1>
-          <p className="text-sm text-muted-foreground">Discounted Cash Flow analysis</p>
+          <p className="text-sm text-muted-foreground">
+            Discounted Cash Flow analysis
+            <span className="ml-2 text-xs">
+              <ArrowDown className="h-3 w-3 inline" /> Uses FCF from Cash Flow Statement
+            </span>
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="outline" data-testid="badge-model-name">{model.name}</Badge>
-          <Badge
-            variant={upside >= 0 ? "default" : "destructive"}
-            data-testid="badge-upside"
-          >
+          <Badge variant={upside >= 0 ? "default" : "destructive"} data-testid="badge-upside">
             {upside >= 0 ? (
               <span className="flex items-center gap-1"><TrendingUp className="h-3 w-3" /> {formatPercent(upside)} Upside</span>
             ) : (
               <span className="flex items-center gap-1"><TrendingDown className="h-3 w-3" /> {formatPercent(Math.abs(upside))} Downside</span>
             )}
           </Badge>
+          {editMode ? (
+            <>
+              <Button variant="outline" onClick={() => { setEditMode(false); setEditedDcf({}); }} data-testid="button-cancel">Cancel</Button>
+              <Button onClick={() => recalcMutation.mutate()} disabled={recalcMutation.isPending} data-testid="button-save-recalculate">
+                {recalcMutation.isPending ? <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Recalculating...</> : <><Save className="h-4 w-4 mr-1" /> Save & Recalculate</>}
+              </Button>
+            </>
+          ) : (
+            <Button variant="outline" onClick={() => setEditMode(true)} data-testid="button-edit-dcf">Edit WACC Params</Button>
+          )}
         </div>
       </div>
 
@@ -126,14 +168,30 @@ export default function DcfValuationPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card data-testid="card-wacc-panel">
           <CardHeader>
-            <CardTitle className="text-sm font-medium">WACC Calculation</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">
+              {editMode && <ArrowRight className="h-4 w-4" />}
+              WACC Calculation
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               {waccParams.map(p => (
-                <div key={p.label} className="flex items-center justify-between">
+                <div key={p.label} className="flex items-center justify-between gap-2">
                   <span className="text-sm text-muted-foreground">{p.label}</span>
-                  <span className="text-sm font-medium" data-testid={`text-wacc-${p.label.toLowerCase().replace(/[^a-z]/g, "-")}`}>{p.value}</span>
+                  {editMode && p.editKey ? (
+                    <Input
+                      type="text"
+                      value={p.isPercent ? (getDcfVal(p.editKey) * 100).toFixed(2) : getDcfVal(p.editKey).toFixed(2)}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        if (!isNaN(v)) setEditedDcf(prev => ({ ...prev, [p.editKey!]: p.isPercent ? v / 100 : v }));
+                      }}
+                      className="h-7 w-24 text-sm text-right"
+                      data-testid={`input-dcf-${p.editKey}`}
+                    />
+                  ) : (
+                    <span className="text-sm font-medium" data-testid={`text-wacc-${p.label.toLowerCase().replace(/[^a-z]/g, "-")}`}>{p.value}</span>
+                  )}
                 </div>
               ))}
             </div>
@@ -158,9 +216,7 @@ export default function DcfValuationPage() {
       </div>
 
       <Card data-testid="card-fcf-chart">
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">FCF Projections ($M)</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="text-sm font-medium">FCF Projections ($M)</CardTitle></CardHeader>
         <CardContent>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -179,17 +235,13 @@ export default function DcfValuationPage() {
 
       {sensitivity && (
         <Card data-testid="card-sensitivity">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Sensitivity Analysis: WACC vs Long-Term Growth</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-sm font-medium">Sensitivity Analysis: WACC vs Long-Term Growth</CardTitle></CardHeader>
           <CardContent>
             <Table data-testid="table-sensitivity">
               <TableHeader>
                 <TableRow>
                   <TableHead>WACC \ LTG</TableHead>
-                  {sensitivity.ltgRange.map(g => (
-                    <TableHead key={g} className="text-right text-xs">{formatPercent(g)}</TableHead>
-                  ))}
+                  {sensitivity.ltgRange.map(g => <TableHead key={g} className="text-right text-xs">{formatPercent(g)}</TableHead>)}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -199,10 +251,7 @@ export default function DcfValuationPage() {
                     {sensitivity.values[wi].map((val, gi) => {
                       const isBase = wi === 2 && gi === 2;
                       return (
-                        <TableCell
-                          key={gi}
-                          className={`text-right text-xs ${isBase ? "font-bold bg-muted/50" : ""}`}
-                        >
+                        <TableCell key={gi} className={`text-right text-xs ${isBase ? "font-bold bg-muted/50" : ""}`}>
                           {val > 0 ? `$${val.toFixed(2)}` : "--"}
                         </TableCell>
                       );

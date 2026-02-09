@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { Server } from "http";
 import { storage } from "./storage";
+import { recalculateModel } from "./recalculate";
 import {
   insertFinancialModelSchema, insertRevenueLineItemSchema,
   insertRevenuePeriodSchema, insertIncomeStatementLineSchema,
@@ -280,5 +281,42 @@ export async function registerRoutes(server: Server, app: Express) {
   app.delete("/api/reports/:id", async (req: Request, res: Response) => {
     await storage.deleteReport(req.params.id);
     res.json({ success: true });
+  });
+
+  app.patch("/api/revenue-periods/:id", async (req: Request, res: Response) => {
+    const updated = await storage.updateRevenuePeriod(req.params.id, req.body);
+    res.json(updated);
+  });
+
+  app.patch("/api/models/:modelId/dcf-params", async (req: Request, res: Response) => {
+    const existing = await storage.getDcfValuation(req.params.modelId);
+    if (existing) {
+      const updated = { ...existing, ...req.body };
+      const result = await storage.upsertDcfValuation(updated);
+      res.json(result);
+    } else {
+      res.status(404).json({ message: "No DCF data found" });
+    }
+  });
+
+  app.post("/api/models/:modelId/recalculate", async (req: Request, res: Response) => {
+    try {
+      const result = await recalculateModel(req.params.modelId);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Recalculation failed" });
+    }
+  });
+
+  app.patch("/api/models/:modelId/assumptions", async (req: Request, res: Response) => {
+    const allAssumptions = await storage.getAssumptions(req.params.modelId);
+    const base = allAssumptions.find(a => !a.scenarioId);
+    if (base) {
+      const updated = await storage.updateAssumptions(base.id, req.body);
+      res.json(updated);
+    } else {
+      const created = await storage.createAssumptions({ modelId: req.params.modelId, ...req.body });
+      res.json(created);
+    }
   });
 }
