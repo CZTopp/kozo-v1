@@ -1,0 +1,27 @@
+Plan
+Intent & Goal
+Turn a spreadsheet-based financial modeling workflow into an app that makes it faster to build scenarios, track performance against forecasts, and share results. The app helps a solo founder or analyst model revenue projections, cash flow, runway, and scenario planning (best/worst case) with a mix of manual actuals and calculated forecasts. Success means spending less time wrestling with spreadsheets and more time making informed decisions.
+
+Audience & Roles
+Solo user (founder or financial analyst). Single-user workflow with no collaboration or permission complexity. The user is both the creator and consumer of all models, scenarios, and reports.
+
+Core Flows
+These flows must work end-to-end:
+
+User creates a financial model → defines key assumptions (growth rate, churn, pricing, costs) → sets up formulas that calculate forecasts based on assumptions → views projected revenue, cash flow, and runway
+User connects to OpenBB → imports market data (stock prices, indices, benchmarks) or company financial data → uses imported data to inform assumptions or actuals in the model
+User creates multiple scenarios (base case, optimistic, pessimistic) → adjusts assumptions per scenario → compares scenarios side-by-side to understand sensitivity and risk
+User inputs actual financial data (monthly actuals) → app calculates variance between actuals and forecast → user sees where performance diverges from plan
+User generates a shareable report or snapshot → exports or shares key metrics, charts, and scenario comparisons with stakeholders (investors, advisors)
+
+What NOT to Do
+❌ Do not build complex multi-user collaboration or approval workflows—this is a single-user tool
+❌ Do not create a generic 'budgeting app'—focus on modeling, forecasting, and scenario planning specifically
+❌ Do not hide the formulas or assumptions—transparency and control over calculations is critical
+❌ Do not make reporting an afterthought—the ability to share clean outputs is a primary job
+
+Technical Requirements
+Integration with OpenBB (open source financial data platform) to pull market data and company financial data. The app should be able to authenticate with OpenBB, query for specific data sets (market indices, stock prices, company financials), and import that data into the model for use in assumptions or actuals.
+
+Design Preferences
+Clean, data-focused interface optimized for speed and clarity. The app is a productivity tool, not a marketing site. Prioritize structured layouts that support: (1) fast input of assumptions and actuals, (2) clear visualization of forecast vs actuals, (3) side-by-side scenario comparison. Use tables, charts, and clear visual hierarchy. Aesthetic should feel modern and professional—think SaaS tool, not consumer app
