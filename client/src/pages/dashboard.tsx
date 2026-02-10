@@ -3,10 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatPercent, calcPortfolioMetrics } from "@/lib/calculations";
 import { useModel } from "@/lib/model-context";
-import type { IncomeStatementLine, PortfolioPosition, MacroIndicator, MarketIndex } from "@shared/schema";
+import type { IncomeStatementLine, PortfolioPosition, MacroIndicator, MarketIndex, RevenueLineItem, RevenuePeriod, BalanceSheetLine, DcfValuation, CashFlowLine } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { TrendingUp, TrendingDown, DollarSign, Briefcase, Activity } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Briefcase, Activity, CheckCircle2, AlertCircle } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
+import { Link } from "wouter";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
@@ -17,6 +18,22 @@ export default function Dashboard() {
   const { data: indices } = useQuery<MarketIndex[]>({ queryKey: ["/api/market-indices"] });
   const { data: incomeData } = useQuery<IncomeStatementLine[]>({
     queryKey: ["/api/models", model?.id, "income-statement"],
+    enabled: !!model,
+  });
+  const { data: revenuePeriods } = useQuery<RevenuePeriod[]>({
+    queryKey: ["/api/models", model?.id, "revenue-periods"],
+    enabled: !!model,
+  });
+  const { data: balanceSheet } = useQuery<BalanceSheetLine[]>({
+    queryKey: ["/api/models", model?.id, "balance-sheet"],
+    enabled: !!model,
+  });
+  const { data: dcfData } = useQuery<DcfValuation | null>({
+    queryKey: ["/api/models", model?.id, "dcf"],
+    enabled: !!model,
+  });
+  const { data: cashFlow } = useQuery<CashFlowLine[]>({
+    queryKey: ["/api/models", model?.id, "cash-flow"],
     enabled: !!model,
   });
 
@@ -40,6 +57,24 @@ export default function Dashboard() {
 
   const interestRates = macro?.filter(m => m.category === "Interest Rates") || [];
   const inflation = macro?.filter(m => m.category === "Inflation") || [];
+
+  const hasRevenueData = revenuePeriods && revenuePeriods.some(p => (p.amount || 0) > 0);
+  const hasCostAssumptions = incomeData && incomeData.some(d => (d.cogs || 0) !== 0 || (d.salesMarketing || 0) !== 0 || (d.researchDevelopment || 0) !== 0);
+  const hasBalanceSheet = balanceSheet && balanceSheet.length > 0;
+  const hasCashFlow = cashFlow && cashFlow.some(cf => (cf.freeCashFlow || 0) !== 0);
+  const hasDcfParameters = dcfData && (dcfData.currentSharePrice || 0) > 0 && ((dcfData.riskFreeRate || 0) > 0 || (dcfData.beta || 0) > 0);
+  const isValuationComplete = hasRevenueData && hasCostAssumptions && hasBalanceSheet && hasCashFlow && hasDcfParameters;
+
+  const readinessItems = [
+    { name: "Revenue Data", complete: hasRevenueData, page: "Revenue Forecast", link: "/revenue" },
+    { name: "Cost Assumptions", complete: hasCostAssumptions, page: "Income Statement", link: "/income-statement" },
+    { name: "Balance Sheet", complete: hasBalanceSheet, page: "Balance Sheet", link: "/balance-sheet" },
+    { name: "Cash Flow", complete: hasCashFlow, page: "Cash Flow", link: "/cash-flow" },
+    { name: "DCF Parameters", complete: hasDcfParameters, page: "DCF Valuation", link: "/dcf" },
+    { name: "Valuation", complete: isValuationComplete, page: "Valuation Comparison", link: "/valuation" },
+  ];
+
+  const completedCount = readinessItems.filter(item => item.complete).length;
 
   return (
     <div className="p-4 space-y-4">
@@ -108,6 +143,31 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {model && (
+        <Card className="border-dashed" data-testid="card-model-readiness">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Model Readiness: {completedCount} of {readinessItems.length} steps complete</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {readinessItems.map(item => (
+                <div key={item.name} data-testid={`readiness-item-${item.name.toLowerCase().replace(/\s+/g, '-')}`} className="flex items-center gap-2">
+                  {item.complete ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                  )}
+                  <span className="text-sm">{item.name}</span>
+                  <Link href={item.link} className="text-xs text-primary hover:underline ml-auto">
+                    {item.page}
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card data-testid="card-revenue-chart">

@@ -12,7 +12,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { IncomeStatementLine, Assumptions } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line } from "recharts";
-import { TrendingUp, TrendingDown, Save, RefreshCw, ArrowRight, ArrowDown } from "lucide-react";
+import { TrendingUp, TrendingDown, Save, RefreshCw, ArrowRight, ArrowDown, AlertTriangle } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
 
 export default function IncomeStatement() {
@@ -62,6 +62,17 @@ export default function IncomeStatement() {
   if (!model) return <div className="p-4 text-muted-foreground">Select a company from the sidebar to begin.</div>;
 
   const annualData = incomeData?.filter(d => !d.quarter).sort((a, b) => a.year - b.year) || [];
+
+  const hasNoRevenue = annualData.length === 0 || annualData.every(d => !d.revenue || d.revenue === 0);
+  const hasDefaultAssumptions = !baseAssumptions || (
+    parseFloat(String(baseAssumptions.cogsPercent || "0")) === 0 &&
+    parseFloat(String(baseAssumptions.salesMarketingPercent || "0")) === 0 &&
+    parseFloat(String(baseAssumptions.rdPercent || "0")) === 0 &&
+    parseFloat(String(baseAssumptions.gaPercent || "0")) === 0 &&
+    parseFloat(String(baseAssumptions.depreciationPercent || "0")) === 0 &&
+    parseFloat(String(baseAssumptions.taxRate || "0")) === 0
+  );
+  const hasIncomeWarnings = hasNoRevenue || hasDefaultAssumptions;
 
   const assumptionFields = [
     { key: "cogsPercent", label: "COGS %", dbKey: "cogsPercent" },
@@ -151,6 +162,27 @@ export default function IncomeStatement() {
           )}
         </div>
       </div>
+
+      {hasIncomeWarnings && !editMode && (
+        <Card className="border-dashed" data-testid="card-income-warnings">
+          <CardContent className="pt-4 pb-3">
+            <div className="space-y-2">
+              {hasNoRevenue && (
+                <div className="flex items-center gap-2 text-sm text-yellow-600 dark:text-yellow-500" data-testid="warning-no-revenue">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                  <span>No revenue data found. Enter quarterly revenue on the Revenue Forecast page first. The Income Statement derives all values from revenue.</span>
+                </div>
+              )}
+              {hasDefaultAssumptions && !hasNoRevenue && (
+                <div className="flex items-center gap-2 text-sm text-yellow-600 dark:text-yellow-500" data-testid="warning-default-assumptions">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                  <span>Cost assumptions appear to be at defaults (all zeros). Click "Edit Assumptions" to set COGS, S&M, R&D, G&A, and Tax Rate percentages so the P&L calculates correctly.</span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {editMode && (
         <Card className="border-dashed">

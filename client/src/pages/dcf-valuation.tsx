@@ -11,7 +11,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { DcfValuation, CashFlowLine } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { TrendingUp, TrendingDown, Target, Save, RefreshCw, ArrowDown, ArrowRight } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, Save, RefreshCw, ArrowDown, ArrowRight, AlertTriangle } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
 
 export default function DcfValuationPage() {
@@ -104,6 +104,11 @@ export default function DcfValuationPage() {
     { label: "Target Price Per Share", value: `$${dcfResult.targetPricePerShare.toFixed(2)}` },
   ] : [];
 
+  const hasZeroPrice = currentPrice === 0;
+  const hasDefaultWacc = getDcfVal("riskFreeRate") === 0 && getDcfVal("beta") === 0 && getDcfVal("marketReturn") === 0;
+  const hasNoFCF = fcfProjections.length === 0 || fcfProjections.every(f => f === 0);
+  const hasIssues = hasZeroPrice || hasDefaultWacc || hasNoFCF;
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -165,6 +170,33 @@ export default function DcfValuationPage() {
           </CardContent>
         </Card>
       </div>
+
+      {hasIssues && (
+        <Card data-testid="card-dcf-warnings" className="border-dashed">
+          <CardContent className="pt-6">
+            <div className="space-y-3">
+              {hasZeroPrice && (
+                <div className="flex gap-2" data-testid="warning-zero-price">
+                  <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 flex-shrink-0 mt-0.5" />
+                  <span className="text-sm text-yellow-600 dark:text-yellow-500">Current share price is $0. Click 'Edit WACC Params' and set the Current Share Price to see meaningful upside/downside calculations.</span>
+                </div>
+              )}
+              {hasDefaultWacc && (
+                <div className="flex gap-2" data-testid="warning-default-wacc">
+                  <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 flex-shrink-0 mt-0.5" />
+                  <span className="text-sm text-yellow-600 dark:text-yellow-500">WACC inputs appear to be at defaults (Risk-Free Rate and Beta are both zero). Set realistic values to get an accurate discount rate.</span>
+                </div>
+              )}
+              {hasNoFCF && (
+                <div className="flex gap-2" data-testid="warning-no-fcf">
+                  <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 flex-shrink-0 mt-0.5" />
+                  <span className="text-sm text-yellow-600 dark:text-yellow-500">No Free Cash Flow data found. Enter revenue on the Revenue Forecast page and run 'Forecast Forward' to generate FCF projections.</span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card data-testid="card-wacc-panel">

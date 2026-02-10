@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCurrency, formatPercent } from "@/lib/calculations";
 import type { ValuationComparison, FinancialModel } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
-import { TrendingUp, TrendingDown, Target, ArrowDown } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, ArrowDown, AlertTriangle } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
 
 export default function ValuationComparisonPage() {
@@ -62,6 +62,12 @@ export default function ValuationComparisonPage() {
     Bear: m.bearTarget,
   }));
 
+  const hasPegZero = val && val.peBullTarget === 0 && val.peBaseTarget === 0 && val.peBearTarget === 0;
+  const hasAllZeroTargets = val && methods.every(m => m.bullTarget === 0 && m.baseTarget === 0 && m.bearTarget === 0);
+  const hasNoScenarioRevenues = !val?.valuationData || !(val.valuationData as any)?.scenarioRevenues || Object.keys((val.valuationData as any)?.scenarioRevenues?.base || {}).length === 0;
+  const hasZeroPrice = currentPrice === 0;
+  const hasIssues = hasPegZero || hasAllZeroTargets || hasNoScenarioRevenues || hasZeroPrice;
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -94,6 +100,39 @@ export default function ValuationComparisonPage() {
           </div>
         </CardContent>
       </Card>
+
+      {hasIssues && (
+        <Card className="border-dashed" data-testid="card-valuation-warnings">
+          <CardContent className="pt-4 pb-3">
+            <div className="space-y-3">
+              {hasZeroPrice && (
+                <div className="flex items-start gap-2" data-testid="warning-zero-price">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0 text-yellow-600 dark:text-yellow-500 mt-0.5" />
+                  <span className="text-sm">Current share price is $0. Set it on the DCF Valuation page to calculate meaningful target comparisons.</span>
+                </div>
+              )}
+              {hasAllZeroTargets && (
+                <div className="flex items-start gap-2" data-testid="warning-all-zero">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0 text-yellow-600 dark:text-yellow-500 mt-0.5" />
+                  <span className="text-sm">All valuation targets are $0. This usually means revenue data hasn't been entered yet. Start with the Revenue Forecast page.</span>
+                </div>
+              )}
+              {hasPegZero && !hasAllZeroTargets && (
+                <div className="flex items-start gap-2" data-testid="warning-peg-zero">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0 text-yellow-600 dark:text-yellow-500 mt-0.5" />
+                  <span className="text-sm">PEG-based targets are $0. This can happen when earnings (EPS) data is zero across all years. Ensure the Income Statement has non-zero net income.</span>
+                </div>
+              )}
+              {hasNoScenarioRevenues && (
+                <div className="flex items-start gap-2" data-testid="warning-no-scenarios">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0 text-yellow-600 dark:text-yellow-500 mt-0.5" />
+                  <span className="text-sm">Scenario revenue projections are empty. Run 'Recalculate' from the Income Statement or DCF page to generate bull/base/bear scenarios.</span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Card data-testid="card-current-price">

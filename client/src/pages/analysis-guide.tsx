@@ -1,6 +1,8 @@
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
+  ClipboardCheck,
   LayoutDashboard,
   DollarSign,
   FileSpreadsheet,
@@ -183,6 +185,51 @@ const workflowSteps = [
   { step: 4, title: "Review Cash Flows", page: "Cash Flow", description: "Verify auto-calculated operating, investing, and financing cash flows. Ensure FCF is reasonable." },
   { step: 5, title: "Run DCF Analysis", page: "DCF Valuation", description: "Set WACC parameters and review the discounted cash flow target price and sensitivity analysis." },
   { step: 6, title: "Compare Valuations", page: "Valuation Comparison", description: "Review the final output comparing P/R, PEG, and DCF target prices across bull/base/bear scenarios." },
+];
+
+const requiredInputs = [
+  {
+    page: "Revenue Forecast",
+    path: "/revenue",
+    critical: ["At least one revenue stream with quarterly amounts for at least one year"],
+    optional: ["Growth Decay Rate", "Scenario Multipliers (Bull/Base/Bear)", "Additional revenue streams"],
+    downstream: "All downstream calculations depend on revenue data. Without it, the entire model produces zeros.",
+  },
+  {
+    page: "Income Statement",
+    path: "/income-statement",
+    critical: ["Cost assumptions: COGS %, S&M %, R&D %, G&A %, Depreciation %, Tax Rate"],
+    optional: ["Target Net Margin (for margin convergence over projection period)"],
+    downstream: "Drives Gross Profit, Operating Income, Net Income, and EPS. EPS feeds into PEG valuation.",
+  },
+  {
+    page: "Balance Sheet",
+    path: "/balance-sheet",
+    critical: ["Working capital ratios: Accounts Receivable %, Accounts Payable %, CapEx %"],
+    optional: [],
+    downstream: "CapEx flows into Cash Flow Statement. Working capital changes affect Operating Cash Flow.",
+  },
+  {
+    page: "Cash Flow",
+    path: "/cash-flow",
+    critical: [],
+    optional: [],
+    downstream: "Fully auto-derived. No inputs needed. Free Cash Flow (FCF) is the key output used by DCF.",
+  },
+  {
+    page: "DCF Valuation",
+    path: "/dcf",
+    critical: ["Current Share Price", "Risk-Free Rate", "Beta", "Market Return"],
+    optional: ["Cost of Debt", "Equity/Debt Weights", "Long-Term Growth Rate", "Total Debt"],
+    downstream: "Produces the DCF target price. Without a current share price, upside/downside cannot be calculated.",
+  },
+  {
+    page: "Valuation Comparison",
+    path: "/valuation",
+    critical: [],
+    optional: [],
+    downstream: "Fully auto-derived. Combines P/R, PEG, and DCF methods. If upstream data is missing, targets show $0.",
+  },
 ];
 
 const walkthroughSteps = [
@@ -438,6 +485,63 @@ export default function AnalysisGuide() {
               </div>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card data-testid="section-required-inputs">
+        <CardHeader>
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <ClipboardCheck className="h-4 w-4" />
+            Required Inputs Reference
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Quick reference for what each page needs as input and how it affects downstream calculations.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {requiredInputs.map((item) => {
+            const slug = item.page.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+            return (
+              <Card key={item.page} data-testid={`card-required-${slug}`}>
+                <CardHeader>
+                  <CardTitle className="text-sm font-medium">
+                    <Link href={item.path} className="underline" data-testid={`link-required-${slug}`}>
+                      {item.page}
+                    </Link>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {item.critical.length === 0 && item.optional.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No inputs needed -- this page is fully auto-derived</p>
+                  ) : (
+                    <>
+                      {item.critical.length > 0 && (
+                        <div className="space-y-1">
+                          <Badge variant="destructive">Required</Badge>
+                          <ul className="ml-4 space-y-0.5">
+                            {item.critical.map((c, i) => (
+                              <li key={i} className="text-sm text-muted-foreground">{c}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {item.optional.length > 0 && (
+                        <div className="space-y-1">
+                          <Badge variant="secondary">Optional</Badge>
+                          <ul className="ml-4 space-y-0.5">
+                            {item.optional.map((o, i) => (
+                              <li key={i} className="text-sm text-muted-foreground">{o}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  <p className="text-sm text-muted-foreground">{item.downstream}</p>
+                </CardContent>
+              </Card>
+            );
+          })}
         </CardContent>
       </Card>
 

@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { RevenueLineItem, RevenuePeriod } from "@shared/schema";
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Label } from "@/components/ui/label";
-import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil, Sparkles, Settings2, ChevronDown, ChevronUp } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil, Sparkles, Settings2, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
@@ -256,6 +256,8 @@ export default function RevenueForecast() {
     return false;
   })();
 
+  const hasNoRevenueData = !periods || periods.length === 0 || !periods.some(p => (p.amount || 0) > 0);
+
   const getTotalRevenue = (year: number) => {
     let total = visibleLineItems.reduce((sum, li) => sum + getAnnualTotal(li.id, year), 0);
     newLineItems.forEach(ni => { total += getNewItemAnnualTotal(ni.tempId, year); });
@@ -447,6 +449,17 @@ export default function RevenueForecast() {
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <ArrowRight className="h-4 w-4" />
               <span>Edit revenue stream names and quarterly values, add new streams, or remove existing ones. Changes cascade through all downstream statements.</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {hasNoRevenueData && !editMode && (
+        <Card className="border-dashed" data-testid="card-revenue-warning">
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-2 text-sm text-yellow-600 dark:text-yellow-500">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              <span>No revenue data entered yet. Click "Edit Revenue" to add quarterly revenue for each stream, or use "Forecast Forward" after entering at least one quarter of data. Revenue is the foundation for all downstream calculations.</span>
             </div>
           </CardContent>
         </Card>
