@@ -27,9 +27,10 @@ const sections = [
     icon: LayoutDashboard,
     path: "/",
     purpose: "Your command center. Provides a high-level snapshot of your financial model, portfolio performance, and macroeconomic context in one place.",
-    keyMetrics: ["Total Revenue (Latest Year)", "Portfolio Value & Total Return", "Portfolio Beta", "S&P 500 YTD"],
+    keyMetrics: ["Total Revenue (Latest Year)", "Portfolio Value & Total Return", "Portfolio Beta", "S&P 500 YTD", "Model Readiness"],
     howToUse: [
       "Start here to assess overall health before diving into individual pages.",
+      "Check the Model Readiness card to see which steps are complete and which still need attention. Each item links directly to the relevant page so you can fill in missing data.",
       "Compare your portfolio return against the S&P 500 YTD to evaluate relative performance.",
       "Check the Revenue & Profitability chart for trend direction -- are revenue, EBITDA, and net income moving in the same direction?",
       "Review sector allocation to ensure you are not over-concentrated in any one sector.",
