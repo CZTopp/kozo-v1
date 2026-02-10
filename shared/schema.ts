@@ -11,11 +11,11 @@ export const financialModels = pgTable("financial_models", {
   startYear: integer("start_year").notNull(),
   endYear: integer("end_year").notNull(),
   sharesOutstanding: real("shares_outstanding").default(0),
-  growthDecayRate: real("growth_decay_rate").default(0.15),
+  growthDecayRate: real("growth_decay_rate").default(0),
   targetNetMargin: real("target_net_margin"),
-  scenarioBullMultiplier: real("scenario_bull_multiplier").default(1.3),
+  scenarioBullMultiplier: real("scenario_bull_multiplier").default(1.2),
   scenarioBaseMultiplier: real("scenario_base_multiplier").default(1.0),
-  scenarioBearMultiplier: real("scenario_bear_multiplier").default(0.7),
+  scenarioBearMultiplier: real("scenario_bear_multiplier").default(0.8),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -167,11 +167,11 @@ export default function RevenueForecast() {
   useEffect(() => {
     if (model && !projectionSettings) {
       setProjectionSettings({
-        growthDecayRate: model.growthDecayRate ?? 0.15,
+        growthDecayRate: model.growthDecayRate ?? 0,
         targetNetMargin: model.targetNetMargin ?? null,
-        scenarioBullMultiplier: model.scenarioBullMultiplier ?? 1.3,
+        scenarioBullMultiplier: model.scenarioBullMultiplier ?? 1.2,
         scenarioBaseMultiplier: model.scenarioBaseMultiplier ?? 1.0,
-        scenarioBearMultiplier: model.scenarioBearMultiplier ?? 0.7,
+        scenarioBearMultiplier: model.scenarioBearMultiplier ?? 0.8,
       });
     }
   }, [model?.id]);

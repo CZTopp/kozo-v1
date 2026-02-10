@@ -45,9 +45,9 @@ export default function ValuationComparisonPage() {
     },
     {
       name: "DCF",
-      bullMultiple: `${(model.scenarioBullMultiplier ?? 1.3).toFixed(1)}x`,
+      bullMultiple: `${(model.scenarioBullMultiplier ?? 1.2).toFixed(1)}x`,
       baseMultiple: `${(model.scenarioBaseMultiplier ?? 1.0).toFixed(1)}x`,
-      bearMultiple: `${(model.scenarioBearMultiplier ?? 0.7).toFixed(1)}x`,
+      bearMultiple: `${(model.scenarioBearMultiplier ?? 0.8).toFixed(1)}x`,
       bullTarget: val.dcfBullTarget || 0,
       baseTarget: val.dcfBaseTarget || 0,
       bearTarget: val.dcfBearTarget || 0,

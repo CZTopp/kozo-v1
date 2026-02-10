@@ -341,9 +341,9 @@ export async function recalculateModel(modelId: string) {
     peBullTarget: Math.round(lastEPS * growthPct * peBullPeg * 100) / 100,
     peBaseTarget: Math.round(lastEPS * growthPct * peBasePeg * 100) / 100,
     peBearTarget: Math.round(lastEPS * growthPct * peBearPeg * 100) / 100,
-    dcfBullTarget: Math.round(targetPrice * (model.scenarioBullMultiplier ?? 1.3) * 100) / 100,
+    dcfBullTarget: Math.round(targetPrice * (model.scenarioBullMultiplier ?? 1.2) * 100) / 100,
     dcfBaseTarget: Math.round(targetPrice * (model.scenarioBaseMultiplier ?? 1.0) * 100) / 100,
-    dcfBearTarget: Math.round(targetPrice * (model.scenarioBearMultiplier ?? 0.7) * 100) / 100,
+    dcfBearTarget: Math.round(targetPrice * (model.scenarioBearMultiplier ?? 0.8) * 100) / 100,
     averageTarget: 0,
     percentToTarget: 0,
   };
@@ -387,9 +387,9 @@ export async function forecastForward(modelId: string) {
   const hasAnyData = periods.some(p => (p.amount || 0) > 0);
   if (!hasAnyData) throw new Error("No existing revenue data to base projections on. Enter revenue for at least one year first.");
 
-  const decayRate = model.growthDecayRate ?? 0.15;
-  const bullMult = model.scenarioBullMultiplier ?? 1.3;
-  const bearMult = model.scenarioBearMultiplier ?? 0.7;
+  const decayRate = model.growthDecayRate ?? 0;
+  const bullMult = model.scenarioBullMultiplier ?? 1.2;
+  const bearMult = model.scenarioBearMultiplier ?? 0.8;
 
   const getAmount = (liId: string, year: number, quarter: number): number => {
     const p = periods.find(p => p.lineItemId === liId && p.year === year && p.quarter === quarter);
