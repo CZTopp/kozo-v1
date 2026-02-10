@@ -6,6 +6,7 @@ import { z } from "zod";
 export const financialModels = pgTable("financial_models", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
+  ticker: text("ticker"),
   description: text("description"),
   currency: text("currency").notNull().default("USD"),
   startYear: integer("start_year").notNull(),

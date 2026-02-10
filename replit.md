@@ -4,6 +4,7 @@
 Comprehensive financial modeling and valuation application covering 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. Market indices pull live data from Yahoo Finance; macro indicators pull live data from FRED API.
 
 ## Recent Changes
+- 2026-02-10: Company ticker field on financial_models - each company can have a ticker symbol; Company Chart auto-loads the selected company's ticker (falls back to AAPL); users can save a new ticker from the chart page; create company dialog includes ticker field
 - 2026-02-10: Company Chart page (/chart) - embedded TradingView interactive chart with ticker search, quick-access buttons, theme-aware widget, pre-loaded MA50/MA200
 - 2026-02-10: Analysis Guide updated - table of contents with jump navigation (desktop sidebar + mobile badges), Company Chart section added to page breakdown, walkthrough expanded to 11 steps with chart step
 - 2026-02-10: Live portfolio price refresh - POST /api/refresh-portfolio-prices fetches live Yahoo Finance quotes for all portfolio positions (price, P/E, beta, MA50/200, 52W range, volume, market cap, EPS, dividend yield), recalculates P&L and golden cross signals

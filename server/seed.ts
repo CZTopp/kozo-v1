@@ -13,6 +13,7 @@ export async function seedDatabase() {
 
   const [model] = await db.insert(financialModels).values({
     name: "TechCo SaaS Model 2024-2028",
+    ticker: "AAPL",
     description: "5-year SaaS financial model with full financial statements, DCF and multiples valuation",
     currency: "USD",
     startYear: 2024,

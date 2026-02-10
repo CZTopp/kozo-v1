@@ -86,6 +86,7 @@ export function AppSidebar() {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [newCompany, setNewCompany] = useState({
     name: "",
+    ticker: "",
     startYear: new Date().getFullYear(),
     endYear: new Date().getFullYear() + 4,
     currency: "USD",
@@ -96,6 +97,7 @@ export function AppSidebar() {
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/models", {
         name: newCompany.name,
+        ticker: newCompany.ticker || null,
         startYear: newCompany.startYear,
         endYear: newCompany.endYear,
         currency: newCompany.currency,
@@ -109,6 +111,7 @@ export function AppSidebar() {
       setCreateOpen(false);
       setNewCompany({
         name: "",
+        ticker: "",
         startYear: new Date().getFullYear(),
         endYear: new Date().getFullYear() + 4,
         currency: "USD",
@@ -293,6 +296,17 @@ export function AppSidebar() {
                 placeholder="e.g. Apple Inc."
                 data-testid="input-company-name"
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="company-ticker">Ticker Symbol</Label>
+              <Input
+                id="company-ticker"
+                value={newCompany.ticker}
+                onChange={(e) => setNewCompany({ ...newCompany, ticker: e.target.value.toUpperCase() })}
+                placeholder="e.g. AAPL"
+                data-testid="input-company-ticker"
+              />
+              <p className="text-xs text-muted-foreground">Used for the Company Chart. You can change this later.</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">

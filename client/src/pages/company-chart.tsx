@@ -4,7 +4,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useModel } from "@/lib/model-context";
-import { LineChart, Search } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useMutation } from "@tanstack/react-query";
+import { LineChart, Search, Save, AlertTriangle } from "lucide-react";
 
 declare global {
   interface Window {
@@ -91,7 +94,7 @@ function TradingViewWidget({ symbol, theme }: { symbol: string; theme: string })
       id={CONTAINER_ID}
       ref={containerRef}
       className="w-full"
-      style={{ height: "calc(100vh - 240px)", minHeight: "500px" }}
+      style={{ height: "calc(100vh - 280px)", minHeight: "500px" }}
       data-testid="tradingview-widget-container"
     />
   );
@@ -99,9 +102,18 @@ function TradingViewWidget({ symbol, theme }: { symbol: string; theme: string })
 
 export default function CompanyChart() {
   const { selectedModel } = useModel();
-  const [ticker, setTicker] = useState("AAPL");
-  const [inputValue, setInputValue] = useState("AAPL");
+  const { toast } = useToast();
+
+  const modelTicker = selectedModel?.ticker || "";
+  const [ticker, setTicker] = useState(modelTicker || "AAPL");
+  const [inputValue, setInputValue] = useState(modelTicker || "AAPL");
   const [theme, setTheme] = useState("dark");
+
+  useEffect(() => {
+    const t = modelTicker || "AAPL";
+    setTicker(t);
+    setInputValue(t);
+  }, [modelTicker]);
 
   useEffect(() => {
     const isDark = document.documentElement.classList.contains("dark");
@@ -114,6 +126,17 @@ export default function CompanyChart() {
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => observer.disconnect();
   }, []);
+
+  const saveTickerMutation = useMutation({
+    mutationFn: async (newTicker: string) => {
+      if (!selectedModel) return;
+      await apiRequest("PATCH", `/api/models/${selectedModel.id}`, { ticker: newTicker });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      toast({ title: "Ticker saved", description: `Ticker updated to ${ticker} for ${selectedModel?.name}` });
+    },
+  });
 
   const handleSearch = () => {
     const cleaned = inputValue.trim().toUpperCase();
@@ -128,6 +151,12 @@ export default function CompanyChart() {
     }
   };
 
+  const handleSaveTicker = () => {
+    if (selectedModel && ticker) {
+      saveTickerMutation.mutate(ticker);
+    }
+  };
+
   const quickSymbols = [
     { label: "S&P 500", symbol: "SPY" },
     { label: "Nasdaq", symbol: "QQQ" },
@@ -139,6 +168,8 @@ export default function CompanyChart() {
     { label: "NVDA", symbol: "NVDA" },
   ];
 
+  const tickerDiffers = selectedModel && ticker !== (selectedModel.ticker || "");
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -147,16 +178,28 @@ export default function CompanyChart() {
           <p className="text-sm text-muted-foreground">
             Interactive price chart powered by TradingView
             {selectedModel && (
-              <span> &mdash; Analyzing: {selectedModel.name}</span>
+              <span> &mdash; {selectedModel.name}</span>
             )}
           </p>
         </div>
       </div>
 
+      {selectedModel && !selectedModel.ticker && (
+        <Card className="border-yellow-500/50" data-testid="card-no-ticker-warning">
+          <CardContent className="p-3 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-yellow-500 shrink-0" />
+            <p className="text-sm">
+              No ticker is set for <span className="font-medium">{selectedModel.name}</span>. 
+              Search for a symbol below and click "Save as Company Ticker" to link it.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card data-testid="card-chart-controls">
         <CardContent className="p-3">
           <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <div className="relative flex-1 max-w-xs">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -195,6 +238,23 @@ export default function CompanyChart() {
                 </Badge>
               ))}
             </div>
+            {selectedModel && tickerDiffers && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSaveTicker}
+                  disabled={saveTickerMutation.isPending}
+                  data-testid="button-save-ticker"
+                >
+                  <Save className="h-3.5 w-3.5 mr-1.5" />
+                  {saveTickerMutation.isPending ? "Saving..." : `Save "${ticker}" as Company Ticker`}
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Currently saved: {selectedModel.ticker || "none"}
+                </span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
