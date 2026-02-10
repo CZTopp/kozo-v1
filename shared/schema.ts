@@ -293,7 +293,9 @@ export const reports = pgTable("reports", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertFinancialModelSchema = createInsertSchema(financialModels).omit({ id: true, createdAt: true });
+export const insertFinancialModelSchema = createInsertSchema(financialModels, {
+  sharesOutstanding: z.number().min(0).max(100000000000).optional(),
+}).omit({ id: true, createdAt: true });
 export const insertRevenueLineItemSchema = createInsertSchema(revenueLineItems).omit({ id: true });
 export const insertRevenuePeriodSchema = createInsertSchema(revenuePeriods).omit({ id: true });
 export const insertIncomeStatementLineSchema = createInsertSchema(incomeStatementLines).omit({ id: true });

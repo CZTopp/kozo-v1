@@ -149,8 +149,20 @@ export class DatabaseStorage implements IStorage {
   async upsertRevenuePeriods(data: InsertRevenuePeriod[]) {
     const results: RevenuePeriod[] = [];
     for (const d of data) {
-      const [period] = await db.insert(revenuePeriods).values(d).returning();
-      results.push(period);
+      const existing = await db.select().from(revenuePeriods).where(
+        eq(revenuePeriods.lineItemId, d.lineItemId)
+      );
+      const match = existing.find(e => e.year === d.year && e.quarter === d.quarter);
+      if (match) {
+        const [updated] = await db.update(revenuePeriods)
+          .set({ amount: d.amount, isActual: d.isActual })
+          .where(eq(revenuePeriods.id, match.id))
+          .returning();
+        results.push(updated);
+      } else {
+        const [period] = await db.insert(revenuePeriods).values(d).returning();
+        results.push(period);
+      }
     }
     return results;
   }
