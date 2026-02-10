@@ -1,5 +1,6 @@
 import { Fragment, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useModel } from "@/lib/model-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCurrency, formatPercent } from "@/lib/calculations";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { FinancialModel, RevenueLineItem, RevenuePeriod } from "@shared/schema";
+import type { RevenueLineItem, RevenuePeriod } from "@shared/schema";
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil } from "lucide-react";
 
@@ -25,8 +26,7 @@ export default function RevenueForecast() {
   const [newLineItems, setNewLineItems] = useState<Array<{ tempId: string; name: string }>>([]);
   const [newLineItemPeriods, setNewLineItemPeriods] = useState<Record<string, Record<string, number>>>({});
 
-  const { data: models, isLoading: modelsLoading } = useQuery<FinancialModel[]>({ queryKey: ["/api/models"] });
-  const model = models?.[0];
+  const { selectedModel: model, isLoading: modelsLoading } = useModel();
 
   const { data: lineItems } = useQuery<RevenueLineItem[]>({
     queryKey: ["/api/models", model?.id, "revenue-line-items"],
@@ -133,7 +133,7 @@ export default function RevenueForecast() {
   });
 
   if (modelsLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
-  if (!model) return <div className="p-4 text-muted-foreground">No financial model found.</div>;
+  if (!model) return <div className="p-4 text-muted-foreground">Select a company from the sidebar to begin.</div>;
 
   const years = Array.from({ length: model.endYear - model.startYear + 1 }, (_, i) => model.startYear + i);
 

@@ -1,16 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
+import { useModel } from "@/lib/model-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/calculations";
-import type { FinancialModel, CashFlowLine } from "@shared/schema";
+import type { CashFlowLine } from "@shared/schema";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { TrendingUp, TrendingDown, DollarSign, ArrowDown } from "lucide-react";
 
 export default function CashFlow() {
-  const { data: models, isLoading } = useQuery<FinancialModel[]>({ queryKey: ["/api/models"] });
-  const model = models?.[0];
+  const { selectedModel: model, isLoading } = useModel();
 
   const { data: cfData } = useQuery<CashFlowLine[]>({
     queryKey: ["/api/models", model?.id, "cash-flow"],
@@ -18,7 +18,7 @@ export default function CashFlow() {
   });
 
   if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
-  if (!model) return <div className="p-4 text-muted-foreground">No financial model found.</div>;
+  if (!model) return <div className="p-4 text-muted-foreground">Select a company from the sidebar to begin.</div>;
 
   const annualData = cfData?.filter(d => !d.quarter).sort((a, b) => a.year - b.year) || [];
 

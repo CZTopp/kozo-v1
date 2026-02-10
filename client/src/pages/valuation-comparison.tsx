@@ -1,15 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
+import { useModel } from "@/lib/model-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency, formatPercent } from "@/lib/calculations";
-import type { FinancialModel, ValuationComparison } from "@shared/schema";
+import type { ValuationComparison } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
 import { TrendingUp, TrendingDown, Target, ArrowDown } from "lucide-react";
 
 export default function ValuationComparisonPage() {
-  const { data: models, isLoading } = useQuery<FinancialModel[]>({ queryKey: ["/api/models"] });
-  const model = models?.[0];
+  const { selectedModel: model, isLoading } = useModel();
 
   const { data: valData } = useQuery<ValuationComparison[]>({
     queryKey: ["/api/models", model?.id, "valuation-comparison"],
@@ -17,7 +17,7 @@ export default function ValuationComparisonPage() {
   });
 
   if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
-  if (!model) return <div className="p-4 text-muted-foreground">No financial model found.</div>;
+  if (!model) return <div className="p-4 text-muted-foreground">Select a company from the sidebar to begin.</div>;
 
   const val = valData?.[0];
   const currentPrice = val?.currentSharePrice || 0;

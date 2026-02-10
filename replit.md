@@ -4,6 +4,8 @@
 Comprehensive financial modeling and valuation application covering 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. All data is simulated demo data.
 
 ## Recent Changes
+- 2026-02-10: Multi-company support - ModelContext provider tracks selected company, sidebar company selector dropdown, create/delete companies, all pages use context instead of hardcoded first model
+- 2026-02-10: New companies start blank (no seeded data) - analyst builds their own analysis
 - 2026-02-09: Added cascading recalculation engine (server/recalculate.ts) - Revenue → IS → BS → CF → DCF → Valuation
 - 2026-02-09: Added editable pages: Revenue (quarterly amounts), Income Statement (cost %), Balance Sheet (working capital %), DCF (WACC params)
 - 2026-02-09: Cash Flow and Valuation Comparison are auto-derived read-only pages with cascade indicators
@@ -42,8 +44,9 @@ Comprehensive financial modeling and valuation application covering 10 core modu
 - `server/storage.ts` - DatabaseStorage class (IStorage interface)
 - `server/recalculate.ts` - Cascading recalculation engine (Revenue → IS → BS → CF → DCF → Valuation)
 - `server/seed.ts` - Comprehensive demo data seeder (5 years financial data, 15 stocks, 16 macro, 12 indices)
-- `client/src/App.tsx` - Main app with sidebar layout, 9 routes
-- `client/src/components/app-sidebar.tsx` - Navigation sidebar with all modules
+- `client/src/App.tsx` - Main app with sidebar layout, 9 routes, ModelProvider wrapping
+- `client/src/lib/model-context.tsx` - ModelContext provider for multi-company support (selected model ID, localStorage persistence)
+- `client/src/components/app-sidebar.tsx` - Navigation sidebar with company selector dropdown, create/delete company dialogs
 
 ### Frontend Pages (9 total)
 - `dashboard.tsx` - Financial overview, portfolio KPIs, sector allocation, macro data, top movers

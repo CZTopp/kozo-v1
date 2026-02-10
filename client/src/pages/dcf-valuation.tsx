@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useModel } from "@/lib/model-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCurrency, formatPercent, calcCostOfEquity, calcWACC, calcDCFTargetPrice, calcSensitivityTable } from "@/lib/calculations";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { FinancialModel, DcfValuation, CashFlowLine } from "@shared/schema";
+import type { DcfValuation, CashFlowLine } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { TrendingUp, TrendingDown, Target, Save, RefreshCw, ArrowDown, ArrowRight } from "lucide-react";
 
@@ -17,8 +18,7 @@ export default function DcfValuationPage() {
   const [editMode, setEditMode] = useState(false);
   const [editedDcf, setEditedDcf] = useState<Record<string, number>>({});
 
-  const { data: models, isLoading } = useQuery<FinancialModel[]>({ queryKey: ["/api/models"] });
-  const model = models?.[0];
+  const { selectedModel: model, isLoading } = useModel();
 
   const { data: dcfData } = useQuery<DcfValuation[]>({
     queryKey: ["/api/models", model?.id, "dcf"],
@@ -51,7 +51,7 @@ export default function DcfValuationPage() {
   });
 
   if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
-  if (!model) return <div className="p-4 text-muted-foreground">No financial model found.</div>;
+  if (!model) return <div className="p-4 text-muted-foreground">Select a company from the sidebar to begin.</div>;
 
   const dcf = dcfData?.[0];
   const annualCF = cfData?.filter(d => !d.quarter).sort((a, b) => a.year - b.year) || [];

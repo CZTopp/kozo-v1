@@ -2,19 +2,18 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatPercent, calcPortfolioMetrics } from "@/lib/calculations";
-import type { FinancialModel, IncomeStatementLine, PortfolioPosition, MacroIndicator, MarketIndex } from "@shared/schema";
+import { useModel } from "@/lib/model-context";
+import type { IncomeStatementLine, PortfolioPosition, MacroIndicator, MarketIndex } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { TrendingUp, TrendingDown, DollarSign, Briefcase, Activity } from "lucide-react";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
 export default function Dashboard() {
-  const { data: models } = useQuery<FinancialModel[]>({ queryKey: ["/api/models"] });
+  const { selectedModel: model } = useModel();
   const { data: portfolio } = useQuery<PortfolioPosition[]>({ queryKey: ["/api/portfolio"] });
   const { data: macro } = useQuery<MacroIndicator[]>({ queryKey: ["/api/macro-indicators"] });
   const { data: indices } = useQuery<MarketIndex[]>({ queryKey: ["/api/market-indices"] });
-
-  const model = models?.[0];
   const { data: incomeData } = useQuery<IncomeStatementLine[]>({
     queryKey: ["/api/models", model?.id, "income-statement"],
     enabled: !!model,
