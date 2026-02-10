@@ -303,7 +303,14 @@ export const insertBalanceSheetLineSchema = createInsertSchema(balanceSheetLines
 export const insertCashFlowLineSchema = createInsertSchema(cashFlowLines).omit({ id: true });
 export const insertDcfValuationSchema = createInsertSchema(dcfValuations).omit({ id: true });
 export const insertValuationComparisonSchema = createInsertSchema(valuationComparisons).omit({ id: true });
-export const insertPortfolioPositionSchema = createInsertSchema(portfolioPositions).omit({ id: true });
+export const insertPortfolioPositionSchema = createInsertSchema(portfolioPositions, {
+  marketCap: z.number().optional(),
+  volume: z.number().optional(),
+  avgVolume: z.number().optional(),
+  positionValue: z.number().optional(),
+  gainLossDollar: z.number().optional(),
+  ebitda: z.number().optional(),
+}).omit({ id: true });
 export const insertMacroIndicatorSchema = createInsertSchema(macroIndicators).omit({ id: true, updatedAt: true });
 export const insertMarketIndexSchema = createInsertSchema(marketIndices).omit({ id: true });
 export const insertPortfolioRedFlagSchema = createInsertSchema(portfolioRedFlags).omit({ id: true });
