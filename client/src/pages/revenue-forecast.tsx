@@ -12,7 +12,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { RevenueLineItem, RevenuePeriod } from "@shared/schema";
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil, Sparkles } from "lucide-react";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
@@ -132,6 +132,28 @@ export default function RevenueForecast() {
     },
   });
 
+  const forecastMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/models/${model!.id}/forecast-forward`);
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "revenue-periods"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "revenue-line-items"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "income-statement"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "balance-sheet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "cash-flow"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "dcf"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "valuation-comparison"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "assumptions"] });
+      const yrs = data?.forecastedYears?.join(", ") || "future years";
+      toast({ title: "Forecast projected", description: `Revenue projected for ${yrs}. All financial statements updated.` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Forecast failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   if (modelsLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
   if (!model) return <div className="p-4 text-muted-foreground">Select a company from the sidebar to begin.</div>;
 
@@ -173,6 +195,17 @@ export default function RevenueForecast() {
   };
 
   const visibleLineItems = lineItems?.filter(li => !pendingDeletes.has(li.id)) || [];
+
+  const hasEmptyFutureYears = (() => {
+    if (!periods || !lineItems || lineItems.length === 0) return false;
+    const yearsWithData = years.filter(yr =>
+      periods.some(p => p.year === yr && (p.amount || 0) > 0)
+    );
+    const yearsWithoutData = years.filter(yr =>
+      !periods.some(p => p.year === yr && (p.amount || 0) > 0)
+    );
+    return yearsWithData.length > 0 && yearsWithoutData.length > 0;
+  })();
 
   const getTotalRevenue = (year: number) => {
     let total = visibleLineItems.reduce((sum, li) => sum + getAnnualTotal(li.id, year), 0);
@@ -333,9 +366,25 @@ export default function RevenueForecast() {
               </Button>
             </>
           ) : (
-            <Button variant="outline" onClick={() => setEditMode(true)} data-testid="button-edit-revenue">
-              <Pencil className="h-4 w-4 mr-1" /> Edit Revenue
-            </Button>
+            <>
+              {hasEmptyFutureYears && (
+                <Button
+                  variant="default"
+                  onClick={() => forecastMutation.mutate()}
+                  disabled={forecastMutation.isPending}
+                  data-testid="button-forecast-forward"
+                >
+                  {forecastMutation.isPending ? (
+                    <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Projecting...</>
+                  ) : (
+                    <><Sparkles className="h-4 w-4 mr-1" /> Forecast Forward</>
+                  )}
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => setEditMode(true)} data-testid="button-edit-revenue">
+                <Pencil className="h-4 w-4 mr-1" /> Edit Revenue
+              </Button>
+            </>
           )}
         </div>
       </div>

@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { Server } from "http";
 import { storage } from "./storage";
-import { recalculateModel } from "./recalculate";
+import { recalculateModel, forecastForward } from "./recalculate";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 import { revenuePeriods } from "@shared/schema";
@@ -367,6 +367,15 @@ export async function registerRoutes(server: Server, app: Express) {
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Recalculation failed" });
+    }
+  });
+
+  app.post("/api/models/:modelId/forecast-forward", async (req: Request, res: Response) => {
+    try {
+      const result = await forecastForward(req.params.modelId);
+      res.json(result);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Forecast failed" });
     }
   });
 

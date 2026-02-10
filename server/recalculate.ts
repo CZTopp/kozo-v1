@@ -326,3 +326,106 @@ export async function recalculateModel(modelId: string) {
     valuation: valPayload,
   };
 }
+
+export async function forecastForward(modelId: string) {
+  const [model] = await db.select().from(financialModels).where(eq(financialModels.id, modelId));
+  if (!model) throw new Error("Model not found");
+
+  const lineItems = await db.select().from(revenueLineItems).where(eq(revenueLineItems.modelId, modelId));
+  if (lineItems.length === 0) throw new Error("No revenue streams found. Add at least one revenue stream first.");
+
+  const periods = await db.select().from(revenuePeriods).where(eq(revenuePeriods.modelId, modelId));
+  const allYears = Array.from({ length: model.endYear - model.startYear + 1 }, (_, i) => model.startYear + i);
+
+  const yearHasData = (year: number): boolean => {
+    return periods.some(p => p.year === year && (p.amount || 0) > 0);
+  };
+
+  const yearsWithData = allYears.filter(yearHasData);
+  const yearsWithoutData = allYears.filter(y => !yearHasData(y));
+
+  if (yearsWithData.length === 0) throw new Error("No existing revenue data to base projections on. Enter revenue for at least one year first.");
+  if (yearsWithoutData.length === 0) throw new Error("All years already have revenue data. Nothing to forecast.");
+
+  const lastDataYear = Math.max(...yearsWithData);
+
+  const newPeriods: Array<{
+    lineItemId: string;
+    modelId: string;
+    year: number;
+    quarter: number;
+    amount: number;
+    isActual: boolean;
+  }> = [];
+
+  for (const li of lineItems) {
+    for (let q = 1; q <= 4; q++) {
+      const quarterValues: Array<{ year: number; amount: number }> = [];
+      for (const yr of yearsWithData) {
+        const p = periods.find(p => p.lineItemId === li.id && p.year === yr && p.quarter === q);
+        if (p && (p.amount || 0) > 0) {
+          quarterValues.push({ year: yr, amount: p.amount || 0 });
+        }
+      }
+
+      let growthRate = 0.05;
+      if (quarterValues.length >= 2) {
+        const sorted = quarterValues.sort((a, b) => a.year - b.year);
+        const rates: number[] = [];
+        for (let i = 1; i < sorted.length; i++) {
+          if (sorted[i - 1].amount > 0) {
+            rates.push((sorted[i].amount - sorted[i - 1].amount) / sorted[i - 1].amount);
+          }
+        }
+        if (rates.length > 0) {
+          growthRate = rates.reduce((s, r) => s + r, 0) / rates.length;
+          growthRate = Math.max(-0.5, Math.min(growthRate, 2.0));
+        }
+      }
+
+      const baseAmount = quarterValues.length > 0
+        ? quarterValues.sort((a, b) => b.year - a.year)[0].amount
+        : 0;
+
+      const emptyFutureYears = yearsWithoutData.filter(y => y > lastDataYear).sort((a, b) => a - b);
+      let projectedAmount = baseAmount;
+      for (const yr of emptyFutureYears) {
+        projectedAmount = Math.round(projectedAmount * (1 + growthRate));
+
+        const existingPeriod = periods.find(p => p.lineItemId === li.id && p.year === yr && p.quarter === q);
+        if (!existingPeriod || (existingPeriod.amount || 0) === 0) {
+          newPeriods.push({
+            lineItemId: li.id,
+            modelId,
+            year: yr,
+            quarter: q,
+            amount: Math.max(0, projectedAmount),
+            isActual: false,
+          });
+        }
+      }
+    }
+  }
+
+  for (const np of newPeriods) {
+    const existing = periods.find(p =>
+      p.lineItemId === np.lineItemId && p.year === np.year && p.quarter === np.quarter
+    );
+    if (existing) {
+      await db.update(revenuePeriods)
+        .set({ amount: np.amount, isActual: false })
+        .where(eq(revenuePeriods.id, existing.id));
+    } else {
+      await db.insert(revenuePeriods).values(np);
+    }
+  }
+
+  const recalcResult = await recalculateModel(modelId);
+
+  return {
+    forecastedYears: [...new Set(newPeriods.map(p => p.year))].sort(),
+    periodsCreated: newPeriods.length,
+    growthApplied: true,
+    ...recalcResult,
+  };
+}

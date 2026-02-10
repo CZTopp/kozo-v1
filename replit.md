@@ -4,6 +4,8 @@
 Comprehensive financial modeling and valuation application covering 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. All data is simulated demo data.
 
 ## Recent Changes
+- 2026-02-10: Forecast Forward feature - auto-projects revenue into empty future years based on historical growth rates, cascades through all financial statements
+- 2026-02-10: New API endpoint: POST /api/models/:id/forecast-forward
 - 2026-02-10: Multi-company support - ModelContext provider tracks selected company, sidebar company selector dropdown, create/delete companies, all pages use context instead of hardcoded first model
 - 2026-02-10: New companies start blank (no seeded data) - analyst builds their own analysis
 - 2026-02-09: Added cascading recalculation engine (server/recalculate.ts) - Revenue → IS → BS → CF → DCF → Valuation
