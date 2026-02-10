@@ -1,21 +1,37 @@
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatPercent } from "@/lib/calculations";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { MacroIndicator, MarketIndex } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Globe, TrendingUp, TrendingDown, RefreshCw, Loader2 } from "lucide-react";
+import { TrendingUp, TrendingDown, RefreshCw, Loader2, Plus, Trash2 } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
 
 export default function MarketDataPage() {
   const { toast } = useToast();
   const { data: indices, isLoading: loadingIndices } = useQuery<MarketIndex[]>({ queryKey: ["/api/market-indices"] });
   const { data: macro, isLoading: loadingMacro } = useQuery<MacroIndicator[]>({ queryKey: ["/api/macro-indicators"] });
+
+  const [addIndexOpen, setAddIndexOpen] = useState(false);
+  const [addMacroOpen, setAddMacroOpen] = useState(false);
+  const [indexSymbol, setIndexSymbol] = useState("");
+  const [indexName, setIndexName] = useState("");
+  const [indexRegion, setIndexRegion] = useState("");
+  const [macroSeriesId, setMacroSeriesId] = useState("");
+  const [macroName, setMacroName] = useState("");
+  const [macroCategory, setMacroCategory] = useState("");
+  const [deleteIndexId, setDeleteIndexId] = useState<string | null>(null);
+  const [deleteMacroId, setDeleteMacroId] = useState<string | null>(null);
 
   const refreshMutation = useMutation({
     mutationFn: async () => {
@@ -37,6 +53,70 @@ export default function MarketDataPage() {
     },
     onError: (err: Error) => {
       toast({ title: "Refresh failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const addIndexMutation = useMutation({
+    mutationFn: async (data: { symbol: string; name: string; region: string }) => {
+      const res = await apiRequest("POST", "/api/market-indices/add-custom", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/market-indices"] });
+      setAddIndexOpen(false);
+      setIndexSymbol("");
+      setIndexName("");
+      setIndexRegion("");
+      toast({ title: "Index added" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Could not add index", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteIndexMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/market-indices/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/market-indices"] });
+      setDeleteIndexId(null);
+      toast({ title: "Index removed" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const addMacroMutation = useMutation({
+    mutationFn: async (data: { seriesId: string; name: string; category: string }) => {
+      const res = await apiRequest("POST", "/api/macro-indicators/add-custom", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/macro-indicators"] });
+      setAddMacroOpen(false);
+      setMacroSeriesId("");
+      setMacroName("");
+      setMacroCategory("");
+      toast({ title: "Macro indicator added" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Could not add indicator", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMacroMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/macro-indicators/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/macro-indicators"] });
+      setDeleteMacroId(null);
+      toast({ title: "Indicator removed" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
 
@@ -65,7 +145,11 @@ export default function MarketDataPage() {
     "Sentiment": "Consumer and business confidence surveys. Leading indicators of spending and investment decisions.",
     "Economic Activity": "Manufacturing and services activity indices. Above 50 indicates expansion; below 50 indicates contraction.",
     "Commodities": "Key commodity prices including oil, gold, and others. Commodity moves affect input costs and sector rotation strategies.",
+    "Custom": "User-added indicators from FRED. These may display raw values; adjust interpretation based on the specific series.",
   };
+
+  const deleteIndexTarget = deleteIndexId ? indices?.find(i => i.id === deleteIndexId) : null;
+  const deleteMacroTarget = deleteMacroId ? macro?.find(m => m.id === deleteMacroId) : null;
 
   return (
     <div className="p-4 space-y-4">
@@ -119,7 +203,13 @@ export default function MarketDataPage() {
           <TabsTrigger value="chart">Index Performance</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="indices" className="mt-4">
+        <TabsContent value="indices" className="mt-4 space-y-4">
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setAddIndexOpen(true)} data-testid="button-add-index">
+              <Plus className="h-4 w-4 mr-1" />
+              Add Index
+            </Button>
+          </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
@@ -135,6 +225,7 @@ export default function MarketDataPage() {
                       <TableHead className="text-right font-semibold">Daily</TableHead>
                       <TableHead className="text-right font-semibold">MTD</TableHead>
                       <TableHead className="text-right font-semibold">YTD</TableHead>
+                      <TableHead className="text-center font-semibold w-10"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -151,6 +242,11 @@ export default function MarketDataPage() {
                         </TableCell>
                         <TableCell className={`text-right ${(idx.ytdReturn || 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
                           {formatPercent(idx.ytdReturn || 0)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button size="icon" variant="ghost" onClick={() => setDeleteIndexId(idx.id)} data-testid={`button-delete-index-${idx.ticker}`}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -172,6 +268,7 @@ export default function MarketDataPage() {
                       <TableHead className="text-right font-semibold">Value</TableHead>
                       <TableHead className="text-right font-semibold">Daily</TableHead>
                       <TableHead className="text-right font-semibold">YTD</TableHead>
+                      <TableHead className="text-center font-semibold w-10"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -186,6 +283,11 @@ export default function MarketDataPage() {
                         <TableCell className={`text-right ${(idx.ytdReturn || 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
                           {formatPercent(idx.ytdReturn || 0)}
                         </TableCell>
+                        <TableCell className="text-center">
+                          <Button size="icon" variant="ghost" onClick={() => setDeleteIndexId(idx.id)} data-testid={`button-delete-index-${idx.ticker}`}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -195,7 +297,13 @@ export default function MarketDataPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="macro" className="mt-4">
+        <TabsContent value="macro" className="mt-4 space-y-4">
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setAddMacroOpen(true)} data-testid="button-add-macro">
+              <Plus className="h-4 w-4 mr-1" />
+              Add Indicator
+            </Button>
+          </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {groupedMacro.filter(g => g.data.length > 0).map(group => (
               <Card key={group.title}>
@@ -209,6 +317,7 @@ export default function MarketDataPage() {
                         <TableHead className="font-semibold">Indicator</TableHead>
                         <TableHead className="text-right font-semibold">Value</TableHead>
                         <TableHead className="text-right font-semibold">Prior</TableHead>
+                        <TableHead className="text-center font-semibold w-10"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -224,6 +333,11 @@ export default function MarketDataPage() {
                                 ? `${(m.priorValue * 100).toFixed(2)}%`
                                 : m.priorValue.toLocaleString()
                               : "--"}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Button size="icon" variant="ghost" onClick={() => setDeleteMacroId(m.id)} data-testid={`button-delete-macro-${m.name}`}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -259,6 +373,150 @@ export default function MarketDataPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={addIndexOpen} onOpenChange={setAddIndexOpen}>
+        <DialogContent data-testid="dialog-add-index">
+          <DialogHeader>
+            <DialogTitle>Add Market Index</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="indexSymbol">Yahoo Finance Symbol *</Label>
+              <Input
+                id="indexSymbol"
+                value={indexSymbol}
+                onChange={e => setIndexSymbol(e.target.value)}
+                placeholder="^GSPC, ^FTSE, BTC-USD, etc."
+                data-testid="input-index-symbol"
+              />
+              <p className="text-xs text-muted-foreground">Use Yahoo Finance ticker format. Index symbols usually start with ^ (e.g., ^GSPC for S&P 500).</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="indexName">Display Name (optional)</Label>
+              <Input
+                id="indexName"
+                value={indexName}
+                onChange={e => setIndexName(e.target.value)}
+                placeholder="Auto-detected from Yahoo"
+                data-testid="input-index-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="indexRegion">Region (optional)</Label>
+              <Input
+                id="indexRegion"
+                value={indexRegion}
+                onChange={e => setIndexRegion(e.target.value)}
+                placeholder="US, Europe, Asia, etc."
+                data-testid="input-index-region"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddIndexOpen(false)} data-testid="button-cancel-add-index">Cancel</Button>
+            <Button
+              onClick={() => addIndexMutation.mutate({ symbol: indexSymbol, name: indexName, region: indexRegion })}
+              disabled={!indexSymbol.trim() || addIndexMutation.isPending}
+              data-testid="button-confirm-add-index"
+            >
+              {addIndexMutation.isPending ? "Adding..." : "Add Index"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={addMacroOpen} onOpenChange={setAddMacroOpen}>
+        <DialogContent data-testid="dialog-add-macro">
+          <DialogHeader>
+            <DialogTitle>Add FRED Macro Indicator</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="macroSeriesId">FRED Series ID *</Label>
+              <Input
+                id="macroSeriesId"
+                value={macroSeriesId}
+                onChange={e => setMacroSeriesId(e.target.value)}
+                placeholder="DGS10, UNRATE, GDP, etc."
+                data-testid="input-macro-series"
+              />
+              <p className="text-xs text-muted-foreground">Find series IDs at fred.stlouisfed.org. Examples: DGS10 (10Y Treasury), UNRATE (Unemployment), GDP, CPIAUCSL (CPI).</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="macroName">Display Name (optional)</Label>
+              <Input
+                id="macroName"
+                value={macroName}
+                onChange={e => setMacroName(e.target.value)}
+                placeholder="Auto-detected from FRED"
+                data-testid="input-macro-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="macroCategory">Category (optional)</Label>
+              <Input
+                id="macroCategory"
+                value={macroCategory}
+                onChange={e => setMacroCategory(e.target.value)}
+                placeholder="Interest Rates, Inflation, etc."
+                data-testid="input-macro-category"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddMacroOpen(false)} data-testid="button-cancel-add-macro">Cancel</Button>
+            <Button
+              onClick={() => addMacroMutation.mutate({ seriesId: macroSeriesId, name: macroName, category: macroCategory })}
+              disabled={!macroSeriesId.trim() || addMacroMutation.isPending}
+              data-testid="button-confirm-add-macro"
+            >
+              {addMacroMutation.isPending ? "Adding..." : "Add Indicator"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteIndexId} onOpenChange={(open) => !open && setDeleteIndexId(null)}>
+        <AlertDialogContent data-testid="dialog-delete-index">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Index</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove {deleteIndexTarget?.name} ({deleteIndexTarget?.ticker}) from your tracked indices? You can add it back later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-index">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteIndexId && deleteIndexMutation.mutate(deleteIndexId)}
+              disabled={deleteIndexMutation.isPending}
+              data-testid="button-confirm-delete-index"
+            >
+              {deleteIndexMutation.isPending ? "Removing..." : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteMacroId} onOpenChange={(open) => !open && setDeleteMacroId(null)}>
+        <AlertDialogContent data-testid="dialog-delete-macro">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Indicator</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove {deleteMacroTarget?.name} from your tracked indicators? You can add it back later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-macro">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteMacroId && deleteMacroMutation.mutate(deleteMacroId)}
+              disabled={deleteMacroMutation.isPending}
+              data-testid="button-confirm-delete-macro"
+            >
+              {deleteMacroMutation.isPending ? "Removing..." : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

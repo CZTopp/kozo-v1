@@ -67,10 +67,12 @@ export interface IStorage {
   getMacroIndicators(): Promise<MacroIndicator[]>;
   upsertMacroIndicator(data: InsertMacroIndicator): Promise<MacroIndicator>;
   replaceAllMacroIndicators(data: InsertMacroIndicator[]): Promise<MacroIndicator[]>;
+  deleteMacroIndicator(id: string): Promise<void>;
 
   getMarketIndices(): Promise<MarketIndex[]>;
   upsertMarketIndex(data: InsertMarketIndex): Promise<MarketIndex>;
   replaceAllMarketIndices(data: InsertMarketIndex[]): Promise<MarketIndex[]>;
+  deleteMarketIndex(id: string): Promise<void>;
 
   getPortfolioRedFlags(): Promise<PortfolioRedFlag[]>;
   upsertPortfolioRedFlag(data: InsertPortfolioRedFlag): Promise<PortfolioRedFlag>;
@@ -272,6 +274,10 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async deleteMacroIndicator(id: string) {
+    await db.delete(macroIndicators).where(eq(macroIndicators.id, id));
+  }
+
   async getMarketIndices() {
     return db.select().from(marketIndices);
   }
@@ -286,6 +292,10 @@ export class DatabaseStorage implements IStorage {
     if (data.length === 0) return [];
     const result = await db.insert(marketIndices).values(data).returning();
     return result;
+  }
+
+  async deleteMarketIndex(id: string) {
+    await db.delete(marketIndices).where(eq(marketIndices.id, id));
   }
 
   async getPortfolioRedFlags() {

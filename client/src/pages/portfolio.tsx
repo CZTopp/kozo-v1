@@ -14,7 +14,7 @@ import { formatCurrency, formatPercent, calcPortfolioMetrics } from "@/lib/calcu
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { PortfolioPosition, PortfolioRedFlag, MacroIndicator, MarketIndex } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { TrendingUp, TrendingDown, AlertTriangle, Shield, Activity, Plus, Pencil, Trash2 } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertTriangle, Shield, Activity, Plus, Pencil, Trash2, RefreshCw, Loader2 } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { useToast } from "@/hooks/use-toast";
 
@@ -161,6 +161,27 @@ export default function Portfolio() {
     },
   });
 
+  const refreshMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/refresh-portfolio-prices");
+      return res.json();
+    },
+    onSuccess: (data: { updated: number; errors: string[] }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portfolio"] });
+      const parts: string[] = [];
+      if (data.updated > 0) parts.push(`${data.updated} positions updated`);
+      toast({
+        title: "Portfolio prices refreshed",
+        description: parts.length > 0
+          ? `${parts.join(", ")} with live data.${data.errors.length > 0 ? ` (${data.errors.length} warning${data.errors.length > 1 ? "s" : ""})` : ""}`
+          : data.errors.join("; "),
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Refresh failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   function openCreate() {
     setEditingId(null);
     setForm({ ...emptyForm });
@@ -241,10 +262,25 @@ export default function Portfolio() {
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Portfolio Dashboard</h1>
           <p className="text-sm text-muted-foreground">{positions?.length || 0} positions tracked</p>
         </div>
-        <Button onClick={openCreate} data-testid="button-add-position">
-          <Plus className="h-4 w-4 mr-1" />
-          Add Position
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={() => refreshMutation.mutate()}
+            disabled={refreshMutation.isPending || !positions?.length}
+            data-testid="button-refresh-prices"
+          >
+            {refreshMutation.isPending ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-1" />
+            )}
+            {refreshMutation.isPending ? "Refreshing..." : "Refresh Prices"}
+          </Button>
+          <Button onClick={openCreate} data-testid="button-add-position">
+            <Plus className="h-4 w-4 mr-1" />
+            Add Position
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">

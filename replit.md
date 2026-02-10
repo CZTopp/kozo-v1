@@ -4,6 +4,10 @@
 Comprehensive financial modeling and valuation application covering 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. Market indices pull live data from Yahoo Finance; macro indicators pull live data from FRED API.
 
 ## Recent Changes
+- 2026-02-10: Live portfolio price refresh - POST /api/refresh-portfolio-prices fetches live Yahoo Finance quotes for all portfolio positions (price, P/E, beta, MA50/200, 52W range, volume, market cap, EPS, dividend yield), recalculates P&L and golden cross signals
+- 2026-02-10: Editable market data - users can add/remove market indices (any Yahoo Finance symbol) and FRED macro indicators (any series ID) via Add/Remove buttons on Market Data page
+- 2026-02-10: New API endpoints: POST /api/market-indices/add-custom, DELETE /api/market-indices/:id, POST /api/macro-indicators/add-custom, DELETE /api/macro-indicators/:id
+- 2026-02-10: fetchPortfolioQuotes, fetchSingleIndexQuote, fetchSingleFredSeries functions added to server/live-data.ts
 - 2026-02-10: Live market data integration - Yahoo Finance for 12 global indices (real-time prices, YTD/MTD returns, daily change %), FRED API for 15 macro indicators (rates, inflation, GDP, labor, sentiment, volatility) with prior values for change tracking
 - 2026-02-10: POST /api/refresh-market-data endpoint - bulk fetches and updates all indices + macro indicators, returns counts and errors
 - 2026-02-10: Market Data page "Refresh Live Data" button with loading state and toast feedback

@@ -131,6 +131,175 @@ export async function fetchLiveIndices(): Promise<IndexResult[]> {
   return results;
 }
 
+export interface PortfolioQuoteResult {
+  ticker: string;
+  currentPrice: number;
+  dailyChangePercent: number;
+  dailyChange: number;
+  dayHigh: number;
+  dayLow: number;
+  openPrice: number;
+  previousClose: number;
+  volume: number;
+  avgVolume: number;
+  marketCap: number;
+  peRatio: number;
+  eps: number;
+  beta: number;
+  ma50: number;
+  ma200: number;
+  week52Low: number;
+  week52High: number;
+  dividendYield: number;
+  shortRatio: number;
+  bookValue: number;
+}
+
+export async function fetchPortfolioQuotes(tickers: string[]): Promise<{ results: PortfolioQuoteResult[]; errors: string[] }> {
+  const results: PortfolioQuoteResult[] = [];
+  const errors: string[] = [];
+
+  for (const ticker of tickers) {
+    try {
+      const quote: any = await yahooFinance.quote(ticker);
+      if (!quote || !quote.regularMarketPrice) {
+        errors.push(`No data for ${ticker}`);
+        continue;
+      }
+
+      const currentPrice = quote.regularMarketPrice ?? 0;
+      const previousClose = quote.regularMarketPreviousClose ?? currentPrice;
+      const dailyChange = currentPrice - previousClose;
+      const dailyChangePercent = previousClose > 0 ? dailyChange / previousClose : 0;
+
+      results.push({
+        ticker: ticker.toUpperCase(),
+        currentPrice,
+        dailyChangePercent,
+        dailyChange,
+        dayHigh: quote.regularMarketDayHigh ?? currentPrice,
+        dayLow: quote.regularMarketDayLow ?? currentPrice,
+        openPrice: quote.regularMarketOpen ?? currentPrice,
+        previousClose,
+        volume: quote.regularMarketVolume ?? 0,
+        avgVolume: quote.averageDailyVolume3Month ?? quote.averageDailyVolume10Day ?? 0,
+        marketCap: quote.marketCap ?? 0,
+        peRatio: quote.trailingPE ?? quote.forwardPE ?? 0,
+        eps: quote.epsTrailingTwelveMonths ?? quote.epsForward ?? 0,
+        beta: quote.beta ?? 1,
+        ma50: quote.fiftyDayAverage ?? 0,
+        ma200: quote.twoHundredDayAverage ?? 0,
+        week52Low: quote.fiftyTwoWeekLow ?? 0,
+        week52High: quote.fiftyTwoWeekHigh ?? 0,
+        dividendYield: quote.dividendYield ? quote.dividendYield / 100 : 0,
+        shortRatio: quote.shortRatio ?? 0,
+        bookValue: quote.bookValue ?? 0,
+      });
+    } catch (err: any) {
+      errors.push(`${ticker}: ${err.message || "Failed"}`);
+    }
+  }
+
+  return { results, errors };
+}
+
+export async function fetchSingleIndexQuote(symbol: string): Promise<IndexResult | null> {
+  try {
+    const quote: any = await yahooFinance.quote(symbol);
+    if (!quote || !quote.regularMarketPrice) return null;
+
+    const currentPrice = quote.regularMarketPrice ?? 0;
+    const dailyChangePercent = quote.regularMarketChangePercent ? (quote.regularMarketChangePercent / 100) : 0;
+    const shortName = quote.shortName || quote.longName || symbol;
+
+    const now = new Date();
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    let ytdReturn = 0;
+    let mtdReturn = 0;
+
+    try {
+      const historicalYtd: any[] = await yahooFinance.historical(symbol, {
+        period1: startOfYear,
+        period2: new Date(startOfYear.getTime() + 7 * 24 * 60 * 60 * 1000),
+        interval: "1d",
+      } as any);
+      if (historicalYtd.length > 0 && historicalYtd[0].close) {
+        ytdReturn = (currentPrice - historicalYtd[0].close) / historicalYtd[0].close;
+      }
+    } catch {
+      ytdReturn = 0;
+    }
+
+    try {
+      const historicalMtd: any[] = await yahooFinance.historical(symbol, {
+        period1: startOfMonth,
+        period2: new Date(startOfMonth.getTime() + 7 * 24 * 60 * 60 * 1000),
+        interval: "1d",
+      } as any);
+      if (historicalMtd.length > 0 && historicalMtd[0].close) {
+        mtdReturn = (currentPrice - historicalMtd[0].close) / historicalMtd[0].close;
+      }
+    } catch {
+      mtdReturn = 0;
+    }
+
+    return {
+      name: shortName,
+      ticker: symbol.replace(/\^/g, ""),
+      region: "Custom",
+      currentValue: currentPrice,
+      ytdReturn,
+      mtdReturn,
+      dailyChangePercent,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchSingleFredSeries(seriesId: string, apiKey: string): Promise<MacroResult | null> {
+  try {
+    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${apiKey}&file_type=json&sort_order=desc&limit=3`;
+    const response = await fetch(url);
+    if (!response.ok) return null;
+
+    const data = await response.json() as { observations?: Array<{ value: string; date: string }> };
+    const observations = data.observations || [];
+    if (observations.length === 0) return null;
+
+    const latestRaw = parseFloat(observations[0].value);
+    if (isNaN(latestRaw)) return null;
+
+    let priorValue: number | null = null;
+    if (observations.length >= 2) {
+      const prevRaw = parseFloat(observations[1].value);
+      if (!isNaN(prevRaw)) priorValue = prevRaw;
+    }
+
+    const seriesUrl = `https://api.stlouisfed.org/fred/series?series_id=${seriesId}&api_key=${apiKey}&file_type=json`;
+    const seriesResponse = await fetch(seriesUrl);
+    let seriesName = seriesId;
+    if (seriesResponse.ok) {
+      const seriesData = await seriesResponse.json() as { seriess?: Array<{ title: string }> };
+      if (seriesData.seriess?.[0]?.title) {
+        seriesName = seriesData.seriess[0].title;
+      }
+    }
+
+    return {
+      name: seriesName,
+      category: "Custom",
+      value: latestRaw,
+      priorValue,
+      displayFormat: "number",
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchFredIndicators(apiKey: string): Promise<MacroResult[]> {
   const results: MacroResult[] = [];
   const seriesIds = Object.keys(FRED_SERIES);

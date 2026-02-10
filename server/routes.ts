@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { Server } from "http";
 import { storage } from "./storage";
 import { recalculateModel, forecastForward } from "./recalculate";
-import { fetchLiveIndices, fetchFredIndicators } from "./live-data";
+import { fetchLiveIndices, fetchFredIndicators, fetchPortfolioQuotes, fetchSingleIndexQuote, fetchSingleFredSeries } from "./live-data";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 import { revenuePeriods } from "@shared/schema";
@@ -312,6 +312,129 @@ export async function registerRoutes(server: Server, app: Express) {
       }
 
       res.json(results);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/refresh-portfolio-prices", async (_req: Request, res: Response) => {
+    try {
+      const positions = await storage.getPortfolioPositions();
+      if (positions.length === 0) {
+        return res.json({ updated: 0, errors: [] });
+      }
+      const tickers = positions.map(p => p.ticker);
+      const { results, errors } = await fetchPortfolioQuotes(tickers);
+
+      let updated = 0;
+      for (const quote of results) {
+        const position = positions.find(p => p.ticker.toUpperCase() === quote.ticker.toUpperCase());
+        if (position) {
+          const ma50 = quote.ma50;
+          const ma200 = quote.ma200;
+          const goldenCross = ma50 > ma200 && ma50 > 0 && ma200 > 0;
+          const changeFromMa50 = quote.currentPrice > 0 && ma50 > 0 ? (quote.currentPrice - ma50) / ma50 : 0;
+          const changeFromMa200 = quote.currentPrice > 0 && ma200 > 0 ? (quote.currentPrice - ma200) / ma200 : 0;
+          const positionValue = (position.sharesHeld || 0) * quote.currentPrice;
+          const costBasis = (position.sharesHeld || 0) * (position.purchasePrice || 0);
+          const gainLossDollar = positionValue - costBasis;
+          const gainLossPercent = costBasis > 0 ? gainLossDollar / costBasis : 0;
+
+          await storage.updatePortfolioPosition(position.id, {
+            currentPrice: quote.currentPrice,
+            dailyChangePercent: quote.dailyChangePercent,
+            dailyChange: quote.dailyChange,
+            dayHigh: quote.dayHigh,
+            dayLow: quote.dayLow,
+            openPrice: quote.openPrice,
+            previousClose: quote.previousClose,
+            volume: quote.volume,
+            avgVolume: quote.avgVolume,
+            marketCap: quote.marketCap,
+            peRatio: quote.peRatio,
+            eps: quote.eps,
+            beta: quote.beta,
+            ma50,
+            ma200,
+            week52Low: quote.week52Low,
+            week52High: quote.week52High,
+            dividendYield: quote.dividendYield,
+            shortRatio: quote.shortRatio,
+            bookValue: quote.bookValue,
+            goldenCross,
+            changeFromMa50,
+            changeFromMa200,
+            positionValue,
+            gainLossDollar,
+            gainLossPercent,
+          });
+          updated++;
+        }
+      }
+
+      res.json({ updated, errors });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/market-indices/:id", async (req: Request, res: Response) => {
+    await storage.deleteMarketIndex(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.post("/api/market-indices/add-custom", async (req: Request, res: Response) => {
+    try {
+      const { symbol, name, region } = req.body;
+      if (!symbol || typeof symbol !== "string") {
+        return res.status(400).json({ message: "Symbol is required" });
+      }
+      const quote = await fetchSingleIndexQuote(symbol.trim());
+      if (!quote) {
+        return res.status(400).json({ message: `Could not find data for symbol "${symbol}". Make sure it is a valid Yahoo Finance symbol (e.g., ^GSPC, ^FTSE).` });
+      }
+      const idx = await storage.upsertMarketIndex({
+        name: name?.trim() || quote.name,
+        ticker: quote.ticker,
+        region: region?.trim() || quote.region,
+        currentValue: quote.currentValue,
+        ytdReturn: quote.ytdReturn,
+        mtdReturn: quote.mtdReturn,
+        dailyChangePercent: quote.dailyChangePercent,
+      });
+      res.json(idx);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/macro-indicators/:id", async (req: Request, res: Response) => {
+    await storage.deleteMacroIndicator(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.post("/api/macro-indicators/add-custom", async (req: Request, res: Response) => {
+    try {
+      const { seriesId, name, category, displayFormat } = req.body;
+      if (!seriesId || typeof seriesId !== "string") {
+        return res.status(400).json({ message: "FRED Series ID is required" });
+      }
+      const fredApiKey = process.env.FRED_API_KEY;
+      if (!fredApiKey) {
+        return res.status(400).json({ message: "FRED_API_KEY not set. Add a free key from fred.stlouisfed.org." });
+      }
+      const result = await fetchSingleFredSeries(seriesId.trim().toUpperCase(), fredApiKey);
+      if (!result) {
+        return res.status(400).json({ message: `Could not find data for FRED series "${seriesId}". Make sure it is a valid FRED series ID (e.g., DGS10, UNRATE).` });
+      }
+      const ind = await storage.upsertMacroIndicator({
+        name: name?.trim() || result.name,
+        category: category?.trim() || result.category,
+        value: result.value,
+        priorValue: result.priorValue,
+        displayFormat: displayFormat?.trim() || result.displayFormat,
+      });
+      res.json(ind);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
