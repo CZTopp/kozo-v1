@@ -1,9 +1,14 @@
 # Foresight - Wall Street-Grade Financial Modeling & Valuation Platform
 
 ## Overview
-Comprehensive financial modeling and valuation application covering 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. All data is simulated demo data.
+Comprehensive financial modeling and valuation application covering 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. Market indices pull live data from Yahoo Finance; macro indicators pull live data from FRED API.
 
 ## Recent Changes
+- 2026-02-10: Live market data integration - Yahoo Finance for 12 global indices (real-time prices, YTD/MTD returns, daily change %), FRED API for 15 macro indicators (rates, inflation, GDP, labor, sentiment, volatility) with prior values for change tracking
+- 2026-02-10: POST /api/refresh-market-data endpoint - bulk fetches and updates all indices + macro indicators, returns counts and errors
+- 2026-02-10: Market Data page "Refresh Live Data" button with loading state and toast feedback
+- 2026-02-10: New DB columns: dailyChangePercent on market_indices, priorValue on macro_indicators
+- 2026-02-10: server/live-data.ts - Yahoo Finance (yahoo-finance2) and FRED API integration module
 - 2026-02-10: Data validation warnings across all pages - Model Readiness checklist on Dashboard, inline warnings on DCF/Valuation/Revenue/Income Statement pages when data is missing or at defaults, Required Inputs reference section in Analysis Guide
 - 2026-02-10: Added 10-step analyst walkthrough to Analysis Guide using hypothetical "CloudSync Corp (CSYN)" - covers company creation, revenue modeling, P&L, balance sheet, cash flow review, full DCF/WACC build, valuation comparison, portfolio addition, macro cross-check, iterative refinement
 - 2026-02-10: Added Analysis Guide page (/guide) with page-by-page breakdown, recommended workflow, cascade explanation
