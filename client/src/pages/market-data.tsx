@@ -7,6 +7,7 @@ import { formatPercent } from "@/lib/calculations";
 import type { MacroIndicator, MarketIndex } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Globe, TrendingUp, TrendingDown } from "lucide-react";
+import { InfoTooltip } from "@/components/info-tooltip";
 
 export default function MarketDataPage() {
   const { data: indices, isLoading: loadingIndices } = useQuery<MarketIndex[]>({ queryKey: ["/api/market-indices"] });
@@ -25,6 +26,14 @@ export default function MarketDataPage() {
     name: idx.ticker,
     YTD: (idx.ytdReturn || 0) * 100,
   })) || [];
+
+  const macroTooltips: Record<string, string> = {
+    "Interest Rates": "Central bank policy rates and treasury yields. Rising rates increase discount rates and typically compress equity valuations.",
+    "Inflation": "Consumer and producer price indices measuring purchasing power erosion. Impacts real returns and monetary policy direction.",
+    "Growth": "GDP growth rates and leading economic indicators. Strong growth supports earnings expansion and higher equity valuations.",
+    "Labor Market": "Employment data including unemployment rate and job creation. Tight labor markets signal economic strength but may fuel inflation.",
+    "Commodities": "Key commodity prices including oil, gold, and others. Commodity moves affect input costs and sector rotation strategies.",
+  };
 
   return (
     <div className="p-4 space-y-4">
@@ -67,7 +76,7 @@ export default function MarketDataPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm font-medium">US Market Indices</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-1">US Market Indices <InfoTooltip content="Major US equity indices including S&P 500, Dow Jones, Nasdaq, and Russell. Shows daily, month-to-date, and year-to-date returns." /></CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
@@ -105,7 +114,7 @@ export default function MarketDataPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm font-medium">International Indices</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-1">International Indices <InfoTooltip content="Key international equity benchmarks from Europe, Asia, and emerging markets. Useful for global diversification analysis." /></CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
@@ -150,7 +159,7 @@ export default function MarketDataPage() {
             ].filter(g => g.data.length > 0).map(group => (
               <Card key={group.title}>
                 <CardHeader>
-                  <CardTitle className="text-sm font-medium">{group.title}</CardTitle>
+                  <CardTitle className="text-sm font-medium flex items-center gap-1">{group.title} <InfoTooltip content={macroTooltips[group.title] || ""} /></CardTitle>
                 </CardHeader>
                 <CardContent>
                   <Table>
@@ -188,7 +197,7 @@ export default function MarketDataPage() {
         <TabsContent value="chart" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-medium">Index YTD Performance (%)</CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center gap-1">Index YTD Performance (%) <InfoTooltip content="Visual comparison of year-to-date returns across all tracked global indices. Helps identify relative market strength by region." /></CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-80">

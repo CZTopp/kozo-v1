@@ -4,6 +4,10 @@
 Comprehensive financial modeling and valuation application covering 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. All data is simulated demo data.
 
 ## Recent Changes
+- 2026-02-10: Added Analysis Guide page (/guide) with page-by-page breakdown, recommended workflow, cascade explanation
+- 2026-02-10: InfoTooltip component (client/src/components/info-tooltip.tsx) - reusable hover tooltip for financial terms
+- 2026-02-10: Added detailed tooltips to all 9 pages - KPI cards, chart titles, projection settings, risk metrics, macro categories
+- 2026-02-10: Default projection settings reverted to match original behavior: decay=0, multipliers=1.2/1.0/0.8
 - 2026-02-10: Advanced projection features - growth decay rate, target margin convergence, bull/base/bear scenario multipliers
 - 2026-02-10: Projection Settings UI panel on Revenue Forecast page (collapsible card with editable parameters)
 - 2026-02-10: Growth decay formula: baseGrowthRate * (1 - decayRate)^yearsFromLastData applied in forecastForward()

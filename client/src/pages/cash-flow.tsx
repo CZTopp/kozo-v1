@@ -8,6 +8,7 @@ import { formatCurrency } from "@/lib/calculations";
 import type { CashFlowLine } from "@shared/schema";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { TrendingUp, TrendingDown, DollarSign, ArrowDown } from "lucide-react";
+import { InfoTooltip } from "@/components/info-tooltip";
 
 export default function CashFlow() {
   const { selectedModel: model, isLoading } = useModel();
@@ -91,7 +92,7 @@ export default function CashFlow() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <Card data-testid="card-operating-cf">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Operating CF</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Operating CF <InfoTooltip content="Cash generated from core business operations. Starts with Net Income and adjusts for non-cash items and working capital changes." /></CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -100,7 +101,7 @@ export default function CashFlow() {
         </Card>
         <Card data-testid="card-investing-cf">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Investing CF</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Investing CF <InfoTooltip content="Cash used for capital expenditures and investments. Typically negative as the company invests in growth. Driven by CapEx assumptions." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{latestData ? formatCurrency(latestData.investingCashFlow || 0) : "--"}</div>
@@ -108,7 +109,7 @@ export default function CashFlow() {
         </Card>
         <Card data-testid="card-financing-cf">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Financing CF</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Financing CF <InfoTooltip content="Cash from debt issuance/repayment and equity transactions. Shows how the company funds itself beyond operations." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{latestData ? formatCurrency(latestData.financingCashFlow || 0) : "--"}</div>
@@ -116,7 +117,7 @@ export default function CashFlow() {
         </Card>
         <Card data-testid="card-fcf">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Free Cash Flow</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Free Cash Flow <InfoTooltip content="Operating Cash Flow minus CapEx. The cash available to shareholders after maintaining/expanding the asset base. Key input for DCF valuation." /></CardTitle>
             {latestData && (latestData.freeCashFlow || 0) >= 0 ? <TrendingUp className="h-4 w-4 text-green-500" /> : <TrendingDown className="h-4 w-4 text-red-500" />}
           </CardHeader>
           <CardContent>

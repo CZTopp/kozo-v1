@@ -7,6 +7,7 @@ import { formatCurrency, formatPercent } from "@/lib/calculations";
 import type { ValuationComparison, FinancialModel } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
 import { TrendingUp, TrendingDown, Target, ArrowDown } from "lucide-react";
+import { InfoTooltip } from "@/components/info-tooltip";
 
 export default function ValuationComparisonPage() {
   const { selectedModel: model, isLoading } = useModel();
@@ -97,7 +98,7 @@ export default function ValuationComparisonPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Card data-testid="card-current-price">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Current Price</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Current Price <InfoTooltip content="Current market share price used as the anchor for all valuation method comparisons." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-current-price">${currentPrice.toFixed(2)}</div>
@@ -105,7 +106,7 @@ export default function ValuationComparisonPage() {
         </Card>
         <Card data-testid="card-average-target">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Average Target</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Average Target <InfoTooltip content="Average of all base-case target prices across Price/Revenue, PEG, and DCF methods. Provides a blended fair value estimate." /></CardTitle>
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -114,7 +115,7 @@ export default function ValuationComparisonPage() {
         </Card>
         <Card data-testid="card-upside">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">% to Target</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">% to Target <InfoTooltip content="Percentage difference between the current price and the average target. Positive means potential upside; negative means the stock may be overvalued." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${percentToTarget >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-percent-to-target">
@@ -165,7 +166,7 @@ export default function ValuationComparisonPage() {
       {val?.valuationData && (val.valuationData as any)?.scenarioRevenues && (
         <Card data-testid="card-scenario-revenues">
           <CardHeader>
-            <CardTitle className="text-sm font-medium">Scenario Revenue Projections</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Scenario Revenue Projections <InfoTooltip content="Revenue forecasts under bull, base, and bear scenarios. Scenario multipliers (set in Projection Settings) adjust the base growth rate." /></CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
@@ -196,7 +197,7 @@ export default function ValuationComparisonPage() {
       )}
 
       <Card data-testid="card-comparison-chart">
-        <CardHeader><CardTitle className="text-sm font-medium">Valuation Methods Comparison</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-sm font-medium flex items-center gap-1">Valuation Methods Comparison <InfoTooltip content="Side-by-side comparison of bull, base, and bear target prices from each valuation method. The dashed line shows the current market price." /></CardTitle></CardHeader>
         <CardContent>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">

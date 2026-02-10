@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { DcfValuation, CashFlowLine } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { TrendingUp, TrendingDown, Target, Save, RefreshCw, ArrowDown, ArrowRight } from "lucide-react";
+import { InfoTooltip } from "@/components/info-tooltip";
 
 export default function DcfValuationPage() {
   const { toast } = useToast();
@@ -140,7 +141,7 @@ export default function DcfValuationPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Card data-testid="card-current-price">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Current Price</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Current Price <InfoTooltip content="The current market share price. Used as the baseline to determine upside or downside from the DCF target." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-current-price">${currentPrice.toFixed(2)}</div>
@@ -148,7 +149,7 @@ export default function DcfValuationPage() {
         </Card>
         <Card data-testid="card-target-price">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">DCF Target Price</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">DCF Target Price <InfoTooltip content="Intrinsic value per share derived from discounted future free cash flows. If above current price, the stock may be undervalued." /></CardTitle>
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -157,7 +158,7 @@ export default function DcfValuationPage() {
         </Card>
         <Card data-testid="card-wacc">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">WACC</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">WACC <InfoTooltip content="Weighted Average Cost of Capital. The blended discount rate combining cost of equity (CAPM) and after-tax cost of debt, weighted by capital structure." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-wacc">{formatPercent(wacc)}</div>
@@ -170,7 +171,7 @@ export default function DcfValuationPage() {
           <CardHeader>
             <CardTitle className="text-sm font-medium flex items-center gap-1">
               {editMode && <ArrowRight className="h-4 w-4" />}
-              WACC Calculation
+              WACC Calculation <InfoTooltip content="CAPM-based cost of equity plus after-tax cost of debt. Edit these inputs to see how the discount rate and target price change." />
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -200,7 +201,7 @@ export default function DcfValuationPage() {
 
         <Card data-testid="card-dcf-panel">
           <CardHeader>
-            <CardTitle className="text-sm font-medium">DCF Results</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">DCF Results <InfoTooltip content="Shows NPV of projected free cash flows, terminal value (perpetuity growth method), and the resulting target equity value per share." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -216,7 +217,7 @@ export default function DcfValuationPage() {
       </div>
 
       <Card data-testid="card-fcf-chart">
-        <CardHeader><CardTitle className="text-sm font-medium">FCF Projections ($M)</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-sm font-medium flex items-center gap-1">FCF Projections ($M) <InfoTooltip content="Historical free cash flow used as the basis for the DCF model. Future projections use the Forecast Forward feature with growth decay." /></CardTitle></CardHeader>
         <CardContent>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -235,7 +236,7 @@ export default function DcfValuationPage() {
 
       {sensitivity && (
         <Card data-testid="card-sensitivity">
-          <CardHeader><CardTitle className="text-sm font-medium">Sensitivity Analysis: WACC vs Long-Term Growth</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-sm font-medium flex items-center gap-1">Sensitivity Analysis: WACC vs Long-Term Growth <InfoTooltip content="5x5 grid showing how the target price changes as WACC and long-term growth assumptions vary. The center cell reflects your current inputs." /></CardTitle></CardHeader>
           <CardContent>
             <Table data-testid="table-sensitivity">
               <TableHeader>

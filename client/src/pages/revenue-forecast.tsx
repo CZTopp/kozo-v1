@@ -14,6 +14,7 @@ import type { RevenueLineItem, RevenuePeriod } from "@shared/schema";
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Label } from "@/components/ui/label";
 import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil, Sparkles, Settings2, ChevronDown, ChevronUp } from "lucide-react";
+import { InfoTooltip } from "@/components/info-tooltip";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
@@ -416,18 +417,21 @@ export default function RevenueForecast() {
           ) : (
             <>
               {hasGapsToForecast && (
-                <Button
-                  variant="default"
-                  onClick={() => forecastMutation.mutate()}
-                  disabled={forecastMutation.isPending}
-                  data-testid="button-forecast-forward"
-                >
-                  {forecastMutation.isPending ? (
-                    <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Projecting...</>
-                  ) : (
-                    <><Sparkles className="h-4 w-4 mr-1" /> Forecast Forward</>
-                  )}
-                </Button>
+                <>
+                  <InfoTooltip content="Auto-projects revenue into empty future years based on historical average growth rates and decay settings. Cascades through all financial statements." />
+                  <Button
+                    variant="default"
+                    onClick={() => forecastMutation.mutate()}
+                    disabled={forecastMutation.isPending}
+                    data-testid="button-forecast-forward"
+                  >
+                    {forecastMutation.isPending ? (
+                      <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Projecting...</>
+                    ) : (
+                      <><Sparkles className="h-4 w-4 mr-1" /> Forecast Forward</>
+                    )}
+                  </Button>
+                </>
               )}
               <Button variant="outline" onClick={() => setEditMode(true)} data-testid="button-edit-revenue">
                 <Pencil className="h-4 w-4 mr-1" /> Edit Revenue
@@ -456,7 +460,7 @@ export default function RevenueForecast() {
           >
             <div className="flex items-center gap-2">
               <Settings2 className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-sm font-medium">Projection Settings</CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center gap-1">Projection Settings <InfoTooltip content="Advanced settings that control how revenue projections behave. Growth decay slows growth over time, target margin drives cost convergence, and scenario multipliers create bull/base/bear cases." /></CardTitle>
             </div>
             {showProjectionSettings ? (
               <ChevronUp className="h-4 w-4 text-muted-foreground" />
@@ -470,7 +474,7 @@ export default function RevenueForecast() {
                 <div className="space-y-3">
                   <h4 className="text-sm font-medium text-muted-foreground">Growth Model</h4>
                   <div className="space-y-1">
-                    <Label className="text-xs">Growth Decay Rate</Label>
+                    <Label className="text-xs flex items-center gap-1">Growth Decay Rate <InfoTooltip content="Controls how quickly revenue growth decelerates in projected years. At 0%, growth stays flat. At 15%, each successive year's growth rate declines by 15% of the prior year's rate." /></Label>
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
@@ -492,7 +496,7 @@ export default function RevenueForecast() {
                     <p className="text-xs text-muted-foreground">Each year, the growth rate decreases by this factor. Higher = faster deceleration.</p>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Target Net Margin</Label>
+                    <Label className="text-xs flex items-center gap-1">Target Net Margin <InfoTooltip content="If set, cost assumptions will gradually converge toward this net margin over the projection period. Leave blank to keep cost percentages fixed." /></Label>
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
@@ -523,7 +527,7 @@ export default function RevenueForecast() {
                   <p className="text-xs text-muted-foreground">Multiplied against the base growth rate to generate bull/base/bear revenue projections for valuation.</p>
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1">
-                      <Label className="text-xs text-green-500">Bull Case</Label>
+                      <Label className="text-xs text-green-500 flex items-center gap-1">Bull Case <InfoTooltip content="Multiplier applied to the base growth rate for bull-case revenue projections. 1.2x means 20% higher growth than base case." /></Label>
                       <Input
                         type="number"
                         step="0.05"
@@ -539,7 +543,7 @@ export default function RevenueForecast() {
                       <p className="text-xs text-muted-foreground">{(projectionSettings.scenarioBullMultiplier * 100).toFixed(0)}% of base growth</p>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Base Case</Label>
+                      <Label className="text-xs flex items-center gap-1">Base Case <InfoTooltip content="Multiplier for the base-case scenario. Typically 1.0x (no adjustment to the projected growth rate)." /></Label>
                       <Input
                         type="number"
                         step="0.05"
@@ -555,7 +559,7 @@ export default function RevenueForecast() {
                       <p className="text-xs text-muted-foreground">{(projectionSettings.scenarioBaseMultiplier * 100).toFixed(0)}% of base growth</p>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs text-red-500">Bear Case</Label>
+                      <Label className="text-xs text-red-500 flex items-center gap-1">Bear Case <InfoTooltip content="Multiplier applied for bear-case projections. 0.8x means 20% lower growth than base case." /></Label>
                       <Input
                         type="number"
                         step="0.05"
@@ -595,7 +599,7 @@ export default function RevenueForecast() {
         {years.slice(-3).map(year => (
           <Card key={year} data-testid={`card-revenue-${year}`}>
             <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{year} Revenue</CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center gap-1">{year} Revenue <InfoTooltip content="Total annual revenue across all revenue streams. YoY shows year-over-year growth rate compared to the prior year." /></CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -901,7 +905,7 @@ export default function RevenueForecast() {
         <TabsContent value="annual-chart">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-medium">Annual Revenue by Stream</CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center gap-1">Annual Revenue by Stream <InfoTooltip content="Quarterly revenue by stream (Subscription, Services, etc.). Annual totals and growth rates are calculated automatically. Click Edit to modify values." /></CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-80">
@@ -925,7 +929,7 @@ export default function RevenueForecast() {
         <TabsContent value="quarterly-chart">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-medium">Quarterly Revenue Trend</CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center gap-1">Quarterly Revenue Trend <InfoTooltip content="Visual trend of total revenue over time. Use this to quickly assess the growth trajectory and identify inflection points." /></CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-80">

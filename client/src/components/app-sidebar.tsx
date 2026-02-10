@@ -16,6 +16,7 @@ import {
   ChevronDown,
   Building2,
   Check,
+  BookOpen,
 } from "lucide-react";
 import {
   Sidebar,
@@ -235,6 +236,21 @@ export function AppSidebar() {
                   </SidebarMenuItem>
                 );
               })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Help</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location === "/guide"}>
+                  <Link href="/guide" data-testid="link-nav-analysis-guide">
+                    <BookOpen className="h-4 w-4" />
+                    <span>Analysis Guide</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

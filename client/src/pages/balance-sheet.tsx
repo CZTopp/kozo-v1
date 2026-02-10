@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { BalanceSheetLine, Assumptions } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { CheckCircle, AlertCircle, Save, RefreshCw, ArrowDown, ArrowRight } from "lucide-react";
+import { InfoTooltip } from "@/components/info-tooltip";
 
 export default function BalanceSheet() {
   const { toast } = useToast();
@@ -189,7 +190,7 @@ export default function BalanceSheet() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Card data-testid="card-total-assets">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Assets</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Total Assets <InfoTooltip content="Sum of all current and long-term assets. Includes cash, receivables, inventory, equipment, and investments." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-total-assets">{latestData ? formatCurrency(latestData.totalAssets || 0) : "--"}</div>
@@ -197,7 +198,7 @@ export default function BalanceSheet() {
         </Card>
         <Card data-testid="card-total-liabilities">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Liabilities</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Total Liabilities <InfoTooltip content="Sum of all current and long-term obligations. Includes payables, short-term and long-term debt." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-total-liabilities">{latestData ? formatCurrency(latestData.totalLiabilities || 0) : "--"}</div>
@@ -205,7 +206,7 @@ export default function BalanceSheet() {
         </Card>
         <Card data-testid="card-total-equity">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Equity</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Total Equity <InfoTooltip content="Assets minus Liabilities. Represents shareholder ownership value including retained earnings and common shares." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-total-equity">{latestData ? formatCurrency(latestData.totalEquity || 0) : "--"}</div>

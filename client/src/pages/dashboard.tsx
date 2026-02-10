@@ -6,6 +6,7 @@ import { useModel } from "@/lib/model-context";
 import type { IncomeStatementLine, PortfolioPosition, MacroIndicator, MarketIndex } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { TrendingUp, TrendingDown, DollarSign, Briefcase, Activity } from "lucide-react";
+import { InfoTooltip } from "@/components/info-tooltip";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
@@ -53,7 +54,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         <Card data-testid="card-total-revenue">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue (Latest)</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Total Revenue (Latest) <InfoTooltip content="Total top-line revenue from the most recent fiscal year in your model. YoY shows the year-over-year growth rate." /></CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -68,7 +69,7 @@ export default function Dashboard() {
 
         <Card data-testid="card-portfolio-value">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Portfolio Value</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Portfolio Value <InfoTooltip content="Sum of all position market values (current price x shares held). Total return shows unrealized gain/loss across all holdings." /></CardTitle>
             <Briefcase className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -83,7 +84,7 @@ export default function Dashboard() {
 
         <Card data-testid="card-portfolio-beta">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Portfolio Beta</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Portfolio Beta <InfoTooltip content="Value-weighted average beta across all positions. Beta > 1 means the portfolio is more volatile than the market; < 1 means less volatile." /></CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -94,7 +95,7 @@ export default function Dashboard() {
 
         <Card data-testid="card-sp500">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">S&P 500 YTD</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">S&P 500 YTD <InfoTooltip content="Year-to-date return of the S&P 500 index. Used as a broad market benchmark to compare portfolio performance." /></CardTitle>
             {indices?.[0]?.ytdReturn && indices[0].ytdReturn >= 0 ? (
               <TrendingUp className="h-4 w-4 text-green-500" />
             ) : (
@@ -111,7 +112,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card data-testid="card-revenue-chart">
           <CardHeader>
-            <CardTitle className="text-sm font-medium">Revenue & Profitability ($M)</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Revenue & Profitability ($M) <InfoTooltip content="Revenue, EBITDA, and Net Income plotted over time in millions. Shows the company's growth trajectory and profitability trend." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-64">
@@ -132,7 +133,7 @@ export default function Dashboard() {
 
         <Card data-testid="card-sector-allocation">
           <CardHeader>
-            <CardTitle className="text-sm font-medium">Sector Allocation</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Sector Allocation <InfoTooltip content="Portfolio value broken down by sector. High concentration in one sector increases unsystematic risk." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-64">
@@ -164,7 +165,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card data-testid="card-macro-rates">
           <CardHeader>
-            <CardTitle className="text-sm font-medium">Interest Rates</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Interest Rates <InfoTooltip content="Key central bank rates including Fed Funds, 10Y Treasury, and others. Rising rates typically pressure equity valuations." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -180,7 +181,7 @@ export default function Dashboard() {
 
         <Card data-testid="card-macro-inflation">
           <CardHeader>
-            <CardTitle className="text-sm font-medium">Inflation Metrics</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Inflation Metrics <InfoTooltip content="CPI, PCE, and other inflation gauges. Persistent inflation erodes real returns and may trigger tighter monetary policy." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -196,7 +197,7 @@ export default function Dashboard() {
 
         <Card data-testid="card-global-indices">
           <CardHeader>
-            <CardTitle className="text-sm font-medium">Global Indices YTD</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Global Indices YTD <InfoTooltip content="Year-to-date performance of major global indices. Useful for assessing cross-market sentiment and relative performance." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -216,7 +217,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card data-testid="card-top-movers">
           <CardHeader>
-            <CardTitle className="text-sm font-medium">Top Daily Movers</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Top Daily Movers <InfoTooltip content="Positions with the largest absolute daily price changes. Helps identify names requiring immediate attention." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -240,7 +241,7 @@ export default function Dashboard() {
 
         <Card data-testid="card-top-gainers">
           <CardHeader>
-            <CardTitle className="text-sm font-medium">Top P&L Positions</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Top P&L Positions <InfoTooltip content="Positions ranked by absolute dollar gain/loss. Shows which holdings are driving overall portfolio performance." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">

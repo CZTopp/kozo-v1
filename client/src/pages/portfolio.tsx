@@ -7,6 +7,7 @@ import { formatCurrency, formatPercent, calcPortfolioMetrics } from "@/lib/calcu
 import type { PortfolioPosition, PortfolioRedFlag, MacroIndicator, MarketIndex } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ScatterChart, Scatter } from "recharts";
 import { TrendingUp, TrendingDown, AlertTriangle, Shield, Activity } from "lucide-react";
+import { InfoTooltip } from "@/components/info-tooltip";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))", "#f97316", "#06b6d4", "#8b5cf6"];
 
@@ -46,7 +47,7 @@ export default function Portfolio() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
         <Card data-testid="card-portfolio-value">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium">Portfolio Value</CardTitle>
+            <CardTitle className="text-xs font-medium flex items-center gap-1">Portfolio Value <InfoTooltip content="Total market value of all positions (current price x shares). Shows unrealized gain/loss percentage and dollar amount." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-xl font-bold">{metrics ? formatCurrency(metrics.totalValue) : "--"}</div>
@@ -58,7 +59,7 @@ export default function Portfolio() {
 
         <Card data-testid="card-portfolio-beta-val">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium">Weighted Beta</CardTitle>
+            <CardTitle className="text-xs font-medium flex items-center gap-1">Weighted Beta <InfoTooltip content="Value-weighted average beta. Measures overall portfolio sensitivity to market movements. Beta > 1 means higher volatility than the market." /></CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -69,7 +70,7 @@ export default function Portfolio() {
 
         <Card data-testid="card-concentration">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium">Concentration Risk</CardTitle>
+            <CardTitle className="text-xs font-medium flex items-center gap-1">Concentration Risk <InfoTooltip content="Largest sector allocation as a percentage of portfolio. High concentration increases exposure to sector-specific risks." /></CardTitle>
             <Shield className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -80,7 +81,7 @@ export default function Portfolio() {
 
         <Card data-testid="card-golden-cross">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium">Golden Cross</CardTitle>
+            <CardTitle className="text-xs font-medium flex items-center gap-1">Golden Cross <InfoTooltip content="Count of positions where the 50-day moving average is above the 200-day moving average. A bullish technical signal." /></CardTitle>
             <TrendingUp className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
@@ -91,7 +92,7 @@ export default function Portfolio() {
 
         <Card data-testid="card-red-flags">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium">Red Flags</CardTitle>
+            <CardTitle className="text-xs font-medium flex items-center gap-1">Red Flags <InfoTooltip content="Number of risk checklist items flagged as concerns. Review these in the Risk & Flags tab for portfolio health assessment." /></CardTitle>
             <AlertTriangle className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
@@ -182,7 +183,7 @@ export default function Portfolio() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm font-medium">Sector Allocation</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-1">Sector Allocation <InfoTooltip content="Portfolio value distributed by sector. Helps identify concentration risk and diversification opportunities." /></CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-64">
@@ -203,7 +204,7 @@ export default function Portfolio() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm font-medium">Position P&L</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-1">Position P&L <InfoTooltip content="Dollar profit or loss for each position, sorted by value. Quickly identifies your biggest winners and losers." /></CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-64">
@@ -266,7 +267,7 @@ export default function Portfolio() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm font-medium">Red Flag Checklist</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-1">Red Flag Checklist <InfoTooltip content="Risk assessment questions covering stop-loss discipline, concentration, leverage, and other portfolio health factors." /></CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -284,7 +285,7 @@ export default function Portfolio() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm font-medium">Technical Signals</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-1">Technical Signals <InfoTooltip content="Positions classified by moving average crossover signals. Golden Cross (bullish) = MA50 above MA200. Death Cross (bearish) = MA50 below MA200." /></CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -323,7 +324,7 @@ export default function Portfolio() {
 
             <Card className="lg:col-span-2">
               <CardHeader>
-                <CardTitle className="text-sm font-medium">Beta Exposure by Position</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-1">Beta Exposure by Position <InfoTooltip content="Beta values for each position. Higher beta means the position amplifies market movements. Useful for risk management." /></CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-48">

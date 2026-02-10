@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { IncomeStatementLine, Assumptions } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line } from "recharts";
 import { TrendingUp, TrendingDown, Save, RefreshCw, ArrowRight, ArrowDown } from "lucide-react";
+import { InfoTooltip } from "@/components/info-tooltip";
 
 export default function IncomeStatement() {
   const { toast } = useToast();
@@ -186,7 +187,7 @@ export default function IncomeStatement() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <Card data-testid="card-revenue">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Revenue <InfoTooltip content="Total top-line revenue for the most recent year. The starting point for all P&L calculations." /></CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -196,7 +197,7 @@ export default function IncomeStatement() {
         </Card>
         <Card data-testid="card-gross-profit">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Gross Profit</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Gross Profit <InfoTooltip content="Revenue minus Cost of Goods Sold (COGS). Gross margin shows how efficiently the company produces goods/services." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{latestData ? formatCurrency(latestData.grossProfit || 0) : "--"}</div>
@@ -205,7 +206,7 @@ export default function IncomeStatement() {
         </Card>
         <Card data-testid="card-operating-income">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Operating Income</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Operating Income <InfoTooltip content="Profit after all operating expenses (COGS, S&M, R&D, G&A, Depreciation). Measures core business profitability." /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{latestData ? formatCurrency(latestData.operatingIncome || 0) : "--"}</div>
@@ -214,7 +215,7 @@ export default function IncomeStatement() {
         </Card>
         <Card data-testid="card-net-income">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Net Income</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-1">Net Income <InfoTooltip content="Bottom-line profit after taxes. This drives EPS and is a key input for the PEG valuation method." /></CardTitle>
             {latestData && (latestData.netIncome || 0) >= 0 ? <TrendingUp className="h-4 w-4 text-green-500" /> : <TrendingDown className="h-4 w-4 text-red-500" />}
           </CardHeader>
           <CardContent>
