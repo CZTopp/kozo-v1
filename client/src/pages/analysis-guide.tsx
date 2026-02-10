@@ -14,6 +14,9 @@ import {
   ArrowDown,
   Settings2,
   Zap,
+  BookOpen,
+  Building2,
+  CheckCircle2,
 } from "lucide-react";
 
 const sections = [
@@ -182,6 +185,197 @@ const workflowSteps = [
   { step: 6, title: "Compare Valuations", page: "Valuation Comparison", description: "Review the final output comparing P/R, PEG, and DCF target prices across bull/base/bear scenarios." },
 ];
 
+const walkthroughSteps = [
+  {
+    step: 1,
+    title: "Create a New Company",
+    page: "Sidebar",
+    icon: Building2,
+    scenario: "You want to analyze \"CloudSync Corp\" (ticker: CSYN), a mid-cap B2B SaaS company with $80M in annual recurring revenue, growing at 25% YoY.",
+    actions: [
+      "Open the company selector dropdown at the top of the sidebar.",
+      "Click \"New Company\" and enter \"CloudSync Corp 2025-2029\" as the model name.",
+      "The app creates a blank model with no data -- you are starting from scratch, just like opening a new Excel workbook.",
+    ],
+    result: "A blank financial model is created. All pages will show empty tables waiting for your inputs.",
+    whatToLookFor: null,
+  },
+  {
+    step: 2,
+    title: "Build the Revenue Model",
+    page: "Revenue Forecast",
+    icon: DollarSign,
+    scenario: "CloudSync has four revenue streams: Subscription ($60M), Professional Services ($10M), Marketplace Add-ons ($6M), and Usage-Based ($4M). You have 2 quarters of actuals for 2025 and need to project through 2029.",
+    actions: [
+      "Navigate to the Revenue Forecast page.",
+      "Click \"Edit\" to enter quarterly revenue for each stream. For Q1 2025 Subscription Revenue, enter $14,000,000 (the quarterly run-rate for $60M ARR growing 25%).",
+      "Fill in Q1 and Q2 actuals for all four streams based on your research: Subscription ($14M, $15.2M), Services ($2.3M, $2.6M), Marketplace ($1.4M, $1.5M), Usage ($0.9M, $1.0M).",
+      "Click \"Forecast Forward\" to auto-project the remaining quarters and future years based on the historical growth rate implied by your actuals.",
+      "Open \"Projection Settings\" to fine-tune the forecast:",
+      "  -- Set Growth Decay Rate to 0.10 (10%) because a 25% growth rate will naturally decelerate as CloudSync scales.",
+      "  -- Set Scenario Multipliers: Bull = 1.3, Base = 1.0, Bear = 0.7 to model upside/downside revenue scenarios.",
+      "Click \"Save & Recalculate\" to lock in your revenue model.",
+    ],
+    result: "The Revenue Forecast page now shows quarterly revenue across all streams from 2025 to 2029, with growth naturally decaying from ~25% to ~16% by 2029. Annual totals and YoY growth rates are calculated.",
+    whatToLookFor: "Check that YoY growth rates make sense. If CloudSync's TAM is $2B, does the model have revenue exceeding the realistic market share by 2029? If growth decay seems too aggressive or too mild, adjust the rate.",
+  },
+  {
+    step: 3,
+    title: "Set Cost Assumptions to Build the P&L",
+    page: "Income Statement",
+    icon: FileSpreadsheet,
+    scenario: "CloudSync is a typical SaaS company: 75% gross margins, heavy R&D spending, and improving operating leverage. You estimate COGS at 25%, S&M at 30%, R&D at 20%, G&A at 10%, Depreciation at 3%, and a 25% tax rate.",
+    actions: [
+      "Navigate to the Income Statement page. You'll see the revenue figures you just entered already populated at the top.",
+      "Click \"Edit Assumptions\" to configure cost percentages:",
+      "  -- COGS: 25% (hosting, infrastructure, support labor)",
+      "  -- Sales & Marketing: 30% (SDRs, AEs, marketing campaigns, events)",
+      "  -- Research & Development: 20% (engineering team, product development)",
+      "  -- General & Administrative: 10% (finance, legal, HR, office)",
+      "  -- Depreciation & Amortization: 3% (capitalized software, equipment)",
+      "  -- Tax Rate: 25%",
+      "Optionally, set Target Net Margin to 15% under Projection Settings. This tells the model to gradually converge cost assumptions so that by the final projection year, the net margin approaches 15% -- reflecting operating leverage as CloudSync scales.",
+      "Click \"Save & Recalculate.\"",
+    ],
+    result: "The full P&L is generated: Revenue, COGS, Gross Profit (75% margin), Operating Expenses, Operating Income, Net Income, and EPS. If Target Net Margin is set, you'll see margins improving from ~12% in 2025 toward 15% by 2029.",
+    whatToLookFor: "Check the Margin Analysis tab. Are gross margins stable at ~75%? Is operating margin expanding year over year? Compare Revenue Growth vs. Net Income Growth in the Growth Rates tab -- faster net income growth confirms operating leverage.",
+  },
+  {
+    step: 4,
+    title: "Configure Balance Sheet Assumptions",
+    page: "Balance Sheet",
+    icon: BarChart3,
+    scenario: "CloudSync collects from enterprise customers in ~45 days (A/R ~12% of revenue), pays suppliers in ~30 days (A/P ~8%), and invests ~5% of revenue in CapEx (servers, office buildouts).",
+    actions: [
+      "Navigate to the Balance Sheet page. Income Statement data has already cascaded in.",
+      "Click \"Edit Assumptions\" to set working capital ratios:",
+      "  -- Accounts Receivable: 12% of revenue (enterprise collection cycles)",
+      "  -- Accounts Payable: 8% of revenue (standard vendor payment terms)",
+      "  -- CapEx: 5% of revenue (cloud infrastructure, office leases)",
+      "Click \"Save & Recalculate.\"",
+    ],
+    result: "The balance sheet builds out with Total Assets, Total Liabilities, and Total Equity. The \"Balanced\" badge should appear, confirming the accounting identity holds. A/R grows with revenue, reflecting the capital tied up in receivables.",
+    whatToLookFor: "Verify the balance sheet shows \"Balanced.\" If it shows \"Imbalanced,\" revisit your assumptions. Check that CapEx at 5% is reasonable -- too high means the company is capital-intensive (unusual for SaaS); too low may understate investment needs.",
+  },
+  {
+    step: 5,
+    title: "Review Auto-Generated Cash Flows",
+    page: "Cash Flow Statement",
+    icon: Wallet,
+    scenario: "This page is fully auto-derived. You don't enter anything here -- you just review the output.",
+    actions: [
+      "Navigate to the Cash Flow page.",
+      "Review Operating Cash Flow: starts with Net Income, adds back Depreciation (non-cash), and adjusts for working capital changes (increase in A/R reduces cash; increase in A/P adds cash).",
+      "Review Investing Cash Flow: primarily the CapEx you set at 5% of revenue.",
+      "Review Free Cash Flow (FCF): Operating Cash Flow minus CapEx. This is the single most important number for valuation.",
+      "Check the FCF Trend tab to visualize the trajectory. Growing FCF is the goal.",
+      "Check the Breakdown tab to see how operating, investing, and financing activities compare as a stacked chart.",
+    ],
+    result: "CloudSync should show positive and growing FCF, driven by strong operating margins and modest CapEx. By 2029, FCF should be meaningfully higher than 2025 -- reflecting revenue growth and improving profitability.",
+    whatToLookFor: "If FCF is negative in early years, this may be acceptable if the company is investing heavily. But by the projection end, FCF should be positive for a healthy SaaS business. If not, revisit your cost or CapEx assumptions.",
+  },
+  {
+    step: 6,
+    title: "Run the DCF Valuation",
+    page: "DCF Valuation",
+    icon: Calculator,
+    scenario: "Now you discount CloudSync's projected free cash flows back to present value to determine what the company is worth per share. This follows the standard DCF methodology.",
+    actions: [
+      "Navigate to the DCF Valuation page. FCF projections from the Cash Flow page are already loaded.",
+      "Click \"Edit WACC Params\" to configure the discount rate. Here is the step-by-step WACC build:",
+      "  -- [Cost of Equity - CAPM]: Risk-Free Rate: 4.25% (10-yr Treasury), Beta: 1.15, Market Return: 9.0%. Result: 4.25% + 1.15 x (9.0% - 4.25%) = 9.71%",
+      "  -- [Cost of Debt - After-Tax]: Pre-Tax Cost of Debt: 6.0%, Tax Rate: 25%. Result: 6.0% x (1 - 0.25) = 4.5%",
+      "  -- [WACC]: Equity Weight: 80%, Debt Weight: 20%. WACC = 9.71% x 0.80 + 4.5% x 0.20 = 8.67%",
+      "  -- [Terminal Value]: Long-Term Growth Rate: 2.5% (near GDP growth). Formula: Last Year FCF x (1 + 2.5%) / (WACC - 2.5%)",
+      "  -- [Target Price]: NPV of FCFs = Sum of FCF / (1 + WACC)^year. TV Discounted = Terminal Value / (1 + WACC)^n. Target Equity Value = NPV + Discounted TV - Total Debt. Target Price = Equity Value / Shares Outstanding",
+      "Also set Total Debt (e.g., $50M) and Current Share Price (e.g., $42.00) so the model can calculate upside/downside.",
+      "Click \"Save & Recalculate.\"",
+    ],
+    result: "The DCF page now shows: WACC (~8.67%), NPV of projected FCFs, Terminal Value and its discounted present value, Target Equity Value, and a Target Price Per Share. An upside/downside percentage compares the target price to the current $42 share price.",
+    whatToLookFor: "Review the 5x5 Sensitivity Analysis table. It shows target prices across a range of WACC (6.67% to 10.67%) and Long-Term Growth (1.5% to 3.5%) assumptions. A 1% change in WACC can move the target price by 20%+. Ensure your base case sits in a reasonable range and that the bear-case scenarios still produce a target above $0.",
+  },
+  {
+    step: 7,
+    title: "Compare All Valuation Methods",
+    page: "Valuation Comparison",
+    icon: Scale,
+    scenario: "The final output page. Three independent valuation methods are compared side-by-side, each with bull/base/bear scenarios.",
+    actions: [
+      "Navigate to the Valuation Comparison page. All data is auto-derived from upstream.",
+      "Review the three methods:",
+      "  -- Price/Revenue (P/S): Applies revenue multiples to annual revenue per share. Uses the scenario multipliers you set (Bull 1.3x, Base 1.0x, Bear 0.7x) applied to the P/S ratio.",
+      "  -- Price/Earnings (PEG): Uses EPS from the Income Statement and earnings growth rate. Applies PEG ratio variants for bull/base/bear.",
+      "  -- DCF: Uses the target price from Step 6, adjusted by scenario multipliers for bull/base/bear.",
+      "Review the Average Target Price: the mean of all three base-case targets.",
+      "Compare against the current share price of $42.00. If all three methods show targets above $42, you have higher conviction in an upside thesis.",
+      "Check the Scenario Revenue Projections table to see how bull and bear revenue paths diverge from the base case.",
+    ],
+    result: "You now have a complete, multi-method valuation for CloudSync Corp with a range of target prices. For example: P/R target of $55, PEG target of $50, DCF target of $48 -- Average Target of ~$51, representing ~21% upside from the current $42.",
+    whatToLookFor: "If the three methods produce wildly different targets, it signals model uncertainty. Large divergence usually means one assumption (revenue multiple, growth rate, or WACC) is significantly different from the others. Revisit the outlier method's assumptions.",
+  },
+  {
+    step: 8,
+    title: "Add to Your Portfolio & Monitor",
+    page: "Portfolio Dashboard",
+    icon: Briefcase,
+    scenario: "Based on your analysis, you decide CloudSync Corp has ~21% upside. You want to add it to your portfolio and set risk parameters.",
+    actions: [
+      "Navigate to the Portfolio Dashboard page.",
+      "Click \"Add Position\" to open the position form.",
+      "Enter the key details:",
+      "  -- Ticker: CSYN",
+      "  -- Company: CloudSync Corp",
+      "  -- Sector: Technology",
+      "  -- Shares: 500 (your intended position size)",
+      "  -- Purchase Price: $42.00",
+      "  -- Current Price: $42.00",
+      "  -- Beta: 1.15 (from your DCF model)",
+      "  -- P/E Ratio: 35 (from market data)",
+      "  -- MA50: $40.50, MA200: $38.00 (from technical analysis)",
+      "  -- Stop Loss: $35.00 (defining your maximum acceptable loss at ~17%)",
+      "Click \"Add Position\" to save.",
+      "Monitor the position alongside your other holdings. Check the Risk & Flags tab for concentration warnings and technical signals.",
+    ],
+    result: "CloudSync is now tracked in your portfolio with a $21,000 position. The app calculates P&L, monitors golden/death cross signals, tracks proximity to your stop loss, and factors CSYN into your portfolio-level weighted beta and sector allocation.",
+    whatToLookFor: "After adding, check that portfolio concentration risk hasn't spiked. If Technology already represents 40%+ of your portfolio, adding CSYN increases sector-specific risk. Also verify your weighted portfolio beta hasn't exceeded your risk tolerance.",
+  },
+  {
+    step: 9,
+    title: "Cross-Check with Market Context",
+    page: "Market Data & Macro",
+    icon: TrendingUp,
+    scenario: "Before finalizing your investment thesis, validate your assumptions against the current macro environment.",
+    actions: [
+      "Navigate to the Market Data & Macro page.",
+      "Check the 10-Year Treasury yield. You used 4.25% as your risk-free rate -- does the current yield match?",
+      "Review inflation trends. If inflation is rising, your 2.5% long-term growth rate may be too conservative in nominal terms but overly aggressive in real terms.",
+      "Check GDP growth data. Your revenue model assumes 25% growth decaying to 16% -- this is a company-specific rate, but it should be directionally supported by a growing economy.",
+      "Review the S&P 500 and Nasdaq YTD returns. If the broad market is down 10%, your 9% expected market return in WACC may need adjustment.",
+      "Compare international indices if CloudSync has global revenue exposure.",
+    ],
+    result: "Your model assumptions are validated (or adjusted) against real-time macro data. The risk-free rate, market return, and growth assumptions in your DCF are grounded in current economic reality.",
+    whatToLookFor: "If rates have risen significantly since you last updated your model, go back to the DCF page and adjust your risk-free rate. A 50bp increase in the risk-free rate raises WACC and can reduce your target price by 10-15%.",
+  },
+  {
+    step: 10,
+    title: "Iterate and Refine",
+    page: "All Pages",
+    icon: CheckCircle2,
+    scenario: "Financial modeling is iterative. As new data comes in (quarterly earnings, macro changes, competitive developments), you revisit and update.",
+    actions: [
+      "When CloudSync reports Q3 2025 earnings, go to Revenue Forecast and update Q3 actuals. Did they beat, meet, or miss your estimates?",
+      "If they beat estimates, consider reducing your Growth Decay Rate (the company is sustaining growth better than expected).",
+      "If margins improved, update your cost assumptions on the Income Statement page.",
+      "After every update, click \"Save & Recalculate\" to cascade changes through the entire model.",
+      "Review the DCF target price -- has it moved materially? If the target dropped below $42, your investment thesis may be weakening.",
+      "Check your portfolio position -- if CSYN has appreciated to $50, update the current price in your portfolio to see updated P&L and portfolio metrics.",
+      "Periodically review the Sensitivity Analysis table on the DCF page to understand your margin of safety at the current price.",
+    ],
+    result: "Your model stays current and your investment thesis is continuously validated. The cascading engine ensures that a single data point update (like a revenue beat) flows through every financial statement, cash flow projection, and valuation method automatically.",
+    whatToLookFor: "Track how your target price evolves over time as you incorporate new data. If the target keeps rising with each quarterly update, your thesis is strengthening. If it's declining, it may be time to re-evaluate the position.",
+  },
+];
+
 export default function AnalysisGuide() {
   return (
     <div className="p-4 space-y-6 max-w-4xl mx-auto">
@@ -244,6 +438,61 @@ export default function AnalysisGuide() {
               </div>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card data-testid="card-walkthrough">
+        <CardHeader>
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <BookOpen className="h-4 w-4" />
+            Complete Walkthrough: Analyzing CloudSync Corp (CSYN)
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Follow this step-by-step example to model a hypothetical B2B SaaS company from scratch -- creating the company, building the revenue forecast, generating financial statements, running a full DCF valuation, and adding it to your portfolio.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {walkthroughSteps.map((ws) => (
+            <div key={ws.step} className="space-y-2" data-testid={`walkthrough-step-${ws.step}`}>
+              <div className="flex items-start gap-3">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                  {ws.step}
+                </div>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold">{ws.title}</span>
+                    <Badge variant="outline" className="text-xs">{ws.page}</Badge>
+                  </div>
+                  <div className="p-2 rounded-md bg-muted/50">
+                    <p className="text-xs text-muted-foreground"><span className="font-medium">Scenario:</span> {ws.scenario}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-medium text-muted-foreground mb-1">What to Do</h4>
+                    <ul className="space-y-0.5">
+                      {ws.actions.map((action, i) => (
+                        <li key={i} className={`text-sm text-muted-foreground ${action.startsWith("  --") ? "ml-4" : action === "" ? "h-1" : ""}`}>
+                          {action.startsWith("  --") ? action : action === "" ? null : `${i + 1}. ${action}`}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="p-2 rounded-md bg-muted/50">
+                    <p className="text-xs"><span className="font-medium">Result:</span> <span className="text-muted-foreground">{ws.result}</span></p>
+                  </div>
+                  {ws.whatToLookFor && (
+                    <div className="p-2 rounded-md bg-muted/50">
+                      <p className="text-xs"><span className="font-medium">What to Look For:</span> <span className="text-muted-foreground">{ws.whatToLookFor}</span></p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {ws.step < walkthroughSteps.length && (
+                <div className="flex justify-center">
+                  <ArrowDown className="h-4 w-4 text-muted-foreground" />
+                </div>
+              )}
+            </div>
+          ))}
         </CardContent>
       </Card>
 

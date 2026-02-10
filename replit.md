@@ -4,6 +4,7 @@
 Comprehensive financial modeling and valuation application covering 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. All data is simulated demo data.
 
 ## Recent Changes
+- 2026-02-10: Added 10-step analyst walkthrough to Analysis Guide using hypothetical "CloudSync Corp (CSYN)" - covers company creation, revenue modeling, P&L, balance sheet, cash flow review, full DCF/WACC build, valuation comparison, portfolio addition, macro cross-check, iterative refinement
 - 2026-02-10: Added Analysis Guide page (/guide) with page-by-page breakdown, recommended workflow, cascade explanation
 - 2026-02-10: InfoTooltip component (client/src/components/info-tooltip.tsx) - reusable hover tooltip for financial terms
 - 2026-02-10: Added detailed tooltips to all 9 pages - KPI cards, chart titles, projection settings, risk metrics, macro categories
