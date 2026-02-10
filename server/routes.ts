@@ -201,6 +201,45 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(results);
   });
 
+  app.patch("/api/models/:modelId/balance-sheet/:year", async (req: Request, res: Response) => {
+    const { modelId, year } = req.params;
+    const yearNum = parseInt(year);
+    const data = { ...req.body };
+
+    const existing = (await storage.getBalanceSheetLines(modelId)).find(l => l.year === yearNum);
+    const merged: Record<string, number> = {};
+    const numKeys = [
+      "cash", "shortTermInvestments", "accountsReceivable", "inventory",
+      "equipment", "depreciationAccum", "capex",
+      "accountsPayable", "shortTermDebt", "longTermDebt",
+      "retainedEarnings", "commonShares",
+    ];
+    for (const k of numKeys) {
+      merged[k] = data[k] !== undefined ? Number(data[k]) : (existing as any)?.[k] || 0;
+    }
+
+    const totalCA = merged.cash + merged.shortTermInvestments + merged.accountsReceivable + merged.inventory;
+    const totalLTA = merged.equipment - merged.depreciationAccum + merged.capex;
+    const totalAssets = totalCA + totalLTA;
+    const totalCL = merged.accountsPayable + merged.shortTermDebt;
+    const totalLTL = merged.longTermDebt;
+    const totalLiab = totalCL + totalLTL;
+    const totalEquity = merged.retainedEarnings + merged.commonShares;
+    const totalLE = totalLiab + totalEquity;
+
+    data.totalCurrentAssets = Math.round(totalCA);
+    data.totalLongTermAssets = Math.round(totalLTA);
+    data.totalAssets = Math.round(totalAssets);
+    data.totalCurrentLiabilities = Math.round(totalCL);
+    data.totalLongTermLiabilities = Math.round(totalLTL);
+    data.totalLiabilities = Math.round(totalLiab);
+    data.totalEquity = Math.round(totalEquity);
+    data.totalLiabilitiesAndEquity = Math.round(totalLE);
+
+    const line = await storage.updateBalanceSheetLineByYear(modelId, yearNum, data);
+    res.json(line);
+  });
+
   app.get("/api/models/:modelId/cash-flow", async (req: Request, res: Response) => {
     const lines = await storage.getCashFlowLines(req.params.modelId);
     res.json(lines);
@@ -218,6 +257,18 @@ export async function registerRoutes(server: Server, app: Express) {
       results.push(line);
     }
     res.json(results);
+  });
+
+  app.patch("/api/models/:modelId/cash-flow/:year", async (req: Request, res: Response) => {
+    const { modelId, year } = req.params;
+    const line = await storage.updateCashFlowLineByYear(modelId, parseInt(year), req.body);
+    res.json(line);
+  });
+
+  app.patch("/api/models/:modelId/income-statement/:year", async (req: Request, res: Response) => {
+    const { modelId, year } = req.params;
+    const line = await storage.updateIncomeStatementLineByYear(modelId, parseInt(year), req.body);
+    res.json(line);
   });
 
   app.get("/api/models/:modelId/dcf", async (req: Request, res: Response) => {

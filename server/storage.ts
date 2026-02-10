@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db } from "./db";
 import {
   financialModels, revenueLineItems, revenuePeriods,
@@ -47,11 +47,15 @@ export interface IStorage {
 
   getBalanceSheetLines(modelId: string): Promise<BalanceSheetLine[]>;
   upsertBalanceSheetLine(data: InsertBalanceSheetLine): Promise<BalanceSheetLine>;
+  updateBalanceSheetLineByYear(modelId: string, year: number, data: Partial<InsertBalanceSheetLine>): Promise<BalanceSheetLine>;
   deleteBalanceSheetLines(modelId: string): Promise<void>;
 
   getCashFlowLines(modelId: string): Promise<CashFlowLine[]>;
   upsertCashFlowLine(data: InsertCashFlowLine): Promise<CashFlowLine>;
+  updateCashFlowLineByYear(modelId: string, year: number, data: Partial<InsertCashFlowLine>): Promise<CashFlowLine>;
   deleteCashFlowLines(modelId: string): Promise<void>;
+
+  updateIncomeStatementLineByYear(modelId: string, year: number, data: Partial<InsertIncomeStatementLine>): Promise<IncomeStatementLine>;
 
   getDcfValuation(modelId: string): Promise<DcfValuation | undefined>;
   upsertDcfValuation(data: InsertDcfValuation): Promise<DcfValuation>;
@@ -193,6 +197,13 @@ export class DatabaseStorage implements IStorage {
     return line;
   }
 
+  async updateBalanceSheetLineByYear(modelId: string, year: number, data: Partial<InsertBalanceSheetLine>) {
+    const [line] = await db.update(balanceSheetLines).set(data)
+      .where(and(eq(balanceSheetLines.modelId, modelId), eq(balanceSheetLines.year, year)))
+      .returning();
+    return line;
+  }
+
   async deleteBalanceSheetLines(modelId: string) {
     await db.delete(balanceSheetLines).where(eq(balanceSheetLines.modelId, modelId));
   }
@@ -206,8 +217,22 @@ export class DatabaseStorage implements IStorage {
     return line;
   }
 
+  async updateCashFlowLineByYear(modelId: string, year: number, data: Partial<InsertCashFlowLine>) {
+    const [line] = await db.update(cashFlowLines).set(data)
+      .where(and(eq(cashFlowLines.modelId, modelId), eq(cashFlowLines.year, year)))
+      .returning();
+    return line;
+  }
+
   async deleteCashFlowLines(modelId: string) {
     await db.delete(cashFlowLines).where(eq(cashFlowLines.modelId, modelId));
+  }
+
+  async updateIncomeStatementLineByYear(modelId: string, year: number, data: Partial<InsertIncomeStatementLine>) {
+    const [line] = await db.update(incomeStatementLines).set(data)
+      .where(and(eq(incomeStatementLines.modelId, modelId), eq(incomeStatementLines.year, year)))
+      .returning();
+    return line;
   }
 
   async getDcfValuation(modelId: string) {

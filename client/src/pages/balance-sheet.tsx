@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useModel } from "@/lib/model-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,13 +12,31 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { BalanceSheetLine, Assumptions } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { CheckCircle, AlertCircle, Save, RefreshCw, ArrowDown, ArrowRight } from "lucide-react";
+import { CheckCircle, AlertCircle, Save, RefreshCw, ArrowDown, ArrowRight, ClipboardPaste, Pencil } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
+import { PasteDataModal } from "@/components/paste-data-modal";
+
+const editableFields: Array<{ key: keyof BalanceSheetLine; label: string; isEditable?: boolean }> = [
+  { key: "cash", label: "Cash", isEditable: true },
+  { key: "shortTermInvestments", label: "Short-Term Investments", isEditable: true },
+  { key: "accountsReceivable", label: "Accounts Receivable", isEditable: true },
+  { key: "inventory", label: "Inventory", isEditable: true },
+  { key: "equipment", label: "Equipment", isEditable: true },
+  { key: "depreciationAccum", label: "Accumulated Depreciation", isEditable: true },
+  { key: "capex", label: "CapEx", isEditable: true },
+  { key: "accountsPayable", label: "Accounts Payable", isEditable: true },
+  { key: "shortTermDebt", label: "Short-Term Debt", isEditable: true },
+  { key: "longTermDebt", label: "Long-Term Debt", isEditable: true },
+  { key: "retainedEarnings", label: "Retained Earnings", isEditable: true },
+  { key: "commonShares", label: "Common Shares", isEditable: true },
+];
 
 export default function BalanceSheet() {
   const { toast } = useToast();
   const [editMode, setEditMode] = useState(false);
   const [editedAssumptions, setEditedAssumptions] = useState<Record<string, string>>({});
+  const [editedCells, setEditedCells] = useState<Record<string, Record<string, number>>>({});
+  const [showPasteModal, setShowPasteModal] = useState(false);
 
   const { selectedModel: model, isLoading } = useModel();
 
@@ -34,6 +52,17 @@ export default function BalanceSheet() {
 
   const baseAssumptions = assumptionsData?.find(a => !a.scenarioId);
 
+  const invalidateAll = useCallback(() => {
+    if (!model) return;
+    queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/models", model.id, "income-statement"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/models", model.id, "balance-sheet"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/models", model.id, "cash-flow"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/models", model.id, "dcf"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/models", model.id, "valuation-comparison"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/models", model.id, "assumptions"] });
+  }, [model]);
+
   const recalcMutation = useMutation({
     mutationFn: async () => {
       if (Object.keys(editedAssumptions).length > 0) {
@@ -42,13 +71,7 @@ export default function BalanceSheet() {
       await apiRequest("POST", `/api/models/${model!.id}/recalculate`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "income-statement"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "balance-sheet"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "cash-flow"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "dcf"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "valuation-comparison"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "assumptions"] });
+      invalidateAll();
       setEditMode(false);
       setEditedAssumptions({});
       toast({ title: "Model recalculated", description: "Balance sheet assumptions updated. Cash Flow, DCF, and Valuation recalculated." });
@@ -57,6 +80,95 @@ export default function BalanceSheet() {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
+
+  const saveCellsMutation = useMutation({
+    mutationFn: async () => {
+      if (Object.keys(editedAssumptions).length > 0) {
+        await apiRequest("PATCH", `/api/models/${model!.id}/assumptions`, editedAssumptions);
+      }
+      const promises: Promise<any>[] = [];
+      for (const [yearStr, fields] of Object.entries(editedCells)) {
+        const year = parseInt(yearStr);
+        promises.push(
+          apiRequest("PATCH", `/api/models/${model!.id}/balance-sheet/${year}`, {
+            ...fields,
+            isActual: true,
+          })
+        );
+      }
+      await Promise.all(promises);
+      await apiRequest("POST", `/api/models/${model!.id}/recalculate`);
+    },
+    onSuccess: () => {
+      invalidateAll();
+      setEditedCells({});
+      setEditedAssumptions({});
+      setEditMode(false);
+      toast({ title: "Actual data saved", description: "Balance sheet actuals saved. Projected years recalculated." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const toggleActualMutation = useMutation({
+    mutationFn: async ({ year, isActual }: { year: number; isActual: boolean }) => {
+      await apiRequest("PATCH", `/api/models/${model!.id}/balance-sheet/${year}`, { isActual });
+      await apiRequest("POST", `/api/models/${model!.id}/recalculate`);
+    },
+    onSuccess: () => {
+      invalidateAll();
+      toast({ title: "Year updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handlePasteImport = useCallback((data: Record<number, Record<string, number>>) => {
+    const bulkPromises: Promise<any>[] = [];
+    for (const [yearStr, fields] of Object.entries(data)) {
+      const year = parseInt(yearStr);
+      const payload: Record<string, any> = { ...fields, isActual: true };
+      const ar = fields.accountsReceivable ?? 0;
+      const inv = fields.inventory ?? 0;
+      const stInv = fields.shortTermInvestments ?? 0;
+      const cash = fields.cash ?? 0;
+      const totalCA = cash + stInv + ar + inv;
+      payload.totalCurrentAssets = totalCA;
+      const equip = fields.equipment ?? 0;
+      const depAccum = fields.depreciationAccum ?? 0;
+      const capex = fields.capex ?? 0;
+      const totalLTA = equip - depAccum + capex;
+      payload.totalLongTermAssets = totalLTA;
+      payload.totalAssets = totalCA + totalLTA;
+      const ap = fields.accountsPayable ?? 0;
+      const stDebt = fields.shortTermDebt ?? 0;
+      const totalCL = ap + stDebt;
+      payload.totalCurrentLiabilities = totalCL;
+      const ltDebt = fields.longTermDebt ?? 0;
+      payload.totalLongTermLiabilities = ltDebt;
+      payload.totalLiabilities = totalCL + ltDebt;
+      const re = fields.retainedEarnings ?? 0;
+      const cs = fields.commonShares ?? 0;
+      payload.totalEquity = re + cs;
+      payload.totalLiabilitiesAndEquity = payload.totalLiabilities + payload.totalEquity;
+
+      bulkPromises.push(
+        apiRequest("PATCH", `/api/models/${model!.id}/balance-sheet/${year}`, payload)
+      );
+    }
+
+    Promise.all(bulkPromises)
+      .then(() => apiRequest("POST", `/api/models/${model!.id}/recalculate`))
+      .then(() => {
+        invalidateAll();
+        toast({ title: "Data imported", description: `Imported actual data for ${Object.keys(data).length} year(s). Model recalculated.` });
+      })
+      .catch((err: Error) => {
+        toast({ title: "Import error", description: err.message, variant: "destructive" });
+      });
+  }, [model, invalidateAll, toast]);
 
   if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
   if (!model) return <div className="p-4 text-muted-foreground">Select a company from the sidebar to begin.</div>;
@@ -77,6 +189,17 @@ export default function BalanceSheet() {
     if (editedAssumptions[key] !== undefined) return editedAssumptions[key];
     if (baseAssumptions) return (baseAssumptions as any)[key] || "0";
     return "0";
+  };
+
+  const getCellValue = (year: number, key: string): number | undefined => {
+    return editedCells[year]?.[key];
+  };
+
+  const setCellValue = (year: number, key: string, value: number) => {
+    setEditedCells(prev => ({
+      ...prev,
+      [year]: { ...prev[year], [key]: value },
+    }));
   };
 
   const assetRows: Array<{ label: string; key: keyof BalanceSheetLine; isBold?: boolean; isSubtotal?: boolean; isSection?: boolean }> = [
@@ -111,6 +234,7 @@ export default function BalanceSheet() {
   ];
 
   const allRows = [...assetRows, ...liabilityRows, ...equityRows];
+  const isFieldEditable = (key: string) => editableFields.some(f => f.key === key);
 
   const chartData = annualData.map(d => ({
     year: d.year,
@@ -120,6 +244,11 @@ export default function BalanceSheet() {
     "Long-Term Liabilities": (d.totalLongTermLiabilities || 0) / 1e6,
     "Equity": (d.totalEquity || 0) / 1e6,
   }));
+
+  const hasEdits = Object.keys(editedCells).length > 0 || Object.keys(editedAssumptions).length > 0;
+
+  const pasteFieldDefs = editableFields.map(f => ({ key: f.key as string, label: f.label }));
+  const allYears = annualData.map(d => d.year);
 
   return (
     <div className="p-4 space-y-4">
@@ -144,13 +273,32 @@ export default function BalanceSheet() {
           </Badge>
           {editMode ? (
             <>
-              <Button variant="outline" onClick={() => { setEditMode(false); setEditedAssumptions({}); }} data-testid="button-cancel">Cancel</Button>
-              <Button onClick={() => recalcMutation.mutate()} disabled={recalcMutation.isPending} data-testid="button-save-recalculate">
-                {recalcMutation.isPending ? <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Recalculating...</> : <><Save className="h-4 w-4 mr-1" /> Save & Recalculate</>}
+              <Button variant="outline" onClick={() => { setEditMode(false); setEditedAssumptions({}); setEditedCells({}); }} data-testid="button-cancel">Cancel</Button>
+              <Button variant="outline" onClick={() => setShowPasteModal(true)} data-testid="button-paste-data">
+                <ClipboardPaste className="h-4 w-4 mr-1" /> Paste Data
+              </Button>
+              <Button
+                onClick={() => {
+                  if (Object.keys(editedCells).length > 0) {
+                    saveCellsMutation.mutate();
+                  } else {
+                    recalcMutation.mutate();
+                  }
+                }}
+                disabled={!hasEdits || saveCellsMutation.isPending || recalcMutation.isPending}
+                data-testid="button-save-recalculate"
+              >
+                {(saveCellsMutation.isPending || recalcMutation.isPending) ? (
+                  <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Saving...</>
+                ) : (
+                  <><Save className="h-4 w-4 mr-1" /> Save & Recalculate</>
+                )}
               </Button>
             </>
           ) : (
-            <Button variant="outline" onClick={() => setEditMode(true)} data-testid="button-edit-assumptions">Edit Assumptions</Button>
+            <Button variant="outline" onClick={() => setEditMode(true)} data-testid="button-edit-assumptions">
+              <Pencil className="h-4 w-4 mr-1" /> Edit / Enter Actuals
+            </Button>
           )}
         </div>
       </div>
@@ -159,7 +307,7 @@ export default function BalanceSheet() {
         <Card className="border-dashed">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
-              <ArrowRight className="h-4 w-4" /> Working Capital & CapEx Assumptions
+              <ArrowRight className="h-4 w-4" /> Working Capital & CapEx Assumptions (for projected years)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -174,14 +322,13 @@ export default function BalanceSheet() {
                       const v = parseFloat(e.target.value) / 100;
                       if (!isNaN(v)) setEditedAssumptions(prev => ({ ...prev, [f.key]: v.toString() }));
                     }}
-                    className="h-8 text-sm"
                     data-testid={`input-assumption-${f.key}`}
                   />
                 </div>
               ))}
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Changes cascade: A/R, A/P, and CapEx drive working capital and Cash Flow, which feeds DCF and Valuation.
+              These assumptions drive projected years. Actual year data (marked below) is preserved as-is during recalculation.
             </p>
           </CardContent>
         </Card>
@@ -221,12 +368,30 @@ export default function BalanceSheet() {
         </TabsList>
         <TabsContent value="table">
           <Card>
-            <CardContent className="pt-6">
+            <CardContent className="pt-6 overflow-x-auto">
               <Table data-testid="table-balance-sheet">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Line Item</TableHead>
-                    {annualData.map(d => <TableHead key={d.year} className="text-right">{d.year}</TableHead>)}
+                    <TableHead className="min-w-[180px]">Line Item</TableHead>
+                    {annualData.map(d => (
+                      <TableHead key={d.year} className="text-right min-w-[120px]">
+                        <div className="flex flex-col items-end gap-1">
+                          <span>{d.year}</span>
+                          {editMode ? (
+                            <Badge
+                              variant={d.isActual ? "default" : "outline"}
+                              className="text-[10px] cursor-pointer"
+                              onClick={() => toggleActualMutation.mutate({ year: d.year, isActual: !d.isActual })}
+                              data-testid={`badge-actual-${d.year}`}
+                            >
+                              {d.isActual ? "Actual" : "Projected"}
+                            </Badge>
+                          ) : (
+                            d.isActual && <Badge variant="default" className="text-[10px]">Actual</Badge>
+                          )}
+                        </div>
+                      </TableHead>
+                    ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -238,17 +403,63 @@ export default function BalanceSheet() {
                         </TableRow>
                       );
                     }
+                    const canEdit = isFieldEditable(row.key);
                     return (
                       <TableRow key={`${row.key}-${idx}`} className={row.isSubtotal ? "border-t-2" : ""} data-testid={`row-${row.key}`}>
                         <TableCell className={row.isBold ? "font-bold" : "pl-8"}>{row.label}</TableCell>
-                        {annualData.map(d => (
-                          <TableCell key={d.year} className={`text-right ${row.isBold ? "font-bold" : ""}`}>
-                            {formatCurrency((d[row.key] as number) || 0)}
-                          </TableCell>
-                        ))}
+                        {annualData.map(d => {
+                          const isActual = d.isActual;
+                          const canEditCell = editMode && canEdit && isActual;
+                          const editedVal = getCellValue(d.year, row.key);
+                          const dbVal = (d[row.key] as number) || 0;
+                          const displayVal = editedVal !== undefined ? editedVal : dbVal;
+
+                          if (canEditCell) {
+                            return (
+                              <TableCell key={d.year} className="text-right p-1">
+                                <Input
+                                  type="number"
+                                  value={editedVal !== undefined ? editedVal : dbVal}
+                                  onChange={(e) => {
+                                    const v = parseFloat(e.target.value);
+                                    if (!isNaN(v)) setCellValue(d.year, row.key, v);
+                                  }}
+                                  className="text-right font-mono text-sm w-full"
+                                  data-testid={`input-${row.key}-${d.year}`}
+                                />
+                              </TableCell>
+                            );
+                          }
+
+                          return (
+                            <TableCell key={d.year} className={`text-right ${row.isBold ? "font-bold" : ""} ${isActual ? "bg-muted/20" : ""}`}>
+                              {formatCurrency(displayVal)}
+                            </TableCell>
+                          );
+                        })}
                       </TableRow>
                     );
                   })}
+                  <TableRow className="border-t-2 bg-muted/30">
+                    <TableCell className="font-bold">Total L+E</TableCell>
+                    {annualData.map(d => (
+                      <TableCell key={d.year} className="text-right font-bold">
+                        {formatCurrency(d.totalLiabilitiesAndEquity || 0)}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-bold">Balance Check (A - L&E)</TableCell>
+                    {annualData.map(d => {
+                      const diff = (d.totalAssets || 0) - (d.totalLiabilitiesAndEquity || 0);
+                      const ok = Math.abs(diff) < 100;
+                      return (
+                        <TableCell key={d.year} className={`text-right font-bold ${ok ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                          {formatCurrency(diff)} {ok ? "\u2713" : "\u2717"}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
                 </TableBody>
               </Table>
             </CardContent>
@@ -278,6 +489,16 @@ export default function BalanceSheet() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <PasteDataModal
+        open={showPasteModal}
+        onOpenChange={setShowPasteModal}
+        fieldDefs={pasteFieldDefs}
+        years={allYears}
+        onImport={handlePasteImport}
+        title="Paste Balance Sheet Data"
+        description="Import actual balance sheet data from SEC EDGAR filings, Excel, or Google Sheets. Matched years will be marked as Actual."
+      />
     </div>
   );
 }

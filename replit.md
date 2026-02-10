@@ -4,6 +4,10 @@
 Comprehensive financial modeling and valuation application covering 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. Market indices pull live data from Yahoo Finance; macro indicators pull live data from FRED API.
 
 ## Recent Changes
+- 2026-02-10: Editable Balance Sheet & Cash Flow pages - inline editing for actual years, actual/projected year toggle badges, "Paste Data" bulk import modal (TSV/CSV from SEC EDGAR/Excel), server-side BS total recomputation on PATCH
+- 2026-02-10: PATCH API endpoints: /api/models/:id/balance-sheet/:year, /api/models/:id/cash-flow/:year, /api/models/:id/income-statement/:year - update individual year data with auto-computed totals
+- 2026-02-10: PasteDataModal component (client/src/components/paste-data-modal.tsx) - reusable modal for pasting TSV/CSV financial data with field matching and preview
+- 2026-02-10: Recalculation engine preserves actual year data (isActual flag) - partitions years into actual vs projected, only recomputes projected years
 - 2026-02-10: Company ticker field on financial_models - each company can have a ticker symbol; Company Chart auto-loads the selected company's ticker (falls back to AAPL); users can save a new ticker from the chart page; create company dialog includes ticker field
 - 2026-02-10: Company Chart page (/chart) - embedded TradingView interactive chart with ticker search, quick-access buttons, theme-aware widget, pre-loaded MA50/MA200
 - 2026-02-10: Analysis Guide updated - table of contents with jump navigation (desktop sidebar + mobile badges), Company Chart section added to page breakdown, walkthrough expanded to 11 steps with chart step

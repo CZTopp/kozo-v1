@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import {
   financialModels, revenueLineItems, revenuePeriods,
   incomeStatementLines, balanceSheetLines, cashFlowLines,
@@ -14,6 +14,14 @@ export async function recalculateModel(modelId: string) {
   const periods = await db.select().from(revenuePeriods).where(eq(revenuePeriods.modelId, modelId));
   const assumptionsList = await db.select().from(assumptions).where(eq(assumptions.modelId, modelId));
   const baseAssumptions = assumptionsList.find(a => !a.scenarioId) || assumptionsList[0];
+
+  const existingIS = await db.select().from(incomeStatementLines).where(eq(incomeStatementLines.modelId, modelId));
+  const existingBS = await db.select().from(balanceSheetLines).where(eq(balanceSheetLines.modelId, modelId));
+  const existingCF = await db.select().from(cashFlowLines).where(eq(cashFlowLines.modelId, modelId));
+
+  const actualISYears = new Set(existingIS.filter(r => r.isActual).map(r => r.year));
+  const actualBSYears = new Set(existingBS.filter(r => r.isActual).map(r => r.year));
+  const actualCFYears = new Set(existingCF.filter(r => r.isActual).map(r => r.year));
 
   const years = Array.from({ length: model.endYear - model.startYear + 1 }, (_, i) => model.startYear + i);
   const sharesOut = model.sharesOutstanding || 50000000;
@@ -95,9 +103,17 @@ export async function recalculateModel(modelId: string) {
     annualRevenues[yr] = getAnnualRevenue(yr);
   }
 
-  await db.delete(incomeStatementLines).where(eq(incomeStatementLines.modelId, modelId));
+  const projectedISYears = years.filter(yr => !actualISYears.has(yr));
+  if (projectedISYears.length > 0) {
+    for (const yr of projectedISYears) {
+      const existing = existingIS.find(r => r.year === yr);
+      if (existing) {
+        await db.delete(incomeStatementLines).where(and(eq(incomeStatementLines.modelId, modelId), eq(incomeStatementLines.year, yr)));
+      }
+    }
+  }
 
-  const isData: Array<{
+  type ISRow = {
     modelId: string; year: number; isActual: boolean;
     revenue: number; cogs: number; grossProfit: number;
     salesMarketing: number; researchDevelopment: number; generalAdmin: number;
@@ -107,10 +123,45 @@ export async function recalculateModel(modelId: string) {
     eps: number; nonGaapEps: number;
     cogsPercent: number; smPercent: number; rdPercent: number;
     gaPercent: number; depreciationPercent: number; taxRate: number;
-  }> = [];
+  };
+
+  const isData: ISRow[] = [];
+  const newISRows: ISRow[] = [];
 
   for (const yr of years) {
     const yearIdx = yr - model.startYear;
+
+    if (actualISYears.has(yr)) {
+      const actual = existingIS.find(r => r.year === yr)!;
+      isData.push({
+        modelId, year: yr, isActual: true,
+        revenue: actual.revenue || 0,
+        cogs: actual.cogs || 0,
+        grossProfit: actual.grossProfit || 0,
+        salesMarketing: actual.salesMarketing || 0,
+        researchDevelopment: actual.researchDevelopment || 0,
+        generalAdmin: actual.generalAdmin || 0,
+        depreciation: actual.depreciation || 0,
+        totalExpenses: actual.totalExpenses || 0,
+        operatingIncome: actual.operatingIncome || 0,
+        ebitda: actual.ebitda || 0,
+        otherIncome: actual.otherIncome || 0,
+        preTaxIncome: actual.preTaxIncome || 0,
+        incomeTax: actual.incomeTax || 0,
+        netIncome: actual.netIncome || 0,
+        sharesOutstanding: actual.sharesOutstanding || sharesOut,
+        eps: actual.eps || 0,
+        nonGaapEps: actual.nonGaapEps || 0,
+        cogsPercent: actual.cogsPercent || 0,
+        smPercent: actual.smPercent || 0,
+        rdPercent: actual.rdPercent || 0,
+        gaPercent: actual.gaPercent || 0,
+        depreciationPercent: actual.depreciationPercent || 0,
+        taxRate: actual.taxRate || 0,
+      });
+      continue;
+    }
+
     const totalRev = annualRevenues[yr];
     const { cogsPercent, smPercent, rdPercent, gaPercent, depPercent } = getCostPercentsForYear(yearIdx);
     const cogs = totalRev * cogsPercent;
@@ -128,8 +179,8 @@ export async function recalculateModel(modelId: string) {
     const netInc = preTax - tax;
     const eps = sharesOut > 0 ? netInc / sharesOut : 0;
 
-    isData.push({
-      modelId, year: yr, isActual: yearIdx === 0,
+    const row: ISRow = {
+      modelId, year: yr, isActual: false,
       revenue: Math.round(totalRev),
       cogs: Math.round(cogs),
       grossProfit: Math.round(gp),
@@ -149,24 +200,63 @@ export async function recalculateModel(modelId: string) {
       nonGaapEps: Math.round(eps * 1.15 * 100) / 100,
       cogsPercent, smPercent, rdPercent, gaPercent,
       depreciationPercent: depPercent, taxRate,
-    });
+    };
+    isData.push(row);
+    newISRows.push(row);
   }
 
-  if (isData.length > 0) {
-    await db.insert(incomeStatementLines).values(isData);
+  if (newISRows.length > 0) {
+    await db.insert(incomeStatementLines).values(newISRows);
   }
 
-  await db.delete(balanceSheetLines).where(eq(balanceSheetLines.modelId, modelId));
+  const projectedBSYears = years.filter(yr => !actualBSYears.has(yr));
+  for (const yr of projectedBSYears) {
+    const existing = existingBS.find(r => r.year === yr);
+    if (existing) {
+      await db.delete(balanceSheetLines).where(and(eq(balanceSheetLines.modelId, modelId), eq(balanceSheetLines.year, yr)));
+    }
+  }
 
   const bsData: Array<Record<string, any>> = [];
+  const newBSRows: Array<Record<string, any>> = [];
   let retainedEarnings = 20000000;
 
   for (const yr of years) {
     const yearIdx = yr - model.startYear;
-    const totalRev = annualRevenues[yr];
     const netInc = isData[yearIdx]?.netIncome || 0;
     retainedEarnings += netInc;
 
+    if (actualBSYears.has(yr)) {
+      const actual = existingBS.find(r => r.year === yr)!;
+      bsData.push({
+        modelId, year: yr, isActual: true,
+        cash: actual.cash || 0,
+        shortTermInvestments: actual.shortTermInvestments || 0,
+        accountsReceivable: actual.accountsReceivable || 0,
+        inventory: actual.inventory || 0,
+        totalCurrentAssets: actual.totalCurrentAssets || 0,
+        equipment: actual.equipment || 0,
+        depreciationAccum: actual.depreciationAccum || 0,
+        capex: actual.capex || 0,
+        totalLongTermAssets: actual.totalLongTermAssets || 0,
+        totalAssets: actual.totalAssets || 0,
+        accountsPayable: actual.accountsPayable || 0,
+        shortTermDebt: actual.shortTermDebt || 0,
+        totalCurrentLiabilities: actual.totalCurrentLiabilities || 0,
+        longTermDebt: actual.longTermDebt || 0,
+        totalLongTermLiabilities: actual.totalLongTermLiabilities || 0,
+        totalLiabilities: actual.totalLiabilities || 0,
+        retainedEarnings: actual.retainedEarnings || 0,
+        commonShares: actual.commonShares || 0,
+        totalEquity: actual.totalEquity || 0,
+        totalLiabilitiesAndEquity: actual.totalLiabilitiesAndEquity || 0,
+        arPercent: actual.arPercent, inventoryPercent: actual.inventoryPercent,
+        apPercent: actual.apPercent, capexPercent: actual.capexPercent,
+      });
+      continue;
+    }
+
+    const totalRev = annualRevenues[yr];
     const ar = totalRev * arPercent;
     const inv = totalRev * invPercent;
     const stInv = 10000000 + yearIdx * 5000000;
@@ -191,8 +281,8 @@ export async function recalculateModel(modelId: string) {
     const totalCA = cash + nonCashCurrentAssets;
     const totalAssets = totalCA + totalLTA;
 
-    bsData.push({
-      modelId, year: yr, isActual: yearIdx === 0,
+    const row = {
+      modelId, year: yr, isActual: false,
       cash: Math.round(cash),
       shortTermInvestments: Math.round(stInv),
       accountsReceivable: Math.round(ar),
@@ -214,18 +304,52 @@ export async function recalculateModel(modelId: string) {
       totalEquity: Math.round(totalEquity),
       totalLiabilitiesAndEquity: Math.round(totalLE),
       arPercent, inventoryPercent: invPercent, apPercent, capexPercent,
-    });
+    };
+    bsData.push(row);
+    newBSRows.push(row);
   }
 
-  if (bsData.length > 0) {
-    await db.insert(balanceSheetLines).values(bsData);
+  if (newBSRows.length > 0) {
+    await db.insert(balanceSheetLines).values(newBSRows);
   }
 
-  await db.delete(cashFlowLines).where(eq(cashFlowLines.modelId, modelId));
+  const projectedCFYears = years.filter(yr => !actualCFYears.has(yr));
+  for (const yr of projectedCFYears) {
+    const existing = existingCF.find(r => r.year === yr);
+    if (existing) {
+      await db.delete(cashFlowLines).where(and(eq(cashFlowLines.modelId, modelId), eq(cashFlowLines.year, yr)));
+    }
+  }
 
   const cfData: Array<Record<string, any>> = [];
+  const newCFRows: Array<Record<string, any>> = [];
   for (const yr of years) {
     const yearIdx = yr - model.startYear;
+
+    if (actualCFYears.has(yr)) {
+      const actual = existingCF.find(r => r.year === yr)!;
+      cfData.push({
+        modelId, year: yr, isActual: true,
+        netIncome: actual.netIncome || 0,
+        depreciationAdd: actual.depreciationAdd || 0,
+        arChange: actual.arChange || 0,
+        inventoryChange: actual.inventoryChange || 0,
+        apChange: actual.apChange || 0,
+        operatingCashFlow: actual.operatingCashFlow || 0,
+        capex: actual.capex || 0,
+        investingCashFlow: actual.investingCashFlow || 0,
+        shortTermDebtChange: actual.shortTermDebtChange || 0,
+        longTermDebtChange: actual.longTermDebtChange || 0,
+        commonSharesChange: actual.commonSharesChange || 0,
+        financingCashFlow: actual.financingCashFlow || 0,
+        netCashChange: actual.netCashChange || 0,
+        beginningCash: actual.beginningCash || 0,
+        endingCash: actual.endingCash || 0,
+        freeCashFlow: actual.freeCashFlow || 0,
+      });
+      continue;
+    }
+
     const is = isData[yearIdx];
     const bs = bsData[yearIdx];
     const netInc = is?.netIncome || 0;
@@ -245,8 +369,8 @@ export async function recalculateModel(modelId: string) {
     const endCash = beginCash + netCashChg;
     const fcf = opCF + capexVal;
 
-    cfData.push({
-      modelId, year: yr, isActual: yearIdx === 0,
+    const row = {
+      modelId, year: yr, isActual: false,
       netIncome: Math.round(netInc),
       depreciationAdd: Math.round(depAdd),
       arChange: Math.round(arChg),
@@ -263,11 +387,13 @@ export async function recalculateModel(modelId: string) {
       beginningCash: Math.round(beginCash),
       endingCash: Math.round(endCash),
       freeCashFlow: Math.round(fcf),
-    });
+    };
+    cfData.push(row);
+    newCFRows.push(row);
   }
 
-  if (cfData.length > 0) {
-    await db.insert(cashFlowLines).values(cfData);
+  if (newCFRows.length > 0) {
+    await db.insert(cashFlowLines).values(newCFRows);
   }
 
   const fcfProjections = cfData.map(c => c.freeCashFlow as number);
