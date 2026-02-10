@@ -11,7 +11,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { FinancialModel, RevenueLineItem, RevenuePeriod } from "@shared/schema";
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { TrendingUp, DollarSign, Save, RefreshCw, ArrowRight } from "lucide-react";
+import { TrendingUp, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil } from "lucide-react";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
@@ -19,6 +19,10 @@ export default function RevenueForecast() {
   const { toast } = useToast();
   const [editMode, setEditMode] = useState(false);
   const [editedPeriods, setEditedPeriods] = useState<Record<string, number>>({});
+  const [editedNames, setEditedNames] = useState<Record<string, string>>({});
+  const [pendingDeletes, setPendingDeletes] = useState<Set<string>>(new Set());
+  const [newLineItems, setNewLineItems] = useState<Array<{ tempId: string; name: string }>>([]);
+  const [newLineItemPeriods, setNewLineItemPeriods] = useState<Record<string, Record<string, number>>>({});
 
   const { data: models, isLoading: modelsLoading } = useQuery<FinancialModel[]>({ queryKey: ["/api/models"] });
   const model = models?.[0];
@@ -49,7 +53,45 @@ export default function RevenueForecast() {
 
   const recalcMutation = useMutation({
     mutationFn: async () => {
-      await saveMutation.mutateAsync();
+      const deleteIds = Array.from(pendingDeletes);
+      for (const id of deleteIds) {
+        await apiRequest("DELETE", `/api/revenue-line-items/${id}`);
+      }
+
+      const nameUpdates = Object.entries(editedNames).map(([id, name]) =>
+        apiRequest("PATCH", `/api/revenue-line-items/${id}`, { name })
+      );
+      await Promise.all(nameUpdates);
+
+      for (const newItem of newLineItems) {
+        const created = await apiRequest("POST", `/api/models/${model!.id}/revenue-line-items-with-periods`, {
+          name: newItem.name,
+          sortOrder: (lineItems?.length || 0) + newLineItems.indexOf(newItem),
+        });
+        const createdItem = await created.json();
+        const itemPeriods = newLineItemPeriods[newItem.tempId];
+        if (itemPeriods && createdItem?.id) {
+          const periodsRes = await apiRequest("GET", `/api/models/${model!.id}/revenue-periods`);
+          const freshPeriods = await periodsRes.json() as RevenuePeriod[];
+          const newPeriods = freshPeriods.filter((p: RevenuePeriod) => p.lineItemId === createdItem.id);
+          const periodUpdates = newPeriods
+            .filter((p: RevenuePeriod) => {
+              const key = `${p.year}-Q${p.quarter}`;
+              return itemPeriods[key] !== undefined && itemPeriods[key] !== 0;
+            })
+            .map((p: RevenuePeriod) => {
+              const key = `${p.year}-Q${p.quarter}`;
+              return apiRequest("PATCH", `/api/revenue-periods/${p.id}`, { amount: itemPeriods[key] });
+            });
+          await Promise.all(periodUpdates);
+        }
+      }
+
+      const periodUpdates = Object.entries(editedPeriods).map(([id, amount]) =>
+        apiRequest("PATCH", `/api/revenue-periods/${id}`, { amount })
+      );
+      await Promise.all(periodUpdates);
+
       await apiRequest("POST", `/api/models/${model!.id}/recalculate`);
     },
     onSuccess: () => {
@@ -63,6 +105,11 @@ export default function RevenueForecast() {
       queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "valuation-comparison"] });
       queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "assumptions"] });
       setEditMode(false);
+      setEditedPeriods({});
+      setEditedNames({});
+      setPendingDeletes(new Set());
+      setNewLineItems([]);
+      setNewLineItemPeriods({});
       toast({ title: "Model recalculated", description: "All financial statements have been updated from your revenue changes." });
     },
     onError: (err: Error) => {
@@ -97,9 +144,25 @@ export default function RevenueForecast() {
     return total;
   };
 
+  const getNewItemQuarterlyAmount = (tempId: string, year: number, quarter: number) => {
+    const key = `${year}-Q${quarter}`;
+    return newLineItemPeriods[tempId]?.[key] || 0;
+  };
+
+  const getNewItemAnnualTotal = (tempId: string, year: number) => {
+    let total = 0;
+    for (let q = 1; q <= 4; q++) {
+      total += getNewItemQuarterlyAmount(tempId, year, q);
+    }
+    return total;
+  };
+
+  const visibleLineItems = lineItems?.filter(li => !pendingDeletes.has(li.id)) || [];
+
   const getTotalRevenue = (year: number) => {
-    if (!lineItems) return 0;
-    return lineItems.reduce((sum, li) => sum + getAnnualTotal(li.id, year), 0);
+    let total = visibleLineItems.reduce((sum, li) => sum + getAnnualTotal(li.id, year), 0);
+    newLineItems.forEach(ni => { total += getNewItemAnnualTotal(ni.tempId, year); });
+    return total;
   };
 
   const calcYoYGrowth = (year: number) => {
@@ -114,19 +177,85 @@ export default function RevenueForecast() {
     setEditedPeriods(prev => ({ ...prev, [periodId]: num }));
   };
 
-  const hasEdits = Object.keys(editedPeriods).length > 0;
+  const handleNewItemEdit = (tempId: string, year: number, quarter: number, value: string) => {
+    const num = parseFloat(value.replace(/,/g, "")) || 0;
+    const key = `${year}-Q${quarter}`;
+    setNewLineItemPeriods(prev => ({
+      ...prev,
+      [tempId]: { ...(prev[tempId] || {}), [key]: num },
+    }));
+  };
+
+  const handleNameEdit = (id: string, name: string) => {
+    setEditedNames(prev => ({ ...prev, [id]: name }));
+  };
+
+  const handleDelete = (id: string) => {
+    setPendingDeletes(prev => new Set(prev).add(id));
+  };
+
+  const handleUndoDelete = (id: string) => {
+    setPendingDeletes(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const handleAddLineItem = () => {
+    const tempId = `new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setNewLineItems(prev => [...prev, { tempId, name: "" }]);
+  };
+
+  const handleRemoveNewLineItem = (tempId: string) => {
+    setNewLineItems(prev => prev.filter(li => li.tempId !== tempId));
+    setNewLineItemPeriods(prev => {
+      const next = { ...prev };
+      delete next[tempId];
+      return next;
+    });
+  };
+
+  const handleNewItemNameChange = (tempId: string, name: string) => {
+    setNewLineItems(prev => prev.map(li => li.tempId === tempId ? { ...li, name } : li));
+  };
+
+  const cancelEdit = () => {
+    setEditMode(false);
+    setEditedPeriods({});
+    setEditedNames({});
+    setPendingDeletes(new Set());
+    setNewLineItems([]);
+    setNewLineItemPeriods({});
+  };
+
+  const hasEdits = Object.keys(editedPeriods).length > 0 ||
+    Object.keys(editedNames).length > 0 ||
+    pendingDeletes.size > 0 ||
+    newLineItems.some(ni => ni.name.trim() !== "");
+
+  const getLineItemName = (li: RevenueLineItem) => {
+    return editedNames[li.id] !== undefined ? editedNames[li.id] : li.name;
+  };
 
   const annualChartData = years.map(year => {
     const entry: Record<string, number | string> = { year };
-    lineItems?.forEach(li => { entry[li.name] = getAnnualTotal(li.id, year); });
+    visibleLineItems.forEach(li => { entry[getLineItemName(li)] = getAnnualTotal(li.id, year); });
+    newLineItems.filter(ni => ni.name.trim()).forEach(ni => { entry[ni.name] = getNewItemAnnualTotal(ni.tempId, year); });
     return entry;
   });
+
+  const allNames = [
+    ...visibleLineItems.map(li => getLineItemName(li)),
+    ...newLineItems.filter(ni => ni.name.trim()).map(ni => ni.name),
+  ];
 
   const quarterlyChartData: Array<Record<string, number | string>> = [];
   years.forEach(year => {
     for (let q = 1; q <= 4; q++) {
       const entry: Record<string, number | string> = { period: `${year} Q${q}` };
-      lineItems?.forEach(li => { entry[li.name] = getQuarterlyAmount(li.id, year, q); });
+      visibleLineItems.forEach(li => { entry[getLineItemName(li)] = getQuarterlyAmount(li.id, year, q); });
+      newLineItems.filter(ni => ni.name.trim()).forEach(ni => { entry[ni.name] = getNewItemQuarterlyAmount(ni.tempId, year, q); });
       quarterlyChartData.push(entry);
     }
   });
@@ -144,7 +273,7 @@ export default function RevenueForecast() {
             <>
               <Button
                 variant="outline"
-                onClick={() => { setEditMode(false); setEditedPeriods({}); }}
+                onClick={cancelEdit}
                 data-testid="button-cancel-edit"
               >
                 Cancel
@@ -163,7 +292,7 @@ export default function RevenueForecast() {
             </>
           ) : (
             <Button variant="outline" onClick={() => setEditMode(true)} data-testid="button-edit-revenue">
-              Edit Revenue
+              <Pencil className="h-4 w-4 mr-1" /> Edit Revenue
             </Button>
           )}
         </div>
@@ -174,7 +303,7 @@ export default function RevenueForecast() {
           <CardContent className="pt-4 pb-3">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <ArrowRight className="h-4 w-4" />
-              <span>Edit quarterly revenue values below. Changes will cascade through Income Statement, Balance Sheet, Cash Flow, DCF, and Valuation.</span>
+              <span>Edit revenue stream names and quarterly values, add new streams, or remove existing ones. Changes cascade through all downstream statements.</span>
             </div>
           </CardContent>
         </Card>
@@ -215,7 +344,7 @@ export default function RevenueForecast() {
                 <Table data-testid="table-quarterly-revenue">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="min-w-[160px]">Revenue Stream</TableHead>
+                      <TableHead className="min-w-[200px]">Revenue Stream</TableHead>
                       {years.map(year => (
                         [1, 2, 3, 4].map(q => (
                           <TableHead key={`${year}-Q${q}`} className="text-right text-xs min-w-[90px]">
@@ -223,12 +352,25 @@ export default function RevenueForecast() {
                           </TableHead>
                         ))
                       ))}
+                      {editMode && <TableHead className="w-[50px]" />}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {lineItems?.map(li => (
+                    {visibleLineItems.map(li => (
                       <TableRow key={li.id} data-testid={`row-revenue-${li.id}`}>
-                        <TableCell className="font-medium text-sm">{li.name}</TableCell>
+                        <TableCell className="font-medium text-sm">
+                          {editMode ? (
+                            <Input
+                              type="text"
+                              value={getLineItemName(li)}
+                              onChange={(e) => handleNameEdit(li.id, e.target.value)}
+                              className="h-7 text-sm"
+                              data-testid={`input-name-${li.id}`}
+                            />
+                          ) : (
+                            li.name
+                          )}
+                        </TableCell>
                         {years.map(year =>
                           [1, 2, 3, 4].map(q => {
                             const period = getPeriod(li.id, year, q);
@@ -251,14 +393,111 @@ export default function RevenueForecast() {
                             );
                           })
                         )}
+                        {editMode && (
+                          <TableCell className="p-1">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => handleDelete(li.id)}
+                              data-testid={`button-delete-${li.id}`}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
+
+                    {editMode && pendingDeletes.size > 0 && lineItems?.filter(li => pendingDeletes.has(li.id)).map(li => (
+                      <TableRow key={`deleted-${li.id}`} className="opacity-40 line-through">
+                        <TableCell className="font-medium text-sm text-muted-foreground">{li.name}</TableCell>
+                        {years.map(year =>
+                          [1, 2, 3, 4].map(q => (
+                            <TableCell key={`${year}-Q${q}`} className="text-right p-1">
+                              <span className="text-xs text-muted-foreground">--</span>
+                            </TableCell>
+                          ))
+                        )}
+                        <TableCell className="p-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => handleUndoDelete(li.id)}
+                            data-testid={`button-undo-delete-${li.id}`}
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+
+                    {editMode && newLineItems.map(ni => (
+                      <TableRow key={ni.tempId} className="bg-muted/30" data-testid={`row-new-${ni.tempId}`}>
+                        <TableCell className="font-medium text-sm">
+                          <Input
+                            type="text"
+                            value={ni.name}
+                            onChange={(e) => handleNewItemNameChange(ni.tempId, e.target.value)}
+                            placeholder="New revenue stream name"
+                            className="h-7 text-sm"
+                            data-testid={`input-new-name-${ni.tempId}`}
+                          />
+                        </TableCell>
+                        {years.map(year =>
+                          [1, 2, 3, 4].map(q => {
+                            const key = `${year}-Q${q}`;
+                            const amt = newLineItemPeriods[ni.tempId]?.[key] || 0;
+                            return (
+                              <TableCell key={key} className="text-right p-1">
+                                <Input
+                                  type="text"
+                                  value={amt === 0 ? "" : Math.round(amt).toLocaleString()}
+                                  onChange={(e) => handleNewItemEdit(ni.tempId, year, q, e.target.value)}
+                                  placeholder="0"
+                                  className="h-7 text-xs text-right"
+                                  data-testid={`input-new-revenue-${ni.tempId}-${year}-Q${q}`}
+                                />
+                              </TableCell>
+                            );
+                          })
+                        )}
+                        <TableCell className="p-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => handleRemoveNewLineItem(ni.tempId)}
+                            data-testid={`button-remove-new-${ni.tempId}`}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+
+                    {editMode && (
+                      <TableRow>
+                        <TableCell colSpan={years.length * 4 + 2}>
+                          <Button
+                            variant="outline"
+                            onClick={handleAddLineItem}
+                            className="w-full border-dashed"
+                            data-testid="button-add-line-item"
+                          >
+                            <Plus className="h-4 w-4 mr-1" /> Add Revenue Stream
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )}
+
                     <TableRow className="font-bold border-t-2">
                       <TableCell>Total</TableCell>
                       {years.map(year =>
                         [1, 2, 3, 4].map(q => {
                           let total = 0;
-                          lineItems?.forEach(li => { total += getQuarterlyAmount(li.id, year, q); });
+                          visibleLineItems.forEach(li => { total += getQuarterlyAmount(li.id, year, q); });
+                          newLineItems.forEach(ni => { total += getNewItemQuarterlyAmount(ni.tempId, year, q); });
                           return (
                             <TableCell key={`total-${year}-Q${q}`} className="text-right text-xs">
                               {formatCurrency(total)}
@@ -266,6 +505,7 @@ export default function RevenueForecast() {
                           );
                         })
                       )}
+                      {editMode && <TableCell />}
                     </TableRow>
                   </TableBody>
                 </Table>
@@ -287,12 +527,22 @@ export default function RevenueForecast() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {lineItems?.map(li => (
+                  {visibleLineItems.map(li => (
                     <TableRow key={li.id}>
-                      <TableCell className="font-medium">{li.name}</TableCell>
+                      <TableCell className="font-medium">{getLineItemName(li)}</TableCell>
                       {years.map(year => (
                         <TableCell key={year} className="text-right">
                           {formatCurrency(getAnnualTotal(li.id, year))}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                  {newLineItems.filter(ni => ni.name.trim()).map(ni => (
+                    <TableRow key={ni.tempId}>
+                      <TableCell className="font-medium">{ni.name}</TableCell>
+                      {years.map(year => (
+                        <TableCell key={year} className="text-right">
+                          {formatCurrency(getNewItemAnnualTotal(ni.tempId, year))}
                         </TableCell>
                       ))}
                     </TableRow>
@@ -342,8 +592,8 @@ export default function RevenueForecast() {
                     <YAxis className="text-xs" tickFormatter={(v) => formatCurrency(v)} />
                     <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => formatCurrency(v)} />
                     <Legend />
-                    {lineItems?.map((li, i) => (
-                      <Bar key={li.id} dataKey={li.name} fill={COLORS[i % COLORS.length]} radius={[2, 2, 0, 0]} />
+                    {allNames.map((name, i) => (
+                      <Bar key={name} dataKey={name} fill={COLORS[i % COLORS.length]} radius={[2, 2, 0, 0]} />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
@@ -366,8 +616,8 @@ export default function RevenueForecast() {
                     <YAxis className="text-xs" tickFormatter={(v) => formatCurrency(v)} />
                     <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => formatCurrency(v)} />
                     <Legend />
-                    {lineItems?.map((li, i) => (
-                      <Area key={li.id} type="monotone" dataKey={li.name} fill={COLORS[i % COLORS.length]} stroke={COLORS[i % COLORS.length]} fillOpacity={0.3} />
+                    {allNames.map((name, i) => (
+                      <Area key={name} type="monotone" dataKey={name} fill={COLORS[i % COLORS.length]} stroke={COLORS[i % COLORS.length]} fillOpacity={0.3} />
                     ))}
                   </AreaChart>
                 </ResponsiveContainer>

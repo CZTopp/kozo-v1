@@ -54,9 +54,41 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(item);
   });
 
+  app.patch("/api/revenue-line-items/:id", async (req: Request, res: Response) => {
+    const { name, sortOrder } = req.body;
+    if (name !== undefined && (typeof name !== "string" || name.trim().length === 0)) {
+      return res.status(400).json({ message: "Name must be a non-empty string" });
+    }
+    const item = await storage.updateRevenueLineItem(req.params.id, req.body);
+    res.json(item);
+  });
+
   app.delete("/api/revenue-line-items/:id", async (req: Request, res: Response) => {
     await storage.deleteRevenueLineItem(req.params.id);
     res.json({ success: true });
+  });
+
+  app.post("/api/models/:modelId/revenue-line-items-with-periods", async (req: Request, res: Response) => {
+    const { name, sortOrder } = req.body;
+    if (!name || typeof name !== "string" || name.trim().length === 0) {
+      return res.status(400).json({ message: "Name is required" });
+    }
+    const modelId = req.params.modelId;
+    const model = await storage.getModel(modelId);
+    if (!model) {
+      return res.status(404).json({ message: "Model not found" });
+    }
+    const lineItem = await storage.createRevenueLineItem({ modelId, name: name.trim(), sortOrder: sortOrder || 0 });
+    const periodsToCreate = [];
+    for (let year = model.startYear; year <= model.endYear; year++) {
+      for (let q = 1; q <= 4; q++) {
+        periodsToCreate.push({ lineItemId: lineItem.id, modelId, year, quarter: q, amount: 0, isActual: false });
+      }
+    }
+    if (periodsToCreate.length > 0) {
+      await storage.upsertRevenuePeriods(periodsToCreate);
+    }
+    res.json(lineItem);
   });
 
   app.get("/api/models/:modelId/revenue-periods", async (req: Request, res: Response) => {

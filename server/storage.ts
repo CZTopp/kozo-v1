@@ -33,6 +33,7 @@ export interface IStorage {
 
   getRevenueLineItems(modelId: string): Promise<RevenueLineItem[]>;
   createRevenueLineItem(data: InsertRevenueLineItem): Promise<RevenueLineItem>;
+  updateRevenueLineItem(id: string, data: Partial<InsertRevenueLineItem>): Promise<RevenueLineItem>;
   deleteRevenueLineItem(id: string): Promise<void>;
 
   getRevenuePeriods(modelId: string): Promise<RevenuePeriod[]>;
@@ -119,6 +120,11 @@ export class DatabaseStorage implements IStorage {
 
   async createRevenueLineItem(data: InsertRevenueLineItem) {
     const [item] = await db.insert(revenueLineItems).values(data).returning();
+    return item;
+  }
+
+  async updateRevenueLineItem(id: string, data: Partial<InsertRevenueLineItem>) {
+    const [item] = await db.update(revenueLineItems).set(data).where(eq(revenueLineItems.id, id)).returning();
     return item;
   }
 
