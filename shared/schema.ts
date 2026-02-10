@@ -223,6 +223,7 @@ export const macroIndicators = pgTable("macro_indicators", {
   name: text("name").notNull(),
   category: text("category").notNull(),
   value: real("value").notNull().default(0),
+  priorValue: real("prior_value"),
   displayFormat: text("display_format").default("percent"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -234,6 +235,7 @@ export const marketIndices = pgTable("market_indices", {
   region: text("region").notNull(),
   ytdReturn: real("ytd_return").default(0),
   mtdReturn: real("mtd_return").default(0),
+  dailyChangePercent: real("daily_change_percent").default(0),
   currentValue: real("current_value").default(0),
 });
 

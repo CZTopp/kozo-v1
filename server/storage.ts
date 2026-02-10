@@ -66,9 +66,11 @@ export interface IStorage {
 
   getMacroIndicators(): Promise<MacroIndicator[]>;
   upsertMacroIndicator(data: InsertMacroIndicator): Promise<MacroIndicator>;
+  replaceAllMacroIndicators(data: InsertMacroIndicator[]): Promise<MacroIndicator[]>;
 
   getMarketIndices(): Promise<MarketIndex[]>;
   upsertMarketIndex(data: InsertMarketIndex): Promise<MarketIndex>;
+  replaceAllMarketIndices(data: InsertMarketIndex[]): Promise<MarketIndex[]>;
 
   getPortfolioRedFlags(): Promise<PortfolioRedFlag[]>;
   upsertPortfolioRedFlag(data: InsertPortfolioRedFlag): Promise<PortfolioRedFlag>;
@@ -263,6 +265,13 @@ export class DatabaseStorage implements IStorage {
     return ind;
   }
 
+  async replaceAllMacroIndicators(data: InsertMacroIndicator[]) {
+    await db.delete(macroIndicators);
+    if (data.length === 0) return [];
+    const result = await db.insert(macroIndicators).values(data).returning();
+    return result;
+  }
+
   async getMarketIndices() {
     return db.select().from(marketIndices);
   }
@@ -270,6 +279,13 @@ export class DatabaseStorage implements IStorage {
   async upsertMarketIndex(data: InsertMarketIndex) {
     const [idx] = await db.insert(marketIndices).values(data).returning();
     return idx;
+  }
+
+  async replaceAllMarketIndices(data: InsertMarketIndex[]) {
+    await db.delete(marketIndices);
+    if (data.length === 0) return [];
+    const result = await db.insert(marketIndices).values(data).returning();
+    return result;
   }
 
   async getPortfolioRedFlags() {

@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { Server } from "http";
 import { storage } from "./storage";
 import { recalculateModel, forecastForward } from "./recalculate";
+import { fetchLiveIndices, fetchFredIndicators } from "./live-data";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 import { revenuePeriods } from "@shared/schema";
@@ -279,6 +280,41 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/market-indices", async (req: Request, res: Response) => {
     const idx = await storage.upsertMarketIndex(req.body);
     res.json(idx);
+  });
+
+  app.post("/api/refresh-market-data", async (_req: Request, res: Response) => {
+    try {
+      const results: { indices: number; macro: number; errors: string[] } = { indices: 0, macro: 0, errors: [] };
+
+      try {
+        const liveIndices = await fetchLiveIndices();
+        if (liveIndices.length > 0) {
+          await storage.replaceAllMarketIndices(liveIndices);
+          results.indices = liveIndices.length;
+        }
+      } catch (err: any) {
+        results.errors.push(`Indices: ${err.message}`);
+      }
+
+      const fredApiKey = process.env.FRED_API_KEY;
+      if (fredApiKey) {
+        try {
+          const liveIndicators = await fetchFredIndicators(fredApiKey);
+          if (liveIndicators.length > 0) {
+            await storage.replaceAllMacroIndicators(liveIndicators);
+            results.macro = liveIndicators.length;
+          }
+        } catch (err: any) {
+          results.errors.push(`Macro: ${err.message}`);
+        }
+      } else {
+        results.errors.push("FRED_API_KEY not set -- macro indicators not updated. Get a free key at fred.stlouisfed.org.");
+      }
+
+      res.json(results);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   app.get("/api/portfolio-red-flags", async (_req: Request, res: Response) => {

@@ -1,26 +1,53 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatPercent } from "@/lib/calculations";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { MacroIndicator, MarketIndex } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Globe, TrendingUp, TrendingDown } from "lucide-react";
+import { Globe, TrendingUp, TrendingDown, RefreshCw, Loader2 } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
 
 export default function MarketDataPage() {
+  const { toast } = useToast();
   const { data: indices, isLoading: loadingIndices } = useQuery<MarketIndex[]>({ queryKey: ["/api/market-indices"] });
   const { data: macro, isLoading: loadingMacro } = useQuery<MacroIndicator[]>({ queryKey: ["/api/macro-indicators"] });
+
+  const refreshMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/refresh-market-data");
+      return res.json();
+    },
+    onSuccess: (data: { indices: number; macro: number; errors: string[] }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/market-indices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/macro-indicators"] });
+      const parts: string[] = [];
+      if (data.indices > 0) parts.push(`${data.indices} indices`);
+      if (data.macro > 0) parts.push(`${data.macro} macro indicators`);
+      toast({
+        title: "Market data refreshed",
+        description: parts.length > 0
+          ? `Updated ${parts.join(" and ")} with live data.${data.errors.length > 0 ? ` (${data.errors.length} warning${data.errors.length > 1 ? "s" : ""})` : ""}`
+          : data.errors.join("; "),
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Refresh failed", description: err.message, variant: "destructive" });
+    },
+  });
 
   const usIndices = indices?.filter(i => i.region === "US") || [];
   const intlIndices = indices?.filter(i => i.region !== "US") || [];
 
-  const rateIndicators = macro?.filter(m => m.category === "Interest Rates") || [];
-  const inflationIndicators = macro?.filter(m => m.category === "Inflation") || [];
-  const growthIndicators = macro?.filter(m => m.category === "Growth") || [];
-  const laborIndicators = macro?.filter(m => m.category === "Labor") || [];
-  const commodityIndicators = macro?.filter(m => m.category === "Commodities") || [];
+  const categories = Array.from(new Set(macro?.map(m => m.category) || []));
+  const groupedMacro = categories.map(cat => ({
+    title: cat,
+    data: macro?.filter(m => m.category === cat) || [],
+  }));
 
   const indicesChartData = indices?.map(idx => ({
     name: idx.ticker,
@@ -30,16 +57,36 @@ export default function MarketDataPage() {
   const macroTooltips: Record<string, string> = {
     "Interest Rates": "Central bank policy rates and treasury yields. Rising rates increase discount rates and typically compress equity valuations.",
     "Inflation": "Consumer and producer price indices measuring purchasing power erosion. Impacts real returns and monetary policy direction.",
+    "Economic Growth": "GDP growth rates and leading economic indicators. Strong growth supports earnings expansion and higher equity valuations.",
     "Growth": "GDP growth rates and leading economic indicators. Strong growth supports earnings expansion and higher equity valuations.",
     "Labor Market": "Employment data including unemployment rate and job creation. Tight labor markets signal economic strength but may fuel inflation.",
+    "Volatility": "Market volatility measures like the VIX. High volatility indicates uncertainty and elevated risk premiums.",
+    "Currency": "Currency strength indicators including the US Dollar Index. Dollar strength affects multinational earnings and commodity prices.",
+    "Sentiment": "Consumer and business confidence surveys. Leading indicators of spending and investment decisions.",
+    "Economic Activity": "Manufacturing and services activity indices. Above 50 indicates expansion; below 50 indicates contraction.",
     "Commodities": "Key commodity prices including oil, gold, and others. Commodity moves affect input costs and sector rotation strategies.",
   };
 
   return (
     <div className="p-4 space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">Market Data & Macro</h1>
-        <p className="text-sm text-muted-foreground">Global market indices and macroeconomic indicators</p>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold" data-testid="text-page-title">Market Data & Macro</h1>
+          <p className="text-sm text-muted-foreground">Global market indices and macroeconomic indicators</p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => refreshMutation.mutate()}
+          disabled={refreshMutation.isPending}
+          data-testid="button-refresh-market-data"
+        >
+          {refreshMutation.isPending ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4 mr-2" />
+          )}
+          {refreshMutation.isPending ? "Refreshing..." : "Refresh Live Data"}
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -150,13 +197,7 @@ export default function MarketDataPage() {
 
         <TabsContent value="macro" className="mt-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {[
-              { title: "Interest Rates", data: rateIndicators },
-              { title: "Inflation", data: inflationIndicators },
-              { title: "Growth", data: growthIndicators },
-              { title: "Labor Market", data: laborIndicators },
-              { title: "Commodities", data: commodityIndicators },
-            ].filter(g => g.data.length > 0).map(group => (
+            {groupedMacro.filter(g => g.data.length > 0).map(group => (
               <Card key={group.title}>
                 <CardHeader>
                   <CardTitle className="text-sm font-medium flex items-center gap-1">{group.title} <InfoTooltip content={macroTooltips[group.title] || ""} /></CardTitle>
