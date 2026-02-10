@@ -3,7 +3,7 @@ import { db } from "./db";
 import {
   financialModels, revenueLineItems, revenuePeriods,
   incomeStatementLines, balanceSheetLines, cashFlowLines,
-  dcfValuations, valuationComparisons, portfolioPositions,
+  dcfValuations, valuationComparisons, portfolioPositions, portfolioLots,
   macroIndicators, marketIndices, portfolioRedFlags,
   scenarios, assumptions, actuals, reports,
   type FinancialModel, type InsertFinancialModel,
@@ -15,6 +15,7 @@ import {
   type DcfValuation, type InsertDcfValuation,
   type ValuationComparison, type InsertValuationComparison,
   type PortfolioPosition, type InsertPortfolioPosition,
+  type PortfolioLot, type InsertPortfolioLot,
   type MacroIndicator, type InsertMacroIndicator,
   type MarketIndex, type InsertMarketIndex,
   type PortfolioRedFlag, type InsertPortfolioRedFlag,
@@ -67,6 +68,13 @@ export interface IStorage {
   createPortfolioPosition(data: InsertPortfolioPosition): Promise<PortfolioPosition>;
   updatePortfolioPosition(id: string, data: Partial<InsertPortfolioPosition>): Promise<PortfolioPosition>;
   deletePortfolioPosition(id: string): Promise<void>;
+
+  getPortfolioLots(positionId: string): Promise<PortfolioLot[]>;
+  getAllPortfolioLots(): Promise<PortfolioLot[]>;
+  createPortfolioLot(data: InsertPortfolioLot): Promise<PortfolioLot>;
+  updatePortfolioLot(id: string, data: Partial<InsertPortfolioLot>): Promise<PortfolioLot>;
+  deletePortfolioLot(id: string): Promise<void>;
+  recomputePositionFromLots(positionId: string): Promise<PortfolioPosition>;
 
   getMacroIndicators(): Promise<MacroIndicator[]>;
   upsertMacroIndicator(data: InsertMacroIndicator): Promise<MacroIndicator>;
@@ -281,6 +289,53 @@ export class DatabaseStorage implements IStorage {
 
   async deletePortfolioPosition(id: string) {
     await db.delete(portfolioPositions).where(eq(portfolioPositions.id, id));
+  }
+
+  async getPortfolioLots(positionId: string) {
+    return db.select().from(portfolioLots).where(eq(portfolioLots.positionId, positionId));
+  }
+
+  async getAllPortfolioLots() {
+    return db.select().from(portfolioLots);
+  }
+
+  async createPortfolioLot(data: InsertPortfolioLot) {
+    const [lot] = await db.insert(portfolioLots).values(data).returning();
+    return lot;
+  }
+
+  async updatePortfolioLot(id: string, data: Partial<InsertPortfolioLot>) {
+    const [lot] = await db.update(portfolioLots).set(data).where(eq(portfolioLots.id, id)).returning();
+    return lot;
+  }
+
+  async deletePortfolioLot(id: string) {
+    await db.delete(portfolioLots).where(eq(portfolioLots.id, id));
+  }
+
+  async recomputePositionFromLots(positionId: string) {
+    const lots = await this.getPortfolioLots(positionId);
+    const totalShares = lots.reduce((sum, l) => sum + (l.sharesHeld || 0), 0);
+    const totalCost = lots.reduce((sum, l) => sum + (l.sharesHeld || 0) * (l.purchasePrice || 0), 0);
+    const weightedAvgPrice = totalShares > 0 ? totalCost / totalShares : 0;
+
+    const position = await db.select().from(portfolioPositions).where(eq(portfolioPositions.id, positionId)).then(r => r[0]);
+    if (!position) throw new Error("Position not found");
+
+    const currentPrice = position.currentPrice || 0;
+    const positionValue = totalShares * currentPrice;
+    const costBasis = totalShares * weightedAvgPrice;
+    const gainLossDollar = positionValue - costBasis;
+    const gainLossPercent = costBasis > 0 ? gainLossDollar / costBasis : 0;
+
+    const [updated] = await db.update(portfolioPositions).set({
+      sharesHeld: totalShares,
+      purchasePrice: weightedAvgPrice,
+      positionValue,
+      gainLossDollar,
+      gainLossPercent,
+    }).where(eq(portfolioPositions.id, positionId)).returning();
+    return updated;
   }
 
   async getMacroIndicators() {

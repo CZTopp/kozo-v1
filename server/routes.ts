@@ -11,7 +11,7 @@ import {
   insertRevenuePeriodSchema, insertIncomeStatementLineSchema,
   insertBalanceSheetLineSchema, insertCashFlowLineSchema,
   insertDcfValuationSchema, insertValuationComparisonSchema,
-  insertPortfolioPositionSchema, insertMacroIndicatorSchema,
+  insertPortfolioPositionSchema, insertPortfolioLotSchema, insertMacroIndicatorSchema,
   insertMarketIndexSchema, insertPortfolioRedFlagSchema,
   insertScenarioSchema, insertAssumptionsSchema,
   insertActualsSchema, insertReportSchema,
@@ -305,6 +305,13 @@ export async function registerRoutes(server: Server, app: Express) {
     const parsed = insertPortfolioPositionSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const pos = await storage.createPortfolioPosition(parsed.data);
+    await storage.createPortfolioLot({
+      positionId: pos.id,
+      sharesHeld: pos.sharesHeld || 0,
+      purchasePrice: pos.purchasePrice || 0,
+      purchaseDate: null,
+      notes: null,
+    });
     res.json(pos);
   });
 
@@ -316,6 +323,43 @@ export async function registerRoutes(server: Server, app: Express) {
   app.delete("/api/portfolio/:id", async (req: Request, res: Response) => {
     await storage.deletePortfolioPosition(req.params.id);
     res.json({ success: true });
+  });
+
+  app.get("/api/portfolio/lots", async (_req: Request, res: Response) => {
+    const lots = await storage.getAllPortfolioLots();
+    res.json(lots);
+  });
+
+  app.get("/api/portfolio/:positionId/lots", async (req: Request, res: Response) => {
+    const lots = await storage.getPortfolioLots(req.params.positionId as string);
+    res.json(lots);
+  });
+
+  app.post("/api/portfolio/:positionId/lots", async (req: Request, res: Response) => {
+    const parsed = insertPortfolioLotSchema.safeParse({
+      ...req.body,
+      positionId: req.params.positionId,
+    });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const lot = await storage.createPortfolioLot(parsed.data);
+    const position = await storage.recomputePositionFromLots(req.params.positionId as string);
+    res.json({ lot, position });
+  });
+
+  app.patch("/api/portfolio/lots/:lotId", async (req: Request, res: Response) => {
+    const lot = await storage.updatePortfolioLot(req.params.lotId as string, req.body);
+    const position = await storage.recomputePositionFromLots(lot.positionId);
+    res.json({ lot, position });
+  });
+
+  app.delete("/api/portfolio/lots/:lotId", async (req: Request, res: Response) => {
+    const allLots = await storage.getAllPortfolioLots();
+    const targetLot = allLots.find(l => l.id === req.params.lotId);
+    if (!targetLot) return res.status(404).json({ message: "Lot not found" });
+    const positionId = targetLot.positionId;
+    await storage.deletePortfolioLot(req.params.lotId as string);
+    const position = await storage.recomputePositionFromLots(positionId);
+    res.json({ success: true, position });
   });
 
   app.get("/api/macro-indicators", async (_req: Request, res: Response) => {

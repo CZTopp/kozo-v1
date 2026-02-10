@@ -4,6 +4,8 @@
 Comprehensive financial modeling and valuation application covering 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. Market indices pull live data from Yahoo Finance; macro indicators pull live data from FRED API.
 
 ## Recent Changes
+- 2026-02-10: Portfolio lots (tax lots) - portfolio_lots table tracks individual purchase entries per position (shares, price, date, notes). Positions auto-aggregate weighted-average cost and total shares. Expandable rows in portfolio table show per-lot P&L. API: GET/POST /api/portfolio/:positionId/lots, PATCH/DELETE /api/portfolio/lots/:lotId, GET /api/portfolio/lots
+- 2026-02-10: Signal Definitions card on Portfolio Analytics tab - explains Golden Cross, Death Cross, Near Stop Loss, MA50/MA200, Beta, 52-Week Range
 - 2026-02-10: Revenue forecast refactor - 10-year mixed-period support (first 6 years quarterly Q1-Q4, remaining years displayed as annual totals with quarterly split under the hood), unit scaling with decimal input (e.g., 11.5M = $11,500,000), YoY/QoQ % change and % of total metrics below dollar amounts, YoY % input mode toggle for forecast entry, inline sparkline trend charts per revenue stream, add/delete revenue streams in edit mode
 - 2026-02-10: displayUnit field on financial_models (ones/thousands/millions/billions/trillions) - controls how values are entered and displayed in tables
 - 2026-02-10: Edit Company dialog in sidebar - edit name, ticker, description, currency, shares outstanding, year range, and display unit after creation via PATCH /api/models/:id

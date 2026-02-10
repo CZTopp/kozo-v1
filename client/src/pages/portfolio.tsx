@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,9 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency, formatPercent, calcPortfolioMetrics } from "@/lib/calculations";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { PortfolioPosition, PortfolioRedFlag, MacroIndicator, MarketIndex } from "@shared/schema";
+import type { PortfolioPosition, PortfolioRedFlag, MacroIndicator, MarketIndex, PortfolioLot } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { TrendingUp, TrendingDown, AlertTriangle, Shield, Activity, Plus, Pencil, Trash2, RefreshCw, Loader2 } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertTriangle, Shield, Activity, Plus, Pencil, Trash2, RefreshCw, Loader2, ChevronDown, ChevronUp, Layers } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { useToast } from "@/hooks/use-toast";
 
@@ -104,6 +104,7 @@ function positionToForm(p: PortfolioPosition): PositionForm {
 
 export default function Portfolio() {
   const { data: positions } = useQuery<PortfolioPosition[]>({ queryKey: ["/api/portfolio"] });
+  const { data: allLots } = useQuery<PortfolioLot[]>({ queryKey: ["/api/portfolio/lots"] });
   const { data: redFlags } = useQuery<PortfolioRedFlag[]>({ queryKey: ["/api/portfolio-red-flags"] });
   const { data: macro } = useQuery<MacroIndicator[]>({ queryKey: ["/api/macro-indicators"] });
   const { data: indices } = useQuery<MarketIndex[]>({ queryKey: ["/api/market-indices"] });
@@ -113,6 +114,11 @@ export default function Portfolio() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState<PositionForm>({ ...emptyForm });
+  const [expandedPositions, setExpandedPositions] = useState<Set<string>>(new Set());
+  const [lotFormOpen, setLotFormOpen] = useState(false);
+  const [lotFormPositionId, setLotFormPositionId] = useState<string | null>(null);
+  const [editingLotId, setEditingLotId] = useState<string | null>(null);
+  const [lotForm, setLotForm] = useState({ sharesHeld: 0, purchasePrice: 0, purchaseDate: "", notes: "" });
 
   const createMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
@@ -181,6 +187,105 @@ export default function Portfolio() {
       toast({ title: "Refresh failed", description: err.message, variant: "destructive" });
     },
   });
+
+  const createLotMutation = useMutation({
+    mutationFn: async ({ positionId, data }: { positionId: string; data: Record<string, unknown> }) => {
+      const res = await apiRequest("POST", `/api/portfolio/${positionId}/lots`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portfolio"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portfolio/lots"] });
+      setLotFormOpen(false);
+      setLotFormPositionId(null);
+      setEditingLotId(null);
+      setLotForm({ sharesHeld: 0, purchasePrice: 0, purchaseDate: "", notes: "" });
+      toast({ title: "Lot added" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateLotMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => {
+      const res = await apiRequest("PATCH", `/api/portfolio/lots/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portfolio"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portfolio/lots"] });
+      setLotFormOpen(false);
+      setEditingLotId(null);
+      setLotFormPositionId(null);
+      setLotForm({ sharesHeld: 0, purchasePrice: 0, purchaseDate: "", notes: "" });
+      toast({ title: "Lot updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteLotMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/portfolio/lots/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portfolio"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portfolio/lots"] });
+      toast({ title: "Lot deleted" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  function toggleExpanded(positionId: string) {
+    setExpandedPositions(prev => {
+      const next = new Set(prev);
+      if (next.has(positionId)) next.delete(positionId);
+      else next.add(positionId);
+      return next;
+    });
+  }
+
+  function openAddLot(positionId: string) {
+    setLotFormPositionId(positionId);
+    setEditingLotId(null);
+    setLotForm({ sharesHeld: 0, purchasePrice: 0, purchaseDate: "", notes: "" });
+    setLotFormOpen(true);
+  }
+
+  function openEditLot(lot: PortfolioLot) {
+    setLotFormPositionId(lot.positionId);
+    setEditingLotId(lot.id);
+    setLotForm({
+      sharesHeld: lot.sharesHeld || 0,
+      purchasePrice: lot.purchasePrice || 0,
+      purchaseDate: lot.purchaseDate || "",
+      notes: lot.notes || "",
+    });
+    setLotFormOpen(true);
+  }
+
+  function handleSaveLot() {
+    const payload = {
+      sharesHeld: Number(lotForm.sharesHeld) || 0,
+      purchasePrice: Number(lotForm.purchasePrice) || 0,
+      purchaseDate: lotForm.purchaseDate || null,
+      notes: lotForm.notes.trim() || null,
+    };
+    if (editingLotId) {
+      updateLotMutation.mutate({ id: editingLotId, data: payload });
+    } else if (lotFormPositionId) {
+      createLotMutation.mutate({ positionId: lotFormPositionId, data: payload });
+    }
+  }
+
+  function getLotsForPosition(positionId: string) {
+    return (allLots || []).filter(l => l.positionId === positionId);
+  }
 
   function openCreate() {
     setEditingId(null);
@@ -254,6 +359,7 @@ export default function Portfolio() {
 
   const deleteTarget = deleteId ? positions?.find(p => p.id === deleteId) : null;
   const isSaving = createMutation.isPending || updateMutation.isPending;
+  const isLotSaving = createLotMutation.isPending || updateLotMutation.isPending;
 
   return (
     <div className="p-4 space-y-4">
@@ -378,50 +484,148 @@ export default function Portfolio() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedPositions.map(p => (
-                      <TableRow key={p.id} data-testid={`row-position-${p.ticker}`}>
-                        <TableCell className="font-medium sticky left-0 bg-background z-10">{p.ticker}</TableCell>
-                        <TableCell className="text-xs max-w-[120px] truncate">{p.companyName}</TableCell>
-                        <TableCell><Badge variant="outline" className="text-xs">{p.sector}</Badge></TableCell>
-                        <TableCell className="text-right font-mono">${p.currentPrice?.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">
-                          <span className={`text-xs ${(p.dailyChangePercent || 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
-                            {((p.dailyChangePercent || 0) * 100).toFixed(2)}%
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">{p.sharesHeld}</TableCell>
-                        <TableCell className="text-right font-mono">${p.purchasePrice?.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-mono">{formatCurrency(p.positionValue || 0)}</TableCell>
-                        <TableCell className={`text-right font-mono ${(p.gainLossDollar || 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
-                          {formatCurrency(p.gainLossDollar || 0)}
-                        </TableCell>
-                        <TableCell className={`text-right ${(p.gainLossPercent || 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
-                          {formatPercent(p.gainLossPercent || 0)}
-                        </TableCell>
-                        <TableCell className="text-right">{p.peRatio?.toFixed(1)}</TableCell>
-                        <TableCell className="text-right">{p.beta?.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-mono">${p.ma50?.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-mono">${p.ma200?.toFixed(2)}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant={p.goldenCross ? "default" : "destructive"} className="text-xs">
-                            {p.goldenCross ? "Golden" : "Death"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-mono">${p.week52Low?.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-mono">${p.week52High?.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-mono">${p.stopLoss?.toFixed(2) || "--"}</TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <Button size="icon" variant="ghost" onClick={() => openEdit(p)} data-testid={`button-edit-${p.ticker}`}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button size="icon" variant="ghost" onClick={() => setDeleteId(p.id)} data-testid={`button-delete-${p.ticker}`}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {sortedPositions.map(p => {
+                      const lots = getLotsForPosition(p.id);
+                      const isExpanded = expandedPositions.has(p.id);
+                      const hasMultipleLots = lots.length > 1;
+                      return (
+                        <Fragment key={p.id}>
+                          <TableRow data-testid={`row-position-${p.ticker}`} className={isExpanded ? "border-b-0" : ""}>
+                            <TableCell className="font-medium sticky left-0 bg-background z-10">
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-5 w-5 p-0"
+                                  onClick={() => toggleExpanded(p.id)}
+                                  data-testid={`button-expand-${p.ticker}`}
+                                >
+                                  {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                </Button>
+                                <span>{p.ticker}</span>
+                                {hasMultipleLots && (
+                                  <Badge variant="outline" className="text-xs ml-1">{lots.length} lots</Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-xs max-w-[120px] truncate">{p.companyName}</TableCell>
+                            <TableCell><Badge variant="outline" className="text-xs">{p.sector}</Badge></TableCell>
+                            <TableCell className="text-right font-mono">${p.currentPrice?.toFixed(2)}</TableCell>
+                            <TableCell className="text-right">
+                              <span className={`text-xs ${(p.dailyChangePercent || 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
+                                {((p.dailyChangePercent || 0) * 100).toFixed(2)}%
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right">{p.sharesHeld}</TableCell>
+                            <TableCell className="text-right font-mono">
+                              ${p.purchasePrice?.toFixed(2)}
+                              {hasMultipleLots && <span className="text-xs text-muted-foreground ml-1">(avg)</span>}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">{formatCurrency(p.positionValue || 0)}</TableCell>
+                            <TableCell className={`text-right font-mono ${(p.gainLossDollar || 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
+                              {formatCurrency(p.gainLossDollar || 0)}
+                            </TableCell>
+                            <TableCell className={`text-right ${(p.gainLossPercent || 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
+                              {formatPercent(p.gainLossPercent || 0)}
+                            </TableCell>
+                            <TableCell className="text-right">{p.peRatio?.toFixed(1)}</TableCell>
+                            <TableCell className="text-right">{p.beta?.toFixed(2)}</TableCell>
+                            <TableCell className="text-right font-mono">${p.ma50?.toFixed(2)}</TableCell>
+                            <TableCell className="text-right font-mono">${p.ma200?.toFixed(2)}</TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant={p.goldenCross ? "default" : "destructive"} className="text-xs">
+                                {p.goldenCross ? "Golden" : "Death"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right font-mono">${p.week52Low?.toFixed(2)}</TableCell>
+                            <TableCell className="text-right font-mono">${p.week52High?.toFixed(2)}</TableCell>
+                            <TableCell className="text-right font-mono">${p.stopLoss?.toFixed(2) || "--"}</TableCell>
+                            <TableCell className="text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <Button size="icon" variant="ghost" onClick={() => openEdit(p)} data-testid={`button-edit-${p.ticker}`}>
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button size="icon" variant="ghost" onClick={() => setDeleteId(p.id)} data-testid={`button-delete-${p.ticker}`}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                          {/* Expanded lots */}
+                          {isExpanded && (
+                            <TableRow className="bg-muted/30">
+                              <TableCell colSpan={19} className="p-3">
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                                      <Layers className="h-3.5 w-3.5" /> Purchase Lots for {p.ticker}
+                                    </span>
+                                    <Button variant="outline" size="sm" onClick={() => openAddLot(p.id)} data-testid={`button-add-lot-${p.ticker}`}>
+                                      <Plus className="h-3.5 w-3.5 mr-1" /> Add Lot
+                                    </Button>
+                                  </div>
+                                  {lots.length > 0 ? (
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead className="text-xs">Lot #</TableHead>
+                                          <TableHead className="text-xs text-right">Shares</TableHead>
+                                          <TableHead className="text-xs text-right">Purchase Price</TableHead>
+                                          <TableHead className="text-xs text-right">Cost Basis</TableHead>
+                                          <TableHead className="text-xs text-right">Current Value</TableHead>
+                                          <TableHead className="text-xs text-right">P&L $</TableHead>
+                                          <TableHead className="text-xs text-right">P&L %</TableHead>
+                                          <TableHead className="text-xs">Date</TableHead>
+                                          <TableHead className="text-xs">Notes</TableHead>
+                                          <TableHead className="text-xs text-center">Actions</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {lots.map((lot, idx) => {
+                                          const lotValue = (lot.sharesHeld || 0) * (p.currentPrice || 0);
+                                          const lotCost = (lot.sharesHeld || 0) * (lot.purchasePrice || 0);
+                                          const lotPL = lotValue - lotCost;
+                                          const lotPLPct = lotCost > 0 ? lotPL / lotCost : 0;
+                                          return (
+                                            <TableRow key={lot.id} data-testid={`row-lot-${p.ticker}-${idx}`}>
+                                              <TableCell className="text-xs">{idx + 1}</TableCell>
+                                              <TableCell className="text-xs text-right">{lot.sharesHeld}</TableCell>
+                                              <TableCell className="text-xs text-right font-mono">${lot.purchasePrice?.toFixed(2)}</TableCell>
+                                              <TableCell className="text-xs text-right font-mono">{formatCurrency(lotCost)}</TableCell>
+                                              <TableCell className="text-xs text-right font-mono">{formatCurrency(lotValue)}</TableCell>
+                                              <TableCell className={`text-xs text-right font-mono ${lotPL >= 0 ? "text-green-500" : "text-red-500"}`}>
+                                                {formatCurrency(lotPL)}
+                                              </TableCell>
+                                              <TableCell className={`text-xs text-right ${lotPLPct >= 0 ? "text-green-500" : "text-red-500"}`}>
+                                                {formatPercent(lotPLPct)}
+                                              </TableCell>
+                                              <TableCell className="text-xs">{lot.purchaseDate || "--"}</TableCell>
+                                              <TableCell className="text-xs max-w-[120px] truncate">{lot.notes || "--"}</TableCell>
+                                              <TableCell className="text-center">
+                                                <div className="flex items-center justify-center gap-1">
+                                                  <Button size="icon" variant="ghost" onClick={() => openEditLot(lot)} data-testid={`button-edit-lot-${idx}`}>
+                                                    <Pencil className="h-3 w-3" />
+                                                  </Button>
+                                                  <Button size="icon" variant="ghost" onClick={() => deleteLotMutation.mutate(lot.id)} data-testid={`button-delete-lot-${idx}`}>
+                                                    <Trash2 className="h-3 w-3" />
+                                                  </Button>
+                                                </div>
+                                              </TableCell>
+                                            </TableRow>
+                                          );
+                                        })}
+                                      </TableBody>
+                                    </Table>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground py-2">No lots recorded. Add a lot to track individual purchases.</p>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </Fragment>
+                      );
+                    })}
                     {sortedPositions.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={19} className="text-center py-8 text-muted-foreground">
@@ -834,6 +1038,73 @@ export default function Portfolio() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={lotFormOpen} onOpenChange={setLotFormOpen}>
+        <DialogContent className="max-w-md" data-testid="dialog-lot-form">
+          <DialogHeader>
+            <DialogTitle data-testid="text-lot-dialog-title">
+              {editingLotId ? "Edit Lot" : "Add Purchase Lot"}
+              {lotFormPositionId && positions && (() => {
+                const pos = positions.find(p => p.id === lotFormPositionId);
+                return pos ? ` - ${pos.ticker}` : "";
+              })()}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="lot-shares">Shares</Label>
+              <Input
+                id="lot-shares"
+                type="number"
+                value={lotForm.sharesHeld}
+                onChange={e => setLotForm(prev => ({ ...prev, sharesHeld: Number(e.target.value) }))}
+                data-testid="input-lot-shares"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="lot-price">Purchase Price ($)</Label>
+              <Input
+                id="lot-price"
+                type="number"
+                step="0.01"
+                value={lotForm.purchasePrice}
+                onChange={e => setLotForm(prev => ({ ...prev, purchasePrice: Number(e.target.value) }))}
+                data-testid="input-lot-price"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="lot-date">Purchase Date</Label>
+              <Input
+                id="lot-date"
+                type="date"
+                value={lotForm.purchaseDate}
+                onChange={e => setLotForm(prev => ({ ...prev, purchaseDate: e.target.value }))}
+                data-testid="input-lot-date"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="lot-notes">Notes</Label>
+              <Input
+                id="lot-notes"
+                value={lotForm.notes}
+                onChange={e => setLotForm(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Optional"
+                data-testid="input-lot-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLotFormOpen(false)} data-testid="button-cancel-lot">Cancel</Button>
+            <Button
+              onClick={handleSaveLot}
+              disabled={createLotMutation.isPending || updateLotMutation.isPending}
+              data-testid="button-save-lot"
+            >
+              {createLotMutation.isPending || updateLotMutation.isPending ? "Saving..." : editingLotId ? "Update Lot" : "Add Lot"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

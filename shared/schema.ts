@@ -220,6 +220,15 @@ export const portfolioPositions = pgTable("portfolio_positions", {
   comments: text("comments"),
 });
 
+export const portfolioLots = pgTable("portfolio_lots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  positionId: varchar("position_id").notNull().references(() => portfolioPositions.id, { onDelete: "cascade" }),
+  sharesHeld: real("shares_held").notNull().default(0),
+  purchasePrice: real("purchase_price").notNull().default(0),
+  purchaseDate: text("purchase_date"),
+  notes: text("notes"),
+});
+
 export const macroIndicators = pgTable("macro_indicators", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -315,6 +324,7 @@ export const insertPortfolioPositionSchema = createInsertSchema(portfolioPositio
   gainLossDollar: z.number().optional(),
   ebitda: z.number().optional(),
 }).omit({ id: true });
+export const insertPortfolioLotSchema = createInsertSchema(portfolioLots).omit({ id: true });
 export const insertMacroIndicatorSchema = createInsertSchema(macroIndicators).omit({ id: true, updatedAt: true });
 export const insertMarketIndexSchema = createInsertSchema(marketIndices).omit({ id: true });
 export const insertPortfolioRedFlagSchema = createInsertSchema(portfolioRedFlags).omit({ id: true });
@@ -341,6 +351,8 @@ export type ValuationComparison = typeof valuationComparisons.$inferSelect;
 export type InsertValuationComparison = z.infer<typeof insertValuationComparisonSchema>;
 export type PortfolioPosition = typeof portfolioPositions.$inferSelect;
 export type InsertPortfolioPosition = z.infer<typeof insertPortfolioPositionSchema>;
+export type PortfolioLot = typeof portfolioLots.$inferSelect;
+export type InsertPortfolioLot = z.infer<typeof insertPortfolioLotSchema>;
 export type MacroIndicator = typeof macroIndicators.$inferSelect;
 export type InsertMacroIndicator = z.infer<typeof insertMacroIndicatorSchema>;
 export type MarketIndex = typeof marketIndices.$inferSelect;
