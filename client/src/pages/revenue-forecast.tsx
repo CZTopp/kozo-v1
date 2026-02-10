@@ -20,6 +20,7 @@ export default function RevenueForecast() {
   const [editMode, setEditMode] = useState(false);
   const [editedPeriods, setEditedPeriods] = useState<Record<string, number>>({});
   const [editedNames, setEditedNames] = useState<Record<string, string>>({});
+  const [editedYears, setEditedYears] = useState<Record<number, number>>({});
   const [pendingDeletes, setPendingDeletes] = useState<Set<string>>(new Set());
   const [newLineItems, setNewLineItems] = useState<Array<{ tempId: string; name: string }>>([]);
   const [newLineItemPeriods, setNewLineItemPeriods] = useState<Record<string, Record<string, number>>>({});
@@ -92,6 +93,19 @@ export default function RevenueForecast() {
       );
       await Promise.all(periodUpdates);
 
+      if (Object.keys(editedYears).length > 0) {
+        const yearMapping: Record<number, number> = {};
+        years.forEach(y => { yearMapping[y] = editedYears[y] !== undefined ? editedYears[y] : y; });
+        const mappedYears = years.map(y => yearMapping[y]);
+        const newStartYear = Math.min(...mappedYears);
+        const newEndYear = Math.max(...mappedYears);
+        await apiRequest("PATCH", `/api/models/${model!.id}/update-years`, {
+          yearMapping,
+          startYear: newStartYear,
+          endYear: newEndYear,
+        });
+      }
+
       await apiRequest("POST", `/api/models/${model!.id}/recalculate`);
     },
     onSuccess: () => {
@@ -107,6 +121,7 @@ export default function RevenueForecast() {
       setEditMode(false);
       setEditedPeriods({});
       setEditedNames({});
+      setEditedYears({});
       setPendingDeletes(new Set());
       setNewLineItems([]);
       setNewLineItemPeriods({});
@@ -231,6 +246,7 @@ export default function RevenueForecast() {
     setEditMode(false);
     setEditedPeriods({});
     setEditedNames({});
+    setEditedYears({});
     setPendingDeletes(new Set());
     setNewLineItems([]);
     setNewLineItemPeriods({});
@@ -238,8 +254,27 @@ export default function RevenueForecast() {
 
   const hasEdits = Object.keys(editedPeriods).length > 0 ||
     Object.keys(editedNames).length > 0 ||
+    Object.keys(editedYears).length > 0 ||
     pendingDeletes.size > 0 ||
     newLineItems.some(ni => ni.name.trim() !== "");
+
+  const getDisplayYear = (originalYear: number): number => {
+    return editedYears[originalYear] !== undefined ? editedYears[originalYear] : originalYear;
+  };
+
+  const handleYearEdit = (originalYear: number, value: string) => {
+    const parsed = parseInt(value);
+    if (isNaN(parsed)) return;
+    if (parsed === originalYear) {
+      setEditedYears(prev => {
+        const next = { ...prev };
+        delete next[originalYear];
+        return next;
+      });
+    } else {
+      setEditedYears(prev => ({ ...prev, [originalYear]: parsed }));
+    }
+  };
 
   const getLineItemName = (li: RevenueLineItem) => {
     return editedNames[li.id] !== undefined ? editedNames[li.id] : li.name;
@@ -351,15 +386,32 @@ export default function RevenueForecast() {
                 <Table data-testid="table-quarterly-revenue">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="min-w-[200px]">Revenue Stream</TableHead>
+                      <TableHead rowSpan={2} className="min-w-[200px] align-bottom">Revenue Stream</TableHead>
+                      {years.map(year => (
+                        <TableHead key={`year-${year}`} colSpan={4} className="text-center text-xs border-b-0">
+                          {editMode ? (
+                            <Input
+                              type="number"
+                              value={getDisplayYear(year)}
+                              onChange={(e) => handleYearEdit(year, e.target.value)}
+                              className={`h-7 text-xs text-center w-20 mx-auto ${editedYears[year] !== undefined ? "border-blue-500" : ""}`}
+                              data-testid={`input-year-${year}`}
+                            />
+                          ) : (
+                            <span data-testid={`text-year-${year}`}>{year}</span>
+                          )}
+                        </TableHead>
+                      ))}
+                      {editMode && <TableHead rowSpan={2} className="w-[50px] align-bottom" />}
+                    </TableRow>
+                    <TableRow>
                       {years.map(year => (
                         [1, 2, 3, 4].map(q => (
                           <TableHead key={`${year}-Q${q}`} className="text-right text-xs min-w-[90px]">
-                            {year} Q{q}
+                            Q{q}
                           </TableHead>
                         ))
                       ))}
-                      {editMode && <TableHead className="w-[50px]" />}
                     </TableRow>
                   </TableHeader>
                   <TableBody>

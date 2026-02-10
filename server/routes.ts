@@ -2,6 +2,9 @@ import type { Express, Request, Response } from "express";
 import { Server } from "http";
 import { storage } from "./storage";
 import { recalculateModel } from "./recalculate";
+import { db } from "./db";
+import { eq, and } from "drizzle-orm";
+import { revenuePeriods } from "@shared/schema";
 import {
   insertFinancialModelSchema, insertRevenueLineItemSchema,
   insertRevenuePeriodSchema, insertIncomeStatementLineSchema,
@@ -34,6 +37,33 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.patch("/api/models/:id", async (req: Request, res: Response) => {
     const model = await storage.updateModel(req.params.id, req.body);
+    res.json(model);
+  });
+
+  app.patch("/api/models/:id/update-years", async (req: Request, res: Response) => {
+    const { yearMapping, startYear, endYear } = req.body;
+    if (!yearMapping || typeof yearMapping !== "object") {
+      return res.status(400).json({ message: "yearMapping is required" });
+    }
+    if (!startYear || !endYear) {
+      return res.status(400).json({ message: "startYear and endYear are required" });
+    }
+
+    const allPeriods = await storage.getRevenuePeriods(req.params.id);
+    for (const [oldYear, newYear] of Object.entries(yearMapping)) {
+      const oldYearNum = parseInt(oldYear);
+      const newYearNum = newYear as number;
+      if (oldYearNum !== newYearNum) {
+        const periodsToUpdate = allPeriods.filter(p => p.year === oldYearNum);
+        for (const p of periodsToUpdate) {
+          await db.update(revenuePeriods)
+            .set({ year: newYearNum })
+            .where(eq(revenuePeriods.id, p.id));
+        }
+      }
+    }
+
+    const model = await storage.updateModel(req.params.id, { startYear, endYear });
     res.json(model);
   });
 
