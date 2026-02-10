@@ -579,6 +579,40 @@ export default function Portfolio() {
               </CardContent>
             </Card>
 
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium flex items-center gap-1">Signal Definitions <InfoTooltip content="Definitions of the technical indicators and signals used across this portfolio view." /></CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <span className="font-medium">Golden Cross</span>
+                    <p className="text-muted-foreground text-xs mt-0.5">The 50-day moving average (MA50) crosses above the 200-day moving average (MA200). This is a bullish signal suggesting upward momentum may continue. The "(Xd)" badge shows how many days since the crossover occurred.</p>
+                  </div>
+                  <div>
+                    <span className="font-medium">Death Cross</span>
+                    <p className="text-muted-foreground text-xs mt-0.5">The 50-day moving average drops below the 200-day moving average. This is a bearish signal indicating potential sustained downward pressure on the stock price.</p>
+                  </div>
+                  <div>
+                    <span className="font-medium">Near Stop Loss</span>
+                    <p className="text-muted-foreground text-xs mt-0.5">Positions where the current price is within 5% of the stop-loss level you set. A stop loss is a pre-determined price at which you plan to sell to limit losses.</p>
+                  </div>
+                  <div>
+                    <span className="font-medium">MA50 / MA200</span>
+                    <p className="text-muted-foreground text-xs mt-0.5">50-day and 200-day simple moving averages. MA50 tracks short-term trend; MA200 tracks long-term trend. "% from MA" shows how far the current price has diverged from each average.</p>
+                  </div>
+                  <div>
+                    <span className="font-medium">Beta</span>
+                    <p className="text-muted-foreground text-xs mt-0.5">Measures a stock's volatility relative to the overall market. Beta &gt; 1 means the stock moves more than the market; Beta &lt; 1 means it moves less. A beta of 1.5 implies the stock typically moves 50% more than the market.</p>
+                  </div>
+                  <div>
+                    <span className="font-medium">52-Week Range</span>
+                    <p className="text-muted-foreground text-xs mt-0.5">The lowest and highest prices the stock has traded at over the past 52 weeks. Useful for gauging whether a stock is near its recent highs or lows.</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card className="lg:col-span-2">
               <CardHeader>
                 <CardTitle className="text-sm font-medium flex items-center gap-1">Beta Exposure by Position <InfoTooltip content="Beta values for each position. Higher beta means the position amplifies market movements. Useful for risk management." /></CardTitle>
