@@ -4,14 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency, formatPercent } from "@/lib/calculations";
-import type { ValuationComparison } from "@shared/schema";
+import type { ValuationComparison, FinancialModel } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
 import { TrendingUp, TrendingDown, Target, ArrowDown } from "lucide-react";
 
 export default function ValuationComparisonPage() {
   const { selectedModel: model, isLoading } = useModel();
 
-  const { data: valData } = useQuery<ValuationComparison[]>({
+  const { data: valData } = useQuery<ValuationComparison>({
     queryKey: ["/api/models", model?.id, "valuation-comparison"],
     enabled: !!model,
   });
@@ -19,7 +19,7 @@ export default function ValuationComparisonPage() {
   if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
   if (!model) return <div className="p-4 text-muted-foreground">Select a company from the sidebar to begin.</div>;
 
-  const val = valData?.[0];
+  const val = valData;
   const currentPrice = val?.currentSharePrice || 0;
   const averageTarget = val?.averageTarget || 0;
   const percentToTarget = val?.percentToTarget || (currentPrice > 0 ? (averageTarget - currentPrice) / currentPrice : 0);
@@ -45,9 +45,9 @@ export default function ValuationComparisonPage() {
     },
     {
       name: "DCF",
-      bullMultiple: "--",
-      baseMultiple: "--",
-      bearMultiple: "--",
+      bullMultiple: `${(model.scenarioBullMultiplier ?? 1.3).toFixed(1)}x`,
+      baseMultiple: `${(model.scenarioBaseMultiplier ?? 1.0).toFixed(1)}x`,
+      bearMultiple: `${(model.scenarioBearMultiplier ?? 0.7).toFixed(1)}x`,
       bullTarget: val.dcfBullTarget || 0,
       baseTarget: val.dcfBaseTarget || 0,
       bearTarget: val.dcfBearTarget || 0,
@@ -161,6 +161,39 @@ export default function ValuationComparisonPage() {
           </Card>
         ))}
       </div>
+
+      {val?.valuationData && (val.valuationData as any)?.scenarioRevenues && (
+        <Card data-testid="card-scenario-revenues">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Scenario Revenue Projections</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Year</TableHead>
+                  <TableHead className="text-right">Bear</TableHead>
+                  <TableHead className="text-right">Base</TableHead>
+                  <TableHead className="text-right">Bull</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Object.keys((val.valuationData as any)?.scenarioRevenues?.base || {}).sort().map((year: string) => {
+                  const scenarios = (val.valuationData as any).scenarioRevenues || {};
+                  return (
+                    <TableRow key={year} data-testid={`row-scenario-${year}`}>
+                      <TableCell className="font-medium">{year}</TableCell>
+                      <TableCell className="text-right text-red-500">{formatCurrency(scenarios.bear?.[year] || 0)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(scenarios.base?.[year] || 0)}</TableCell>
+                      <TableCell className="text-right text-green-500">{formatCurrency(scenarios.bull?.[year] || 0)}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <Card data-testid="card-comparison-chart">
         <CardHeader><CardTitle className="text-sm font-medium">Valuation Methods Comparison</CardTitle></CardHeader>

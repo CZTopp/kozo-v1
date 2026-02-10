@@ -18,17 +18,63 @@ export async function recalculateModel(modelId: string) {
   const years = Array.from({ length: model.endYear - model.startYear + 1 }, (_, i) => model.startYear + i);
   const sharesOut = model.sharesOutstanding || 50000000;
 
-  const cogsPercent = baseAssumptions ? parseFloat(baseAssumptions.cogsPercent) : 0.28;
-  const smPercent = baseAssumptions ? parseFloat(baseAssumptions.salesMarketingPercent) : 0.22;
-  const rdPercent = baseAssumptions ? parseFloat(baseAssumptions.rdPercent) : 0.18;
-  const gaPercent = baseAssumptions ? parseFloat(baseAssumptions.gaPercent) : 0.08;
-  const depPercent = baseAssumptions ? parseFloat(baseAssumptions.depreciationPercent) : 0.015;
+  const baseCogs = baseAssumptions ? parseFloat(baseAssumptions.cogsPercent) : 0.28;
+  const baseSm = baseAssumptions ? parseFloat(baseAssumptions.salesMarketingPercent) : 0.22;
+  const baseRd = baseAssumptions ? parseFloat(baseAssumptions.rdPercent) : 0.18;
+  const baseGa = baseAssumptions ? parseFloat(baseAssumptions.gaPercent) : 0.08;
+  const baseDep = baseAssumptions ? parseFloat(baseAssumptions.depreciationPercent) : 0.015;
   const taxRate = baseAssumptions ? parseFloat(baseAssumptions.taxRate) : 0.25;
   const arPercent = baseAssumptions ? parseFloat(baseAssumptions.arPercent) : 0.12;
   const invPercent = 0.03;
   const apPercent = baseAssumptions ? parseFloat(baseAssumptions.apPercent) : 0.08;
   const capexPercent = baseAssumptions ? parseFloat(baseAssumptions.capexPercent) : 0.04;
   const initialCash = baseAssumptions ? parseFloat(baseAssumptions.initialCash) : 50000000;
+
+  const targetNetMargin = model.targetNetMargin;
+  const totalYears = years.length;
+
+  const currentNetMarginFromAssumptions = (() => {
+    const totalCostPct = baseCogs + baseSm + baseRd + baseGa + baseDep;
+    const preTaxMargin = 1 - totalCostPct + 0.002;
+    return preTaxMargin * (1 - taxRate);
+  })();
+
+  const getCostPercentsForYear = (yearIdx: number) => {
+    if (targetNetMargin === null || targetNetMargin === undefined || totalYears <= 1) {
+      return { cogsPercent: baseCogs, smPercent: baseSm, rdPercent: baseRd, gaPercent: baseGa, depPercent: baseDep };
+    }
+
+    const progress = yearIdx / (totalYears - 1);
+    const currentMargin = currentNetMarginFromAssumptions;
+    const marginGap = targetNetMargin - currentMargin;
+
+    if (Math.abs(marginGap) < 0.001) {
+      return { cogsPercent: baseCogs, smPercent: baseSm, rdPercent: baseRd, gaPercent: baseGa, depPercent: baseDep };
+    }
+
+    const adjustableCosts = [
+      { key: "cogsPercent", base: baseCogs, weight: 0.3 },
+      { key: "smPercent", base: baseSm, weight: 0.35 },
+      { key: "rdPercent", base: baseRd, weight: 0.2 },
+      { key: "gaPercent", base: baseGa, weight: 0.15 },
+    ];
+
+    const totalCostReductionNeeded = -marginGap / (1 - taxRate);
+    const result: Record<string, number> = {};
+
+    for (const cost of adjustableCosts) {
+      const adjustment = totalCostReductionNeeded * cost.weight * progress;
+      result[cost.key] = Math.max(0.01, cost.base + adjustment);
+    }
+
+    return {
+      cogsPercent: result.cogsPercent,
+      smPercent: result.smPercent,
+      rdPercent: result.rdPercent,
+      gaPercent: result.gaPercent,
+      depPercent: baseDep,
+    };
+  };
 
   const getAnnualRevenue = (year: number): number => {
     let total = 0;
@@ -66,6 +112,7 @@ export async function recalculateModel(modelId: string) {
   for (const yr of years) {
     const yearIdx = yr - model.startYear;
     const totalRev = annualRevenues[yr];
+    const { cogsPercent, smPercent, rdPercent, gaPercent, depPercent } = getCostPercentsForYear(yearIdx);
     const cogs = totalRev * cogsPercent;
     const gp = totalRev - cogs;
     const sm = totalRev * smPercent;
@@ -294,9 +341,9 @@ export async function recalculateModel(modelId: string) {
     peBullTarget: Math.round(lastEPS * growthPct * peBullPeg * 100) / 100,
     peBaseTarget: Math.round(lastEPS * growthPct * peBasePeg * 100) / 100,
     peBearTarget: Math.round(lastEPS * growthPct * peBearPeg * 100) / 100,
-    dcfBullTarget: Math.round(targetPrice * 1.2 * 100) / 100,
-    dcfBaseTarget: Math.round(targetPrice * 100) / 100,
-    dcfBearTarget: Math.round(targetPrice * 0.8 * 100) / 100,
+    dcfBullTarget: Math.round(targetPrice * (model.scenarioBullMultiplier ?? 1.3) * 100) / 100,
+    dcfBaseTarget: Math.round(targetPrice * (model.scenarioBaseMultiplier ?? 1.0) * 100) / 100,
+    dcfBearTarget: Math.round(targetPrice * (model.scenarioBearMultiplier ?? 0.7) * 100) / 100,
     averageTarget: 0,
     percentToTarget: 0,
   };
@@ -340,6 +387,10 @@ export async function forecastForward(modelId: string) {
   const hasAnyData = periods.some(p => (p.amount || 0) > 0);
   if (!hasAnyData) throw new Error("No existing revenue data to base projections on. Enter revenue for at least one year first.");
 
+  const decayRate = model.growthDecayRate ?? 0.15;
+  const bullMult = model.scenarioBullMultiplier ?? 1.3;
+  const bearMult = model.scenarioBearMultiplier ?? 0.7;
+
   const getAmount = (liId: string, year: number, quarter: number): number => {
     const p = periods.find(p => p.lineItemId === liId && p.year === year && p.quarter === quarter);
     return p ? (p.amount || 0) : 0;
@@ -377,6 +428,12 @@ export async function forecastForward(modelId: string) {
   const projectedAmounts = new Map<string, number>();
   const key = (liId: string, yr: number, q: number) => `${liId}:${yr}:${q}`;
 
+  const scenarioRevenues: Record<string, Record<number, number>> = { bull: {}, base: {}, bear: {} };
+
+  const lastYearWithData = Math.max(
+    ...allYears.filter(yr => periods.some(p => p.year === yr && (p.amount || 0) > 0))
+  );
+
   for (const li of lineItems) {
     const streamPeriods = periods.filter(p => p.lineItemId === li.id && (p.amount || 0) > 0);
     if (streamPeriods.length === 0) continue;
@@ -390,7 +447,7 @@ export async function forecastForward(modelId: string) {
         }
       }
 
-      let growthRate = 0.05;
+      let baseGrowthRate = 0.05;
       if (quarterValues.length >= 2) {
         const sorted = [...quarterValues].sort((a, b) => a.year - b.year);
         const rates: number[] = [];
@@ -400,8 +457,8 @@ export async function forecastForward(modelId: string) {
           }
         }
         if (rates.length > 0) {
-          growthRate = rates.reduce((s, r) => s + r, 0) / rates.length;
-          growthRate = Math.max(-0.5, Math.min(growthRate, 2.0));
+          baseGrowthRate = rates.reduce((s, r) => s + r, 0) / rates.length;
+          baseGrowthRate = Math.max(-0.5, Math.min(baseGrowthRate, 2.0));
         }
       }
 
@@ -419,6 +476,11 @@ export async function forecastForward(modelId: string) {
           .filter(v => v.year > emptyYear)
           .sort((a, b) => a.year - b.year);
 
+        const yearsFromLastData = emptyYear - lastYearWithData;
+        const decayedGrowth = yearsFromLastData > 0
+          ? baseGrowthRate * Math.pow(1 - decayRate, yearsFromLastData)
+          : baseGrowthRate;
+
         if (priorYearsWithData.length > 0 && laterYearsWithData.length > 0) {
           const before = priorYearsWithData[0];
           const after = laterYearsWithData[0];
@@ -427,20 +489,27 @@ export async function forecastForward(modelId: string) {
           const fraction = position / span;
           projected = Math.round(before.amount + (after.amount - before.amount) * fraction);
         } else if (priorYearsWithData.length > 0) {
-          const nearest = priorYearsWithData[0];
-          const yearsAhead = emptyYear - nearest.year;
           const alreadyProjected = projectedAmounts.get(key(li.id, emptyYear - 1, q));
-          const baseAmount = alreadyProjected !== undefined ? alreadyProjected : nearest.amount;
-          const yearsToProject = alreadyProjected !== undefined ? 1 : yearsAhead;
-          projected = Math.round(baseAmount * Math.pow(1 + growthRate, yearsToProject));
+          const baseAmount = alreadyProjected !== undefined
+            ? alreadyProjected
+            : priorYearsWithData[0].amount;
+          projected = Math.round(baseAmount * (1 + decayedGrowth));
         } else if (laterYearsWithData.length > 0) {
           const nearest = laterYearsWithData[0];
           const yearsBehind = nearest.year - emptyYear;
-          projected = Math.round(nearest.amount / Math.pow(1 + growthRate, yearsBehind));
+          projected = Math.round(nearest.amount / Math.pow(1 + baseGrowthRate, yearsBehind));
         }
 
         projected = Math.max(0, projected);
         projectedAmounts.set(key(li.id, emptyYear, q), projected);
+
+        if (yearsFromLastData > 0 && projected > 0) {
+          const bullProjected = Math.round(projected * (1 + (decayedGrowth * bullMult - decayedGrowth)));
+          const bearProjected = Math.round(projected * (1 + (decayedGrowth * bearMult - decayedGrowth)));
+          scenarioRevenues.bull[emptyYear] = (scenarioRevenues.bull[emptyYear] || 0) + Math.max(0, bullProjected);
+          scenarioRevenues.base[emptyYear] = (scenarioRevenues.base[emptyYear] || 0) + projected;
+          scenarioRevenues.bear[emptyYear] = (scenarioRevenues.bear[emptyYear] || 0) + Math.max(0, bearProjected);
+        }
 
         if (projected > 0) {
           newPeriods.push({
@@ -473,11 +542,21 @@ export async function forecastForward(modelId: string) {
 
   const recalcResult = await recalculateModel(modelId);
 
+  const [existingVal] = await db.select().from(valuationComparisons).where(eq(valuationComparisons.modelId, modelId));
+  if (existingVal) {
+    const existingData = (existingVal.valuationData as Record<string, any>) || {};
+    await db.update(valuationComparisons)
+      .set({ valuationData: { ...existingData, scenarioRevenues } })
+      .where(eq(valuationComparisons.modelId, modelId));
+  }
+
   const filledYears = [...new Set(newPeriods.map(p => p.year))].sort();
   return {
     forecastedYears: filledYears,
     periodsCreated: newPeriods.length,
     growthApplied: true,
+    growthDecayRate: decayRate,
+    scenarioRevenues,
     ...recalcResult,
   };
 }

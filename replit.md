@@ -4,6 +4,13 @@
 Comprehensive financial modeling and valuation application covering 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. All data is simulated demo data.
 
 ## Recent Changes
+- 2026-02-10: Advanced projection features - growth decay rate, target margin convergence, bull/base/bear scenario multipliers
+- 2026-02-10: Projection Settings UI panel on Revenue Forecast page (collapsible card with editable parameters)
+- 2026-02-10: Growth decay formula: baseGrowthRate * (1 - decayRate)^yearsFromLastData applied in forecastForward()
+- 2026-02-10: Target margin convergence in recalculate engine - cost % adjusts across years to approach target net margin
+- 2026-02-10: Scenario multipliers wire into DCF bull/base/bear targets and scenario revenue table on Valuation Comparison page
+- 2026-02-10: 5 new columns on financial_models: growthDecayRate, targetNetMargin, scenarioBullMultiplier, scenarioBaseMultiplier, scenarioBearMultiplier
+- 2026-02-10: PATCH /api/models/:id now validates numeric projection fields
 - 2026-02-10: Forecast Forward feature - auto-projects revenue into empty future years based on historical growth rates, cascades through all financial statements
 - 2026-02-10: New API endpoint: POST /api/models/:id/forecast-forward
 - 2026-02-10: Multi-company support - ModelContext provider tracks selected company, sidebar company selector dropdown, create/delete companies, all pages use context instead of hardcoded first model

@@ -36,7 +36,21 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   app.patch("/api/models/:id", async (req: Request, res: Response) => {
-    const model = await storage.updateModel(req.params.id, req.body);
+    const body = req.body;
+    const numericFields = [
+      "growthDecayRate", "targetNetMargin",
+      "scenarioBullMultiplier", "scenarioBaseMultiplier", "scenarioBearMultiplier",
+    ] as const;
+    for (const field of numericFields) {
+      if (field in body) {
+        const val = Number(body[field]);
+        if (isNaN(val)) {
+          return res.status(400).json({ message: `${field} must be a number` });
+        }
+        body[field] = val;
+      }
+    }
+    const model = await storage.updateModel(req.params.id, body);
     res.json(model);
   });
 

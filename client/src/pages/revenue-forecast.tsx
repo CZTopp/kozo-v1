@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useModel } from "@/lib/model-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,7 +12,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { RevenueLineItem, RevenuePeriod } from "@shared/schema";
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil, Sparkles } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil, Sparkles, Settings2, ChevronDown, ChevronUp } from "lucide-react";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
@@ -25,6 +26,14 @@ export default function RevenueForecast() {
   const [pendingDeletes, setPendingDeletes] = useState<Set<string>>(new Set());
   const [newLineItems, setNewLineItems] = useState<Array<{ tempId: string; name: string }>>([]);
   const [newLineItemPeriods, setNewLineItemPeriods] = useState<Record<string, Record<string, number>>>({});
+  const [showProjectionSettings, setShowProjectionSettings] = useState(false);
+  const [projectionSettings, setProjectionSettings] = useState<{
+    growthDecayRate: number;
+    targetNetMargin: number | null;
+    scenarioBullMultiplier: number;
+    scenarioBaseMultiplier: number;
+    scenarioBearMultiplier: number;
+  } | null>(null);
 
   const { selectedModel: model, isLoading: modelsLoading } = useModel();
 
@@ -152,6 +161,38 @@ export default function RevenueForecast() {
     },
     onError: (err: Error) => {
       toast({ title: "Forecast failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  useEffect(() => {
+    if (model && !projectionSettings) {
+      setProjectionSettings({
+        growthDecayRate: model.growthDecayRate ?? 0.15,
+        targetNetMargin: model.targetNetMargin ?? null,
+        scenarioBullMultiplier: model.scenarioBullMultiplier ?? 1.3,
+        scenarioBaseMultiplier: model.scenarioBaseMultiplier ?? 1.0,
+        scenarioBearMultiplier: model.scenarioBearMultiplier ?? 0.7,
+      });
+    }
+  }, [model?.id]);
+
+  const saveProjectionSettingsMutation = useMutation({
+    mutationFn: async (settings: typeof projectionSettings) => {
+      if (!model || !settings) return;
+      await apiRequest("PATCH", `/api/models/${model.id}`, {
+        growthDecayRate: settings.growthDecayRate,
+        targetNetMargin: settings.targetNetMargin,
+        scenarioBullMultiplier: settings.scenarioBullMultiplier,
+        scenarioBaseMultiplier: settings.scenarioBaseMultiplier,
+        scenarioBearMultiplier: settings.scenarioBearMultiplier,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      toast({ title: "Settings saved", description: "Projection parameters updated. Click Forecast Forward to apply." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
 
@@ -404,6 +445,149 @@ export default function RevenueForecast() {
               <span>Edit revenue stream names and quarterly values, add new streams, or remove existing ones. Changes cascade through all downstream statements.</span>
             </div>
           </CardContent>
+        </Card>
+      )}
+
+      {!editMode && (
+        <Card data-testid="card-projection-settings">
+          <CardHeader
+            className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2 cursor-pointer"
+            onClick={() => setShowProjectionSettings(!showProjectionSettings)}
+          >
+            <div className="flex items-center gap-2">
+              <Settings2 className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Projection Settings</CardTitle>
+            </div>
+            {showProjectionSettings ? (
+              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            )}
+          </CardHeader>
+          {showProjectionSettings && projectionSettings && (
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-muted-foreground">Growth Model</h4>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Growth Decay Rate</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="1"
+                        value={projectionSettings.growthDecayRate}
+                        onChange={(e) => setProjectionSettings({
+                          ...projectionSettings,
+                          growthDecayRate: parseFloat(e.target.value) || 0,
+                        })}
+                        className="w-24"
+                        data-testid="input-growth-decay"
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        ({(projectionSettings.growthDecayRate * 100).toFixed(0)}% annual decay)
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Each year, the growth rate decreases by this factor. Higher = faster deceleration.</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Target Net Margin</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="-1"
+                        max="1"
+                        value={projectionSettings.targetNetMargin ?? ""}
+                        placeholder="None"
+                        onChange={(e) => setProjectionSettings({
+                          ...projectionSettings,
+                          targetNetMargin: e.target.value === "" ? null : parseFloat(e.target.value) || 0,
+                        })}
+                        className="w-24"
+                        data-testid="input-target-margin"
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {projectionSettings.targetNetMargin !== null
+                          ? `(${(projectionSettings.targetNetMargin * 100).toFixed(0)}% target)`
+                          : "(disabled)"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Cost assumptions converge toward this net margin over the model period. Leave blank to disable.</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 md:col-span-2">
+                  <h4 className="text-sm font-medium text-muted-foreground">Scenario Multipliers</h4>
+                  <p className="text-xs text-muted-foreground">Multiplied against the base growth rate to generate bull/base/bear revenue projections for valuation.</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-green-500">Bull Case</Label>
+                      <Input
+                        type="number"
+                        step="0.05"
+                        min="0.1"
+                        max="5"
+                        value={projectionSettings.scenarioBullMultiplier}
+                        onChange={(e) => setProjectionSettings({
+                          ...projectionSettings,
+                          scenarioBullMultiplier: parseFloat(e.target.value) || 1,
+                        })}
+                        data-testid="input-bull-multiplier"
+                      />
+                      <p className="text-xs text-muted-foreground">{(projectionSettings.scenarioBullMultiplier * 100).toFixed(0)}% of base growth</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Base Case</Label>
+                      <Input
+                        type="number"
+                        step="0.05"
+                        min="0.1"
+                        max="5"
+                        value={projectionSettings.scenarioBaseMultiplier}
+                        onChange={(e) => setProjectionSettings({
+                          ...projectionSettings,
+                          scenarioBaseMultiplier: parseFloat(e.target.value) || 1,
+                        })}
+                        data-testid="input-base-multiplier"
+                      />
+                      <p className="text-xs text-muted-foreground">{(projectionSettings.scenarioBaseMultiplier * 100).toFixed(0)}% of base growth</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-red-500">Bear Case</Label>
+                      <Input
+                        type="number"
+                        step="0.05"
+                        min="0.1"
+                        max="5"
+                        value={projectionSettings.scenarioBearMultiplier}
+                        onChange={(e) => setProjectionSettings({
+                          ...projectionSettings,
+                          scenarioBearMultiplier: parseFloat(e.target.value) || 1,
+                        })}
+                        data-testid="input-bear-multiplier"
+                      />
+                      <p className="text-xs text-muted-foreground">{(projectionSettings.scenarioBearMultiplier * 100).toFixed(0)}% of base growth</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  onClick={() => saveProjectionSettingsMutation.mutate(projectionSettings)}
+                  disabled={saveProjectionSettingsMutation.isPending}
+                  data-testid="button-save-projection-settings"
+                >
+                  {saveProjectionSettingsMutation.isPending ? (
+                    <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Saving...</>
+                  ) : (
+                    <><Save className="h-4 w-4 mr-1" /> Save Settings</>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          )}
         </Card>
       )}
 
