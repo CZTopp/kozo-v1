@@ -12,7 +12,7 @@ import { formatPercent } from "@/lib/calculations";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { RevenueLineItem, RevenuePeriod } from "@shared/schema";
-import { ComposedChart, Bar, AreaChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Label } from "@/components/ui/label";
 import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil, Sparkles, Settings2, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
@@ -779,6 +779,7 @@ export default function RevenueForecast() {
           <TabsTrigger value="quarterly" data-testid="tab-quarterly">Quarterly Detail</TabsTrigger>
           <TabsTrigger value="table" data-testid="tab-table">Annual Summary</TabsTrigger>
           <TabsTrigger value="annual-chart" data-testid="tab-annual-chart">Annual Chart</TabsTrigger>
+          <TabsTrigger value="annual-trend" data-testid="tab-annual-trend">Annual Trend</TabsTrigger>
           <TabsTrigger value="quarterly-chart" data-testid="tab-quarterly-chart">Quarterly Trend</TabsTrigger>
         </TabsList>
 
@@ -1196,24 +1197,45 @@ export default function RevenueForecast() {
         <TabsContent value="annual-chart">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-medium flex items-center gap-1">Annual Revenue by Stream <InfoTooltip content="Bars show revenue by stream. Lines trace each stream's trend over time." /></CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center gap-1">Annual Revenue by Stream <InfoTooltip content="Stacked bar chart showing annual revenue breakdown by stream." /></CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-96">
+              <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={annualChartData}>
+                  <BarChart data={annualChartData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="year" className="text-xs" />
                     <YAxis className="text-xs" tickFormatter={(v) => formatWithUnit(v, displayUnit)} />
                     <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => formatWithUnit(v, displayUnit)} />
                     <Legend />
                     {allNames.map((name, i) => (
-                      <Bar key={`bar-${name}`} dataKey={name} fill={COLORS[i % COLORS.length]} radius={[2, 2, 0, 0]} fillOpacity={0.7} />
+                      <Bar key={name} dataKey={name} fill={COLORS[i % COLORS.length]} radius={[2, 2, 0, 0]} />
                     ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="annual-trend">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium flex items-center gap-1">Annual Revenue Trend <InfoTooltip content="Area chart showing annual revenue trends by stream over time." /></CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={annualChartData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="year" className="text-xs" />
+                    <YAxis className="text-xs" tickFormatter={(v) => formatWithUnit(v, displayUnit)} />
+                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => formatWithUnit(v, displayUnit)} />
+                    <Legend />
                     {allNames.map((name, i) => (
-                      <Line key={`line-${name}`} dataKey={name} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={{ r: 3 }} type="monotone" legendType="none" />
+                      <Area key={name} type="monotone" dataKey={name} fill={COLORS[i % COLORS.length]} stroke={COLORS[i % COLORS.length]} fillOpacity={0.3} />
                     ))}
-                  </ComposedChart>
+                  </AreaChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
