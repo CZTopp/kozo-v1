@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   LineChart,
   List,
+  AlertTriangle,
 } from "lucide-react";
 
 const sections = [
@@ -88,10 +89,32 @@ const sections = [
     keyMetrics: ["Total Assets", "Total Liabilities", "Total Equity", "Balance Status (Balanced/Imbalanced)"],
     howToUse: [
       "Click 'Edit Assumptions' to modify working capital ratios (A/R %, A/P %, CapEx % of Revenue).",
-      "The 'Balanced' badge confirms Assets = Liabilities + Equity. If 'Imbalanced' appears, check your assumptions.",
+      "The 'Balanced' badge confirms Assets = Liabilities + Equity. If 'Imbalanced' appears, see the troubleshooting steps below.",
       "Review the chart tab for a visual breakdown of current vs. long-term assets, liabilities, and equity over time.",
       "A/R % affects how much cash is tied up in receivables. A/P % affects supplier payment timing. CapEx % drives long-term asset growth.",
     ],
+    troubleshooting: {
+      title: "Troubleshooting: Balance Sheet Imbalance",
+      what: "An 'Imbalanced' badge means the fundamental accounting equation (Assets = Liabilities + Equity) is not holding. The gap between the two sides tells you something in the model needs attention.",
+      howToDiagnose: [
+        "Compare Total Assets to Total Liabilities + Total Equity at the bottom of each year's column. The side that looks too high (or too low) narrows down where the issue is.",
+        "Check which years are imbalanced. If only projected years are off but historical years are fine, the issue is likely in your growth or working capital assumptions.",
+        "Look at Retained Earnings under Equity. If it's zero or looks wrong, the Income Statement hasn't cascaded properly -- recalculate first.",
+        "Check whether A/R or Inventory are growing faster than Revenue. If A/R % is set very high, assets will outpace liabilities.",
+      ],
+      commonCauses: [
+        "Income Statement not completed yet -- Retained Earnings (which sits in Equity) comes from cumulative Net Income. Without a complete P&L, Equity will be understated.",
+        "Missing or zero Revenue -- Working capital items are calculated as a % of Revenue. If Revenue is empty, assets and liabilities will be zero but other items may not be.",
+        "Inconsistent working capital ratios -- Very high A/R % (assets side) with very low A/P % (liabilities side) creates a structural gap.",
+        "CapEx growing assets without corresponding debt or equity financing -- If CapEx % is high but there's no debt to fund it, assets grow faster than the other side.",
+      ],
+      fixSteps: [
+        "Complete the Income Statement first (set COGS %, SG&A %, R&D %, G&A %, Tax Rate) so Net Income and Retained Earnings flow correctly.",
+        "Run 'Save & Recalculate' to cascade the latest numbers from Revenue through Income Statement into the Balance Sheet.",
+        "Review your working capital ratios for reasonableness: A/R 8-15%, A/P 5-10%, CapEx 3-8% are typical for most companies.",
+        "If the imbalance persists, try zeroing out all assumptions, recalculating, then re-entering them one at a time to isolate which input causes the gap.",
+      ],
+    },
     tips: "High A/R % with low A/P % means the company is extending credit to customers but paying suppliers quickly -- this strains cash flow. Consider if the business model supports this.",
     cascadeInfo: "Derived from Revenue & Income Statement. Changes cascade to Cash Flow, DCF, and Valuation.",
   },
@@ -244,7 +267,7 @@ const requiredInputs = [
     path: "/balance-sheet",
     critical: ["Working capital ratios: Accounts Receivable %, Accounts Payable %, CapEx %"],
     optional: [],
-    downstream: "CapEx flows into Cash Flow Statement. Working capital changes affect Operating Cash Flow.",
+    downstream: "CapEx flows into Cash Flow Statement. Working capital changes affect Operating Cash Flow. If the 'Imbalanced' badge appears, ensure the Income Statement is complete (so Retained Earnings populate Equity) and that working capital ratios are reasonable (A/R 8-15%, A/P 5-10%, CapEx 3-8%). See the Balance Sheet section in Page-by-Page Breakdown for full troubleshooting steps.",
   },
   {
     page: "Cash Flow",
@@ -346,7 +369,7 @@ const walkthroughSteps = [
       "Click \"Save & Recalculate.\"",
     ],
     result: "The balance sheet builds out with Total Assets, Total Liabilities, and Total Equity. The \"Balanced\" badge should appear, confirming the accounting identity holds. A/R grows with revenue, reflecting the capital tied up in receivables.",
-    whatToLookFor: "Verify the balance sheet shows \"Balanced.\" If it shows \"Imbalanced,\" revisit your assumptions. Check that CapEx at 5% is reasonable -- too high means the company is capital-intensive (unusual for SaaS); too low may understate investment needs.",
+    whatToLookFor: "Verify the balance sheet shows \"Balanced.\" If it shows \"Imbalanced,\" here's how to diagnose: (1) Compare Total Assets vs. Total Liabilities + Total Equity for each year -- the side that's too high tells you where the gap is. (2) Check Retained Earnings under Equity -- if it's zero, your Income Statement hasn't cascaded yet; go back and recalculate. (3) Review whether A/R % is set much higher than A/P % -- this inflates assets relative to liabilities. (4) Check that CapEx at 5% is reasonable -- too high means the company is capital-intensive (unusual for SaaS); too low may understate investment needs. If you can't find the cause, try zeroing out all assumptions, recalculating, then re-entering them one at a time.",
   },
   {
     step: 5,
@@ -813,6 +836,43 @@ export default function AnalysisGuide() {
                           ))}
                         </ul>
                       </div>
+
+                      {"troubleshooting" in section && section.troubleshooting && (
+                        <div className="space-y-3 p-3 rounded-md border border-yellow-500/30 bg-yellow-500/5" data-testid="section-bs-troubleshooting">
+                          <h4 className="text-sm font-medium flex items-center gap-1.5">
+                            <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
+                            {(section.troubleshooting as any).title}
+                          </h4>
+                          <p className="text-sm text-muted-foreground">{(section.troubleshooting as any).what}</p>
+
+                          <div>
+                            <h5 className="text-xs font-medium mb-1">How to Identify the Cause</h5>
+                            <ol className="space-y-1 ml-4">
+                              {((section.troubleshooting as any).howToDiagnose as string[]).map((item: string, i: number) => (
+                                <li key={i} className="text-sm text-muted-foreground">{i + 1}. {item}</li>
+                              ))}
+                            </ol>
+                          </div>
+
+                          <div>
+                            <h5 className="text-xs font-medium mb-1">Common Causes</h5>
+                            <ul className="space-y-1 ml-4">
+                              {((section.troubleshooting as any).commonCauses as string[]).map((item: string, i: number) => (
+                                <li key={i} className="text-sm text-muted-foreground">{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          <div>
+                            <h5 className="text-xs font-medium mb-1">Steps to Fix</h5>
+                            <ol className="space-y-1 ml-4">
+                              {((section.troubleshooting as any).fixSteps as string[]).map((item: string, i: number) => (
+                                <li key={i} className="text-sm text-muted-foreground">{i + 1}. {item}</li>
+                              ))}
+                            </ol>
+                          </div>
+                        </div>
+                      )}
 
                       {section.cascadeInfo && (
                         <div className="flex items-start gap-2 p-2 rounded-md bg-muted/50">
