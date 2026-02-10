@@ -21,7 +21,7 @@ export default function DcfValuationPage() {
 
   const { selectedModel: model, isLoading } = useModel();
 
-  const { data: dcfData } = useQuery<DcfValuation[]>({
+  const { data: dcfData } = useQuery<DcfValuation | null>({
     queryKey: ["/api/models", model?.id, "dcf"],
     enabled: !!model,
   });
@@ -33,7 +33,7 @@ export default function DcfValuationPage() {
 
   const recalcMutation = useMutation({
     mutationFn: async () => {
-      if (Object.keys(editedDcf).length > 0 && dcfData?.[0]) {
+      if (Object.keys(editedDcf).length > 0 && dcfData) {
         await apiRequest("PATCH", `/api/models/${model!.id}/dcf-params`, editedDcf);
       }
       await apiRequest("POST", `/api/models/${model!.id}/recalculate`);
@@ -54,7 +54,7 @@ export default function DcfValuationPage() {
   if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
   if (!model) return <div className="p-4 text-muted-foreground">Select a company from the sidebar to begin.</div>;
 
-  const dcf = dcfData?.[0];
+  const dcf = dcfData;
   const annualCF = cfData?.filter(d => !d.quarter).sort((a, b) => a.year - b.year) || [];
 
   const getDcfVal = (key: string): number => {
