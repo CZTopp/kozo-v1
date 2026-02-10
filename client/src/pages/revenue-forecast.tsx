@@ -146,8 +146,9 @@ export default function RevenueForecast() {
       queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "dcf"] });
       queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "valuation-comparison"] });
       queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "assumptions"] });
-      const yrs = data?.forecastedYears?.join(", ") || "future years";
-      toast({ title: "Forecast projected", description: `Revenue projected for ${yrs}. All financial statements updated.` });
+      const yrs = data?.forecastedYears?.join(", ") || "missing quarters";
+      const count = data?.periodsCreated || 0;
+      toast({ title: "Projections complete", description: `Filled ${count} quarter(s) across ${yrs}. All financial statements updated.` });
     },
     onError: (err: Error) => {
       toast({ title: "Forecast failed", description: err.message, variant: "destructive" });
@@ -196,15 +197,21 @@ export default function RevenueForecast() {
 
   const visibleLineItems = lineItems?.filter(li => !pendingDeletes.has(li.id)) || [];
 
-  const hasEmptyFutureYears = (() => {
+  const hasGapsToForecast = (() => {
     if (!periods || !lineItems || lineItems.length === 0) return false;
-    const yearsWithData = years.filter(yr =>
-      periods.some(p => p.year === yr && (p.amount || 0) > 0)
-    );
-    const yearsWithoutData = years.filter(yr =>
-      !periods.some(p => p.year === yr && (p.amount || 0) > 0)
-    );
-    return yearsWithData.length > 0 && yearsWithoutData.length > 0;
+    const hasAnyData = periods.some(p => (p.amount || 0) > 0);
+    if (!hasAnyData) return false;
+    for (const li of visibleLineItems) {
+      const streamHasData = periods.some(p => p.lineItemId === li.id && (p.amount || 0) > 0);
+      if (!streamHasData) continue;
+      for (const yr of years) {
+        for (let q = 1; q <= 4; q++) {
+          const p = periods.find(p => p.lineItemId === li.id && p.year === yr && p.quarter === q);
+          if (!p || (p.amount || 0) === 0) return true;
+        }
+      }
+    }
+    return false;
   })();
 
   const getTotalRevenue = (year: number) => {
@@ -367,7 +374,7 @@ export default function RevenueForecast() {
             </>
           ) : (
             <>
-              {hasEmptyFutureYears && (
+              {hasGapsToForecast && (
                 <Button
                   variant="default"
                   onClick={() => forecastMutation.mutate()}

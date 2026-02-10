@@ -337,17 +337,33 @@ export async function forecastForward(modelId: string) {
   const periods = await db.select().from(revenuePeriods).where(eq(revenuePeriods.modelId, modelId));
   const allYears = Array.from({ length: model.endYear - model.startYear + 1 }, (_, i) => model.startYear + i);
 
-  const yearHasData = (year: number): boolean => {
-    return periods.some(p => p.year === year && (p.amount || 0) > 0);
+  const hasAnyData = periods.some(p => (p.amount || 0) > 0);
+  if (!hasAnyData) throw new Error("No existing revenue data to base projections on. Enter revenue for at least one year first.");
+
+  const getAmount = (liId: string, year: number, quarter: number): number => {
+    const p = periods.find(p => p.lineItemId === liId && p.year === year && p.quarter === quarter);
+    return p ? (p.amount || 0) : 0;
   };
 
-  const yearsWithData = allYears.filter(yearHasData);
-  const yearsWithoutData = allYears.filter(y => !yearHasData(y));
+  const emptySlots: Array<{ liId: string; year: number; quarter: number }> = [];
+  for (const li of lineItems) {
+    for (const yr of allYears) {
+      for (let q = 1; q <= 4; q++) {
+        if (getAmount(li.id, yr, q) === 0) {
+          emptySlots.push({ liId: li.id, year: yr, quarter: q });
+        }
+      }
+    }
+  }
 
-  if (yearsWithData.length === 0) throw new Error("No existing revenue data to base projections on. Enter revenue for at least one year first.");
-  if (yearsWithoutData.length === 0) throw new Error("All years already have revenue data. Nothing to forecast.");
+  const fillableSlots = emptySlots.filter(slot => {
+    const streamHasDataElsewhere = periods.some(
+      p => p.lineItemId === slot.liId && (p.amount || 0) > 0
+    );
+    return streamHasDataElsewhere;
+  });
 
-  const lastDataYear = Math.max(...yearsWithData);
+  if (fillableSlots.length === 0) throw new Error("All quarters already have revenue data. Nothing to forecast.");
 
   const newPeriods: Array<{
     lineItemId: string;
@@ -358,19 +374,25 @@ export async function forecastForward(modelId: string) {
     isActual: boolean;
   }> = [];
 
+  const projectedAmounts = new Map<string, number>();
+  const key = (liId: string, yr: number, q: number) => `${liId}:${yr}:${q}`;
+
   for (const li of lineItems) {
+    const streamPeriods = periods.filter(p => p.lineItemId === li.id && (p.amount || 0) > 0);
+    if (streamPeriods.length === 0) continue;
+
     for (let q = 1; q <= 4; q++) {
       const quarterValues: Array<{ year: number; amount: number }> = [];
-      for (const yr of yearsWithData) {
-        const p = periods.find(p => p.lineItemId === li.id && p.year === yr && p.quarter === q);
-        if (p && (p.amount || 0) > 0) {
-          quarterValues.push({ year: yr, amount: p.amount || 0 });
+      for (const yr of allYears) {
+        const amt = getAmount(li.id, yr, q);
+        if (amt > 0) {
+          quarterValues.push({ year: yr, amount: amt });
         }
       }
 
       let growthRate = 0.05;
       if (quarterValues.length >= 2) {
-        const sorted = quarterValues.sort((a, b) => a.year - b.year);
+        const sorted = [...quarterValues].sort((a, b) => a.year - b.year);
         const rates: number[] = [];
         for (let i = 1; i < sorted.length; i++) {
           if (sorted[i - 1].amount > 0) {
@@ -383,29 +405,58 @@ export async function forecastForward(modelId: string) {
         }
       }
 
-      const baseAmount = quarterValues.length > 0
-        ? quarterValues.sort((a, b) => b.year - a.year)[0].amount
-        : 0;
+      const emptyYearsForThisQuarter = allYears
+        .filter(yr => getAmount(li.id, yr, q) === 0)
+        .sort((a, b) => a - b);
 
-      const emptyFutureYears = yearsWithoutData.filter(y => y > lastDataYear).sort((a, b) => a - b);
-      let projectedAmount = baseAmount;
-      for (const yr of emptyFutureYears) {
-        projectedAmount = Math.round(projectedAmount * (1 + growthRate));
+      for (const emptyYear of emptyYearsForThisQuarter) {
+        let projected = 0;
 
-        const existingPeriod = periods.find(p => p.lineItemId === li.id && p.year === yr && p.quarter === q);
-        if (!existingPeriod || (existingPeriod.amount || 0) === 0) {
+        const priorYearsWithData = quarterValues
+          .filter(v => v.year < emptyYear)
+          .sort((a, b) => b.year - a.year);
+        const laterYearsWithData = quarterValues
+          .filter(v => v.year > emptyYear)
+          .sort((a, b) => a.year - b.year);
+
+        if (priorYearsWithData.length > 0 && laterYearsWithData.length > 0) {
+          const before = priorYearsWithData[0];
+          const after = laterYearsWithData[0];
+          const span = after.year - before.year;
+          const position = emptyYear - before.year;
+          const fraction = position / span;
+          projected = Math.round(before.amount + (after.amount - before.amount) * fraction);
+        } else if (priorYearsWithData.length > 0) {
+          const nearest = priorYearsWithData[0];
+          const yearsAhead = emptyYear - nearest.year;
+          const alreadyProjected = projectedAmounts.get(key(li.id, emptyYear - 1, q));
+          const baseAmount = alreadyProjected !== undefined ? alreadyProjected : nearest.amount;
+          const yearsToProject = alreadyProjected !== undefined ? 1 : yearsAhead;
+          projected = Math.round(baseAmount * Math.pow(1 + growthRate, yearsToProject));
+        } else if (laterYearsWithData.length > 0) {
+          const nearest = laterYearsWithData[0];
+          const yearsBehind = nearest.year - emptyYear;
+          projected = Math.round(nearest.amount / Math.pow(1 + growthRate, yearsBehind));
+        }
+
+        projected = Math.max(0, projected);
+        projectedAmounts.set(key(li.id, emptyYear, q), projected);
+
+        if (projected > 0) {
           newPeriods.push({
             lineItemId: li.id,
             modelId,
-            year: yr,
+            year: emptyYear,
             quarter: q,
-            amount: Math.max(0, projectedAmount),
+            amount: projected,
             isActual: false,
           });
         }
       }
     }
   }
+
+  if (newPeriods.length === 0) throw new Error("Could not generate any projections. Ensure at least one revenue stream has data.");
 
   for (const np of newPeriods) {
     const existing = periods.find(p =>
@@ -422,8 +473,9 @@ export async function forecastForward(modelId: string) {
 
   const recalcResult = await recalculateModel(modelId);
 
+  const filledYears = [...new Set(newPeriods.map(p => p.year))].sort();
   return {
-    forecastedYears: [...new Set(newPeriods.map(p => p.year))].sort(),
+    forecastedYears: filledYears,
     periodsCreated: newPeriods.length,
     growthApplied: true,
     ...recalcResult,
