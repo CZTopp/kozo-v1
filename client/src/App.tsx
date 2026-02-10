@@ -19,6 +19,7 @@ import ValuationComparison from "@/pages/valuation-comparison";
 import Portfolio from "@/pages/portfolio";
 import MarketDataPage from "@/pages/market-data";
 import AnalysisGuide from "@/pages/analysis-guide";
+import CompanyChart from "@/pages/company-chart";
 
 function Router() {
   return (
@@ -32,6 +33,7 @@ function Router() {
       <Route path="/valuation" component={ValuationComparison} />
       <Route path="/portfolio" component={Portfolio} />
       <Route path="/market-data" component={MarketDataPage} />
+      <Route path="/chart" component={CompanyChart} />
       <Route path="/guide" component={AnalysisGuide} />
       <Route component={NotFound} />
     </Switch>

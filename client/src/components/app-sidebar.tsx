@@ -17,6 +17,7 @@ import {
   Building2,
   Check,
   BookOpen,
+  LineChart,
 } from "lucide-react";
 import {
   Sidebar,
@@ -68,6 +69,7 @@ const modelingItems = [
   { title: "Cash Flow", url: "/cash-flow", icon: Wallet },
   { title: "DCF Valuation", url: "/dcf", icon: Calculator },
   { title: "Valuation Compare", url: "/valuation", icon: Scale },
+  { title: "Company Chart", url: "/chart", icon: LineChart },
 ];
 
 const portfolioItems = [

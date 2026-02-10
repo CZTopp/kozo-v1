@@ -4,6 +4,8 @@
 Comprehensive financial modeling and valuation application covering 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. Market indices pull live data from Yahoo Finance; macro indicators pull live data from FRED API.
 
 ## Recent Changes
+- 2026-02-10: Company Chart page (/chart) - embedded TradingView interactive chart with ticker search, quick-access buttons, theme-aware widget, pre-loaded MA50/MA200
+- 2026-02-10: Analysis Guide updated - table of contents with jump navigation (desktop sidebar + mobile badges), Company Chart section added to page breakdown, walkthrough expanded to 11 steps with chart step
 - 2026-02-10: Live portfolio price refresh - POST /api/refresh-portfolio-prices fetches live Yahoo Finance quotes for all portfolio positions (price, P/E, beta, MA50/200, 52W range, volume, market cap, EPS, dividend yield), recalculates P&L and golden cross signals
 - 2026-02-10: Editable market data - users can add/remove market indices (any Yahoo Finance symbol) and FRED macro indicators (any series ID) via Add/Remove buttons on Market Data page
 - 2026-02-10: New API endpoints: POST /api/market-indices/add-custom, DELETE /api/market-indices/:id, POST /api/macro-indicators/add-custom, DELETE /api/macro-indicators/:id
@@ -68,11 +70,11 @@ Comprehensive financial modeling and valuation application covering 10 core modu
 - `server/storage.ts` - DatabaseStorage class (IStorage interface)
 - `server/recalculate.ts` - Cascading recalculation engine (Revenue → IS → BS → CF → DCF → Valuation)
 - `server/seed.ts` - Comprehensive demo data seeder (5 years financial data, 15 stocks, 16 macro, 12 indices)
-- `client/src/App.tsx` - Main app with sidebar layout, 9 routes, ModelProvider wrapping
+- `client/src/App.tsx` - Main app with sidebar layout, 10 routes, ModelProvider wrapping
 - `client/src/lib/model-context.tsx` - ModelContext provider for multi-company support (selected model ID, localStorage persistence)
 - `client/src/components/app-sidebar.tsx` - Navigation sidebar with company selector dropdown, create/delete company dialogs
 
-### Frontend Pages (9 total)
+### Frontend Pages (10 total)
 - `dashboard.tsx` - Financial overview, portfolio KPIs, sector allocation, macro data, top movers
 - `revenue-forecast.tsx` - Revenue streams table, quarterly breakdown, growth rates, charts
 - `income-statement.tsx` - Full P&L table with margins, YoY growth, margin analysis chart
@@ -80,6 +82,7 @@ Comprehensive financial modeling and valuation application covering 10 core modu
 - `cash-flow.tsx` - Operating/investing/financing flows, FCF trend chart
 - `dcf-valuation.tsx` - WACC calculation panel, DCF results, 5x5 sensitivity table
 - `valuation-comparison.tsx` - P/R, P/E, DCF methods with bull/base/bear scenarios
+- `company-chart.tsx` - Embedded TradingView interactive chart with ticker search, quick symbols, theme-aware
 - `portfolio.tsx` - 15 positions table, analytics, risk/red flags, macro/indices tabs
 - `market-data.tsx` - Global indices tables, macro indicators by category, YTD performance chart
 

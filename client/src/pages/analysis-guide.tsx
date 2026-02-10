@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,10 +20,13 @@ import {
   BookOpen,
   Building2,
   CheckCircle2,
+  LineChart,
+  List,
 } from "lucide-react";
 
 const sections = [
   {
+    id: "dashboard",
     title: "Dashboard",
     icon: LayoutDashboard,
     path: "/",
@@ -40,6 +44,7 @@ const sections = [
     cascadeInfo: null,
   },
   {
+    id: "revenue-forecast",
     title: "Revenue Forecast",
     icon: DollarSign,
     path: "/revenue",
@@ -58,6 +63,7 @@ const sections = [
     cascadeInfo: "Revenue is the top of the cascade. Changes here flow downstream to all other financial statements.",
   },
   {
+    id: "income-statement",
     title: "Income Statement (P&L)",
     icon: FileSpreadsheet,
     path: "/income-statement",
@@ -74,6 +80,7 @@ const sections = [
     cascadeInfo: "Derived from Revenue. Changes cascade to Balance Sheet, Cash Flow, DCF, and Valuation.",
   },
   {
+    id: "balance-sheet",
     title: "Balance Sheet",
     icon: BarChart3,
     path: "/balance-sheet",
@@ -89,6 +96,7 @@ const sections = [
     cascadeInfo: "Derived from Revenue & Income Statement. Changes cascade to Cash Flow, DCF, and Valuation.",
   },
   {
+    id: "cash-flow",
     title: "Cash Flow Statement",
     icon: Wallet,
     path: "/cash-flow",
@@ -106,6 +114,7 @@ const sections = [
     cascadeInfo: "Auto-derived from Income Statement & Balance Sheet. FCF feeds directly into DCF Valuation.",
   },
   {
+    id: "dcf-valuation",
     title: "DCF Valuation",
     icon: Calculator,
     path: "/dcf",
@@ -126,6 +135,7 @@ const sections = [
     cascadeInfo: "Uses FCF from Cash Flow Statement. Target price feeds into Valuation Comparison.",
   },
   {
+    id: "valuation-comparison",
     title: "Valuation Comparison",
     icon: Scale,
     path: "/valuation",
@@ -145,6 +155,26 @@ const sections = [
     cascadeInfo: "This is the final output. It pulls from Revenue (P/R), Earnings (PEG), and DCF. Edit upstream inputs to see how valuations change.",
   },
   {
+    id: "company-chart",
+    title: "Company Chart",
+    icon: LineChart,
+    path: "/chart",
+    purpose: "Interactive TradingView chart for any publicly traded stock. Provides price context for your valuation analysis with professional-grade charting tools, technical indicators, and multiple timeframes.",
+    keyMetrics: ["Price History", "Moving Averages (50 & 200 day)", "Volume", "Technical Indicators (RSI, MACD, Bollinger Bands)"],
+    howToUse: [
+      "Enter any ticker symbol in the search bar and press Enter or click 'Load Chart' to display the interactive chart.",
+      "Use the quick-access buttons to jump directly to major indices (S&P 500, Nasdaq) or popular stocks (AAPL, MSFT, GOOGL, etc.).",
+      "The chart comes pre-loaded with 50-day and 200-day moving averages -- the same MA signals tracked in your Portfolio page.",
+      "Use TradingView's built-in toolbar to add technical indicators like RSI, MACD, Bollinger Bands, and volume profiles.",
+      "Draw trendlines, support/resistance levels, and Fibonacci retracements directly on the chart.",
+      "Switch between timeframes (1D, 1W, 1M, etc.) using the interval selector in the TradingView toolbar.",
+      "Compare the stock's current trading range against your DCF target price to assess the margin of safety.",
+    ],
+    tips: "Use the chart to gut-check your valuation. If your DCF target is $60 but the stock has never traded above $45, investigate what catalyst would drive that re-rating. Check for golden cross (50-day MA crossing above 200-day MA) as a bullish entry signal, or death cross as a warning sign.",
+    cascadeInfo: null,
+  },
+  {
+    id: "portfolio-dashboard",
     title: "Portfolio Dashboard",
     icon: Briefcase,
     path: "/portfolio",
@@ -155,6 +185,7 @@ const sections = [
       "Analytics tab: Sector allocation pie chart, position P&L bar chart, top gainers, and worst performers.",
       "Risk & Flags tab: Red flag checklist for risk assessment, golden/death cross signals, positions near stop-loss levels, and beta exposure chart.",
       "Macro & Indices tab: US and international market indices, and a comprehensive macro indicator dashboard.",
+      "Click 'Refresh Prices' to fetch live stock quotes from Yahoo Finance for all positions -- updates prices, P/E, beta, moving averages, 52-week range, and recalculates P&L.",
       "Look for Golden Cross signals (MA50 > MA200) as bullish indicators and Death Cross as bearish.",
       "Monitor positions approaching stop-loss levels for potential exit decisions.",
     ],
@@ -162,6 +193,7 @@ const sections = [
     cascadeInfo: null,
   },
   {
+    id: "market-data",
     title: "Market Data & Macro",
     icon: TrendingUp,
     path: "/market-data",
@@ -171,6 +203,9 @@ const sections = [
       "Global Indices tab: Compare US indices (S&P 500, Dow, Nasdaq, Russell) and international benchmarks (FTSE, DAX, Nikkei, etc.).",
       "Macro Indicators tab: Five categories of economic data -- Interest Rates, Inflation, Growth, Labor Market, and Commodities.",
       "Index Performance tab: Visual bar chart ranking all indices by YTD return for quick relative comparison.",
+      "Click 'Refresh Live Data' to pull the latest quotes from Yahoo Finance and FRED API.",
+      "Use 'Add Index' to track any custom Yahoo Finance symbol (e.g., BTC-USD for Bitcoin).",
+      "Use 'Add Indicator' to track any FRED series ID (e.g., UNRATE for unemployment rate).",
       "Use interest rate data to validate your DCF discount rate assumptions.",
       "Monitor inflation trends to assess real vs. nominal return expectations.",
     ],
@@ -186,6 +221,7 @@ const workflowSteps = [
   { step: 4, title: "Review Cash Flows", page: "Cash Flow", description: "Verify auto-calculated operating, investing, and financing cash flows. Ensure FCF is reasonable." },
   { step: 5, title: "Run DCF Analysis", page: "DCF Valuation", description: "Set WACC parameters and review the discounted cash flow target price and sensitivity analysis." },
   { step: 6, title: "Compare Valuations", page: "Valuation Comparison", description: "Review the final output comparing P/R, PEG, and DCF target prices across bull/base/bear scenarios." },
+  { step: 7, title: "Check the Chart", page: "Company Chart", description: "Pull up the company's stock chart on TradingView to visually compare your target price against historical trading range and technical signals." },
 ];
 
 const requiredInputs = [
@@ -223,6 +259,13 @@ const requiredInputs = [
     critical: ["Current Share Price", "Risk-Free Rate", "Beta", "Market Return"],
     optional: ["Cost of Debt", "Equity/Debt Weights", "Long-Term Growth Rate", "Total Debt"],
     downstream: "Produces the DCF target price. Without a current share price, upside/downside cannot be calculated.",
+  },
+  {
+    page: "Company Chart",
+    path: "/chart",
+    critical: [],
+    optional: ["Ticker symbol of the company being analyzed"],
+    downstream: "No inputs needed for the model. This is a visual reference tool for price context and technical analysis.",
   },
   {
     page: "Valuation Comparison",
@@ -344,6 +387,24 @@ const walkthroughSteps = [
   },
   {
     step: 7,
+    title: "Check the Price Chart",
+    page: "Company Chart",
+    icon: LineChart,
+    scenario: "Before finalizing your valuation, pull up CloudSync's stock chart to see where the market is pricing it relative to your model.",
+    actions: [
+      "Navigate to the Company Chart page.",
+      "Type \"CSYN\" in the ticker search bar and press Enter (for a real company, enter its actual ticker).",
+      "Examine the price history. Has the stock been trending up, down, or sideways? This tells you about market sentiment.",
+      "Check the 50-day and 200-day moving averages (pre-loaded on the chart). A golden cross (50 above 200) is bullish; a death cross is bearish.",
+      "Your DCF target is approximately $51. Look at the chart's price range -- has the stock ever traded near $51? If so, the market has valued it there before, increasing conviction. If not, identify what catalyst would drive re-rating.",
+      "Add additional indicators using TradingView's toolbar -- RSI can show if the stock is overbought/oversold, MACD confirms momentum direction.",
+      "Draw support and resistance lines to identify key entry and exit price levels.",
+    ],
+    result: "You now have visual context for your valuation. You can see whether the stock is trading at a discount to your target (potential buy), near your target (hold), or above it (potential sell). Technical indicators help time the entry.",
+    whatToLookFor: "Compare the stock's 52-week range against your bull/base/bear target prices. If your bear case ($35) is below the 52-week low, your downside scenario may be too aggressive. If your bull case ($66) significantly exceeds the all-time high, consider what fundamental change justifies that premium.",
+  },
+  {
+    step: 8,
     title: "Compare All Valuation Methods",
     page: "Valuation Comparison",
     icon: Scale,
@@ -362,7 +423,7 @@ const walkthroughSteps = [
     whatToLookFor: "If the three methods produce wildly different targets, it signals model uncertainty. Large divergence usually means one assumption (revenue multiple, growth rate, or WACC) is significantly different from the others. Revisit the outlier method's assumptions.",
   },
   {
-    step: 8,
+    step: 9,
     title: "Add to Your Portfolio & Monitor",
     page: "Portfolio Dashboard",
     icon: Briefcase,
@@ -388,7 +449,7 @@ const walkthroughSteps = [
     whatToLookFor: "After adding, check that portfolio concentration risk hasn't spiked. If Technology already represents 40%+ of your portfolio, adding CSYN increases sector-specific risk. Also verify your weighted portfolio beta hasn't exceeded your risk tolerance.",
   },
   {
-    step: 9,
+    step: 10,
     title: "Cross-Check with Market Context",
     page: "Market Data & Macro",
     icon: TrendingUp,
@@ -405,7 +466,7 @@ const walkthroughSteps = [
     whatToLookFor: "If rates have risen significantly since you last updated your model, go back to the DCF page and adjust your risk-free rate. A 50bp increase in the risk-free rate raises WACC and can reduce your target price by 10-15%.",
   },
   {
-    step: 10,
+    step: 11,
     title: "Iterate and Refine",
     page: "All Pages",
     icon: CheckCircle2,
@@ -416,6 +477,7 @@ const walkthroughSteps = [
       "If margins improved, update your cost assumptions on the Income Statement page.",
       "After every update, click \"Save & Recalculate\" to cascade changes through the entire model.",
       "Review the DCF target price -- has it moved materially? If the target dropped below $42, your investment thesis may be weakening.",
+      "Check the Company Chart page to see how the market reacted to earnings -- did the price move toward or away from your target?",
       "Check your portfolio position -- if CSYN has appreciated to $50, update the current price in your portfolio to see updated P&L and portfolio metrics.",
       "Periodically review the Sensitivity Analysis table on the DCF page to understand your margin of safety at the current price.",
     ],
@@ -424,234 +486,351 @@ const walkthroughSteps = [
   },
 ];
 
+const tocItems = [
+  { id: "toc-cascade", label: "How the Cascade Works" },
+  { id: "toc-workflow", label: "Recommended Workflow" },
+  { id: "toc-required-inputs", label: "Required Inputs Reference" },
+  { id: "toc-walkthrough", label: "Walkthrough: CloudSync Corp" },
+  { id: "toc-pages", label: "Page-by-Page Breakdown" },
+  ...sections.map((s) => ({ id: `toc-page-${s.id}`, label: `  ${s.title}` })),
+];
+
 export default function AnalysisGuide() {
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  useEffect(() => {
+    const headings = tocItems
+      .map((item) => document.getElementById(item.id))
+      .filter(Boolean) as HTMLElement[];
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting);
+        if (visible.length > 0) {
+          setActiveSection(visible[0].target.id);
+        }
+      },
+      { rootMargin: "-80px 0px -60% 0px", threshold: 0.1 }
+    );
+
+    headings.forEach((h) => observerRef.current?.observe(h));
+    return () => observerRef.current?.disconnect();
+  }, []);
+
+  const scrollTo = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   return (
-    <div className="p-4 space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">Analysis Guide</h1>
-        <p className="text-sm text-muted-foreground">Learn how to use each page to build and analyze your financial model</p>
-      </div>
-
-      <Card data-testid="card-cascade-overview">
-        <CardHeader>
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Zap className="h-4 w-4" />
-            How the Cascading Model Works
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            This application works like an Excel workbook with linked sheets. When you change an input on one page, all downstream pages automatically recalculate. The cascade flows in this order:
-          </p>
-          <div className="flex flex-wrap items-center gap-1 text-sm">
-            <Badge>Revenue</Badge>
-            <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            <Badge variant="secondary">Income Statement</Badge>
-            <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            <Badge variant="secondary">Balance Sheet</Badge>
-            <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            <Badge variant="secondary">Cash Flow</Badge>
-            <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            <Badge variant="secondary">DCF</Badge>
-            <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            <Badge variant="outline">Valuation</Badge>
+    <div className="p-4 max-w-5xl mx-auto">
+      <div className="flex gap-6">
+        <div className="hidden lg:block w-56 shrink-0">
+          <div className="sticky top-16">
+            <Card data-testid="card-table-of-contents">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-medium flex items-center gap-1.5">
+                  <List className="h-3.5 w-3.5" />
+                  Contents
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-2">
+                <nav className="space-y-0.5">
+                  {tocItems.map((item) => {
+                    const isSubItem = item.label.startsWith("  ");
+                    const isActive = activeSection === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => scrollTo(item.id)}
+                        className={`block w-full text-left py-1 px-2 rounded-md text-xs transition-colors ${
+                          isSubItem ? "pl-4" : "font-medium"
+                        } ${
+                          isActive
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover-elevate"
+                        }`}
+                        data-testid={`toc-link-${item.id}`}
+                      >
+                        {item.label.trim()}
+                      </button>
+                    );
+                  })}
+                </nav>
+              </CardContent>
+            </Card>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Revenue is the foundation. Cost assumptions on the Income Statement page determine profitability. Working capital and CapEx assumptions on the Balance Sheet page drive cash flow generation. Free Cash Flow feeds the DCF valuation, and all methods combine in the final Valuation Comparison.
-          </p>
-        </CardContent>
-      </Card>
+        </div>
 
-      <Card data-testid="card-recommended-workflow">
-        <CardHeader>
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Settings2 className="h-4 w-4" />
-            Recommended Workflow
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {workflowSteps.map((ws) => (
-              <div key={ws.step} className="flex items-start gap-3" data-testid={`workflow-step-${ws.step}`}>
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
-                  {ws.step}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium">{ws.title}</span>
-                    <Badge variant="outline" className="text-xs">{ws.page}</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">{ws.description}</p>
-                </div>
-              </div>
-            ))}
+        <div className="flex-1 min-w-0 space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold" data-testid="text-page-title">Analysis Guide</h1>
+            <p className="text-sm text-muted-foreground">Learn how to use each page to build and analyze your financial model</p>
           </div>
-        </CardContent>
-      </Card>
 
-      <Card data-testid="section-required-inputs">
-        <CardHeader>
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <ClipboardCheck className="h-4 w-4" />
-            Required Inputs Reference
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Quick reference for what each page needs as input and how it affects downstream calculations.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {requiredInputs.map((item) => {
-            const slug = item.page.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-            return (
-              <Card key={item.page} data-testid={`card-required-${slug}`}>
-                <CardHeader>
-                  <CardTitle className="text-sm font-medium">
-                    <Link href={item.path} className="underline" data-testid={`link-required-${slug}`}>
-                      {item.page}
-                    </Link>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {item.critical.length === 0 && item.optional.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No inputs needed -- this page is fully auto-derived</p>
-                  ) : (
-                    <>
-                      {item.critical.length > 0 && (
-                        <div className="space-y-1">
-                          <Badge variant="destructive">Required</Badge>
-                          <ul className="ml-4 space-y-0.5">
-                            {item.critical.map((c, i) => (
-                              <li key={i} className="text-sm text-muted-foreground">{c}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      {item.optional.length > 0 && (
-                        <div className="space-y-1">
-                          <Badge variant="secondary">Optional</Badge>
-                          <ul className="ml-4 space-y-0.5">
-                            {item.optional.map((o, i) => (
-                              <li key={i} className="text-sm text-muted-foreground">{o}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  <p className="text-sm text-muted-foreground">{item.downstream}</p>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </CardContent>
-      </Card>
-
-      <Card data-testid="card-walkthrough">
-        <CardHeader>
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <BookOpen className="h-4 w-4" />
-            Complete Walkthrough: Analyzing CloudSync Corp (CSYN)
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Follow this step-by-step example to model a hypothetical B2B SaaS company from scratch -- creating the company, building the revenue forecast, generating financial statements, running a full DCF valuation, and adding it to your portfolio.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {walkthroughSteps.map((ws) => (
-            <div key={ws.step} className="space-y-2" data-testid={`walkthrough-step-${ws.step}`}>
-              <div className="flex items-start gap-3">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
-                  {ws.step}
-                </div>
-                <div className="min-w-0 flex-1 space-y-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-semibold">{ws.title}</span>
-                    <Badge variant="outline" className="text-xs">{ws.page}</Badge>
-                  </div>
-                  <div className="p-2 rounded-md bg-muted/50">
-                    <p className="text-xs text-muted-foreground"><span className="font-medium">Scenario:</span> {ws.scenario}</p>
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-medium text-muted-foreground mb-1">What to Do</h4>
-                    <ul className="space-y-0.5">
-                      {ws.actions.map((action, i) => (
-                        <li key={i} className={`text-sm text-muted-foreground ${action.startsWith("  --") ? "ml-4" : action === "" ? "h-1" : ""}`}>
-                          {action.startsWith("  --") ? action : action === "" ? null : `${i + 1}. ${action}`}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="p-2 rounded-md bg-muted/50">
-                    <p className="text-xs"><span className="font-medium">Result:</span> <span className="text-muted-foreground">{ws.result}</span></p>
-                  </div>
-                  {ws.whatToLookFor && (
-                    <div className="p-2 rounded-md bg-muted/50">
-                      <p className="text-xs"><span className="font-medium">What to Look For:</span> <span className="text-muted-foreground">{ws.whatToLookFor}</span></p>
-                    </div>
-                  )}
-                </div>
-              </div>
-              {ws.step < walkthroughSteps.length && (
-                <div className="flex justify-center">
-                  <ArrowDown className="h-4 w-4 text-muted-foreground" />
-                </div>
-              )}
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold">Page-by-Page Breakdown</h2>
-
-        {sections.map((section) => (
-          <Card key={section.title} data-testid={`card-guide-${section.title.toLowerCase().replace(/[^a-z]/g, "-")}`}>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <section.icon className="h-4 w-4" />
-                {section.title}
-                {section.cascadeInfo && (
-                  <Badge variant="outline" className="text-xs">
-                    <ArrowDown className="h-3 w-3 mr-1" /> Cascade
-                  </Badge>
-                )}
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">{section.purpose}</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <h4 className="text-xs font-medium text-muted-foreground mb-1">Key Metrics</h4>
+          <div className="lg:hidden">
+            <Card data-testid="card-toc-mobile">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-medium flex items-center gap-1.5">
+                  <List className="h-3.5 w-3.5" />
+                  Jump to Section
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-2">
                 <div className="flex flex-wrap gap-1">
-                  {section.keyMetrics.map((m) => (
-                    <Badge key={m} variant="secondary" className="text-xs">{m}</Badge>
+                  {tocItems.filter((t) => !t.label.startsWith("  ")).map((item) => (
+                    <Badge
+                      key={item.id}
+                      variant="secondary"
+                      className="cursor-pointer text-xs"
+                      onClick={() => scrollTo(item.id)}
+                      data-testid={`toc-badge-${item.id}`}
+                    >
+                      {item.label.trim()}
+                    </Badge>
                   ))}
                 </div>
-              </div>
+              </CardContent>
+            </Card>
+          </div>
 
-              <div>
-                <h4 className="text-xs font-medium text-muted-foreground mb-1">How to Use</h4>
-                <ul className="space-y-1">
-                  {section.howToUse.map((item, i) => (
-                    <li key={i} className={`text-sm text-muted-foreground ${item.startsWith("  --") ? "ml-4" : ""}`}>
-                      {item.startsWith("  --") ? item : `${i + 1}. ${item}`}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {section.cascadeInfo && (
-                <div className="flex items-start gap-2 p-2 rounded-md bg-muted/50">
-                  <ArrowDown className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-                  <p className="text-xs text-muted-foreground">{section.cascadeInfo}</p>
+          <div id="toc-cascade">
+            <Card data-testid="card-cascade-overview">
+              <CardHeader>
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Zap className="h-4 w-4" />
+                  How the Cascading Model Works
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  This application works like an Excel workbook with linked sheets. When you change an input on one page, all downstream pages automatically recalculate. The cascade flows in this order:
+                </p>
+                <div className="flex flex-wrap items-center gap-1 text-sm">
+                  <Badge>Revenue</Badge>
+                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                  <Badge variant="secondary">Income Statement</Badge>
+                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                  <Badge variant="secondary">Balance Sheet</Badge>
+                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                  <Badge variant="secondary">Cash Flow</Badge>
+                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                  <Badge variant="secondary">DCF</Badge>
+                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                  <Badge variant="outline">Valuation</Badge>
                 </div>
-              )}
+                <p className="text-sm text-muted-foreground">
+                  Revenue is the foundation. Cost assumptions on the Income Statement page determine profitability. Working capital and CapEx assumptions on the Balance Sheet page drive cash flow generation. Free Cash Flow feeds the DCF valuation, and all methods combine in the final Valuation Comparison.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
-              <div className="p-2 rounded-md bg-muted/50">
-                <p className="text-xs"><span className="font-medium">Tip:</span> <span className="text-muted-foreground">{section.tips}</span></p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+          <div id="toc-workflow">
+            <Card data-testid="card-recommended-workflow">
+              <CardHeader>
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Settings2 className="h-4 w-4" />
+                  Recommended Workflow
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {workflowSteps.map((ws) => (
+                    <div key={ws.step} className="flex items-start gap-3" data-testid={`workflow-step-${ws.step}`}>
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                        {ws.step}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium">{ws.title}</span>
+                          <Badge variant="outline" className="text-xs">{ws.page}</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">{ws.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div id="toc-required-inputs">
+            <Card data-testid="section-required-inputs">
+              <CardHeader>
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <ClipboardCheck className="h-4 w-4" />
+                  Required Inputs Reference
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Quick reference for what each page needs as input and how it affects downstream calculations.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {requiredInputs.map((item) => {
+                  const slug = item.page.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+                  return (
+                    <Card key={item.page} data-testid={`card-required-${slug}`}>
+                      <CardHeader>
+                        <CardTitle className="text-sm font-medium">
+                          <Link href={item.path} className="underline" data-testid={`link-required-${slug}`}>
+                            {item.page}
+                          </Link>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {item.critical.length === 0 && item.optional.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No inputs needed -- this page is fully auto-derived</p>
+                        ) : (
+                          <>
+                            {item.critical.length > 0 && (
+                              <div className="space-y-1">
+                                <Badge variant="destructive">Required</Badge>
+                                <ul className="ml-4 space-y-0.5">
+                                  {item.critical.map((c, i) => (
+                                    <li key={i} className="text-sm text-muted-foreground">{c}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {item.optional.length > 0 && (
+                              <div className="space-y-1">
+                                <Badge variant="secondary">Optional</Badge>
+                                <ul className="ml-4 space-y-0.5">
+                                  {item.optional.map((o, i) => (
+                                    <li key={i} className="text-sm text-muted-foreground">{o}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </>
+                        )}
+                        <p className="text-sm text-muted-foreground">{item.downstream}</p>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div id="toc-walkthrough">
+            <Card data-testid="card-walkthrough">
+              <CardHeader>
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <BookOpen className="h-4 w-4" />
+                  Complete Walkthrough: Analyzing CloudSync Corp (CSYN)
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Follow this step-by-step example to model a hypothetical B2B SaaS company from scratch -- creating the company, building the revenue forecast, generating financial statements, running a full DCF valuation, checking the price chart, and adding it to your portfolio.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {walkthroughSteps.map((ws) => (
+                  <div key={ws.step} className="space-y-2" data-testid={`walkthrough-step-${ws.step}`}>
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                        {ws.step}
+                      </div>
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold">{ws.title}</span>
+                          <Badge variant="outline" className="text-xs">{ws.page}</Badge>
+                        </div>
+                        <div className="p-2 rounded-md bg-muted/50">
+                          <p className="text-xs text-muted-foreground"><span className="font-medium">Scenario:</span> {ws.scenario}</p>
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-medium text-muted-foreground mb-1">What to Do</h4>
+                          <ul className="space-y-0.5">
+                            {ws.actions.map((action, i) => (
+                              <li key={i} className={`text-sm text-muted-foreground ${action.startsWith("  --") ? "ml-4" : action === "" ? "h-1" : ""}`}>
+                                {action.startsWith("  --") ? action : action === "" ? null : `${i + 1}. ${action}`}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="p-2 rounded-md bg-muted/50">
+                          <p className="text-xs"><span className="font-medium">Result:</span> <span className="text-muted-foreground">{ws.result}</span></p>
+                        </div>
+                        {ws.whatToLookFor && (
+                          <div className="p-2 rounded-md bg-muted/50">
+                            <p className="text-xs"><span className="font-medium">What to Look For:</span> <span className="text-muted-foreground">{ws.whatToLookFor}</span></p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {ws.step < walkthroughSteps.length && (
+                      <div className="flex justify-center">
+                        <ArrowDown className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div id="toc-pages">
+            <h2 className="text-lg font-semibold mb-4">Page-by-Page Breakdown</h2>
+
+            <div className="space-y-4">
+              {sections.map((section) => (
+                <div key={section.id} id={`toc-page-${section.id}`}>
+                  <Card data-testid={`card-guide-${section.id}`}>
+                    <CardHeader>
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <section.icon className="h-4 w-4" />
+                        {section.title}
+                        {section.cascadeInfo && (
+                          <Badge variant="outline" className="text-xs">
+                            <ArrowDown className="h-3 w-3 mr-1" /> Cascade
+                          </Badge>
+                        )}
+                      </CardTitle>
+                      <p className="text-sm text-muted-foreground">{section.purpose}</p>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <h4 className="text-xs font-medium text-muted-foreground mb-1">Key Metrics</h4>
+                        <div className="flex flex-wrap gap-1">
+                          {section.keyMetrics.map((m) => (
+                            <Badge key={m} variant="secondary" className="text-xs">{m}</Badge>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="text-xs font-medium text-muted-foreground mb-1">How to Use</h4>
+                        <ul className="space-y-1">
+                          {section.howToUse.map((item, i) => (
+                            <li key={i} className={`text-sm text-muted-foreground ${item.startsWith("  --") ? "ml-4" : ""}`}>
+                              {item.startsWith("  --") ? item : `${i + 1}. ${item}`}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {section.cascadeInfo && (
+                        <div className="flex items-start gap-2 p-2 rounded-md bg-muted/50">
+                          <ArrowDown className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                          <p className="text-xs text-muted-foreground">{section.cascadeInfo}</p>
+                        </div>
+                      )}
+
+                      <div className="p-2 rounded-md bg-muted/50">
+                        <p className="text-xs"><span className="font-medium">Tip:</span> <span className="text-muted-foreground">{section.tips}</span></p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
