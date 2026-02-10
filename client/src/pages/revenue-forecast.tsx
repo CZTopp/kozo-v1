@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,8 +10,8 @@ import { formatCurrency, formatPercent } from "@/lib/calculations";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { FinancialModel, RevenueLineItem, RevenuePeriod } from "@shared/schema";
-import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { TrendingUp, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil } from "lucide-react";
+import { BarChart, Bar, AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil } from "lucide-react";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
@@ -168,6 +168,13 @@ export default function RevenueForecast() {
   const calcYoYGrowth = (year: number) => {
     const current = getTotalRevenue(year);
     const prior = getTotalRevenue(year - 1);
+    if (!prior || prior === 0) return null;
+    return (current - prior) / Math.abs(prior);
+  };
+
+  const calcStreamYoYGrowth = (lineItemId: string, year: number) => {
+    const current = getAnnualTotal(lineItemId, year);
+    const prior = getAnnualTotal(lineItemId, year - 1);
     if (!prior || prior === 0) return null;
     return (current - prior) / Math.abs(prior);
   };
@@ -335,6 +342,7 @@ export default function RevenueForecast() {
           <TabsTrigger value="table" data-testid="tab-table">Annual Summary</TabsTrigger>
           <TabsTrigger value="annual-chart" data-testid="tab-annual-chart">Annual Chart</TabsTrigger>
           <TabsTrigger value="quarterly-chart" data-testid="tab-quarterly-chart">Quarterly Trend</TabsTrigger>
+          <TabsTrigger value="sparklines" data-testid="tab-sparklines">Sparklines</TabsTrigger>
         </TabsList>
 
         <TabsContent value="quarterly">
@@ -520,7 +528,7 @@ export default function RevenueForecast() {
               <Table data-testid="table-revenue">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Revenue Stream</TableHead>
+                    <TableHead className="min-w-[200px]">Revenue Stream</TableHead>
                     {years.map(year => (
                       <TableHead key={year} className="text-right">{year}</TableHead>
                     ))}
@@ -528,14 +536,34 @@ export default function RevenueForecast() {
                 </TableHeader>
                 <TableBody>
                   {visibleLineItems.map(li => (
-                    <TableRow key={li.id}>
-                      <TableCell className="font-medium">{getLineItemName(li)}</TableCell>
-                      {years.map(year => (
-                        <TableCell key={year} className="text-right">
-                          {formatCurrency(getAnnualTotal(li.id, year))}
-                        </TableCell>
-                      ))}
-                    </TableRow>
+                    <Fragment key={li.id}>
+                      <TableRow data-testid={`row-annual-${li.id}`}>
+                        <TableCell className="font-medium">{getLineItemName(li)}</TableCell>
+                        {years.map(year => (
+                          <TableCell key={year} className="text-right">
+                            {formatCurrency(getAnnualTotal(li.id, year))}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                      <TableRow key={`growth-${li.id}`} className="border-b">
+                        <TableCell className="text-xs text-muted-foreground pl-6 py-1">YoY Growth</TableCell>
+                        {years.map(year => {
+                          const g = calcStreamYoYGrowth(li.id, year);
+                          return (
+                            <TableCell key={year} className="text-right py-1">
+                              {g !== null ? (
+                                <span className={`text-xs font-medium inline-flex items-center gap-0.5 ${g >= 0 ? "text-emerald-500" : "text-red-500"}`} data-testid={`text-stream-growth-${li.id}-${year}`}>
+                                  {g >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                                  {formatPercent(g)}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">--</span>
+                              )}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    </Fragment>
                   ))}
                   {newLineItems.filter(ni => ni.name.trim()).map(ni => (
                     <TableRow key={ni.tempId}>
@@ -562,9 +590,10 @@ export default function RevenueForecast() {
                       return (
                         <TableCell key={year} className="text-right">
                           {growth !== null ? (
-                            <Badge variant={growth >= 0 ? "default" : "destructive"}>
+                            <span className={`text-xs font-semibold inline-flex items-center gap-0.5 ${growth >= 0 ? "text-emerald-500" : "text-red-500"}`} data-testid={`text-total-growth-${year}`}>
+                              {growth >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                               {formatPercent(growth)}
-                            </Badge>
+                            </span>
                           ) : (
                             <span className="text-muted-foreground">--</span>
                           )}
@@ -624,6 +653,184 @@ export default function RevenueForecast() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="sparklines">
+          <div className="space-y-3" data-testid="sparklines-container">
+            {visibleLineItems.map((li, idx) => {
+              const sparkData = quarterlyChartData.map(d => ({
+                period: d.period,
+                value: (d[getLineItemName(li)] as number) || 0,
+              }));
+              const values = sparkData.map(d => d.value);
+              const total = values.reduce((a, b) => a + b, 0);
+              const avg = values.length > 0 ? total / values.length : 0;
+              const max = Math.max(...values);
+              const min = Math.min(...values);
+              const lastTwo = values.slice(-2);
+              const qoqGrowth = lastTwo.length === 2 && lastTwo[0] !== 0
+                ? (lastTwo[1] - lastTwo[0]) / Math.abs(lastTwo[0])
+                : null;
+              const latestYearGrowth = calcStreamYoYGrowth(li.id, years[years.length - 1]);
+
+              return (
+                <Card key={li.id} data-testid={`sparkline-card-${li.id}`}>
+                  <CardContent className="py-4">
+                    <div className="flex items-start gap-4 flex-wrap">
+                      <div className="flex-shrink-0 min-w-[180px] space-y-1">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                          <span className="font-medium text-sm" data-testid={`sparkline-name-${li.id}`}>{getLineItemName(li)}</span>
+                        </div>
+                        <div className="pl-5 space-y-0.5">
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-xs text-muted-foreground">Latest QoQ</span>
+                            {qoqGrowth !== null ? (
+                              <span className={`text-xs font-medium inline-flex items-center gap-0.5 ${qoqGrowth >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                                {qoqGrowth >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                                {formatPercent(qoqGrowth)}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">--</span>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-xs text-muted-foreground">Latest YoY</span>
+                            {latestYearGrowth !== null ? (
+                              <span className={`text-xs font-medium inline-flex items-center gap-0.5 ${latestYearGrowth >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                                {latestYearGrowth >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                                {formatPercent(latestYearGrowth)}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">--</span>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-xs text-muted-foreground">Avg / Qtr</span>
+                            <span className="text-xs font-medium">{formatCurrency(avg)}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-xs text-muted-foreground">Range</span>
+                            <span className="text-xs font-medium">{formatCurrency(min)} - {formatCurrency(max)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-[300px] h-[80px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={sparkData}>
+                            <XAxis dataKey="period" hide />
+                            <YAxis hide domain={["dataMin", "dataMax"]} />
+                            <Tooltip
+                              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", fontSize: "12px", padding: "4px 8px" }}
+                              formatter={(v: number) => formatCurrency(v)}
+                              labelStyle={{ fontSize: "10px" }}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="value"
+                              stroke={COLORS[idx % COLORS.length]}
+                              strokeWidth={2}
+                              dot={false}
+                              activeDot={{ r: 3 }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+
+            <Card data-testid="sparkline-card-total">
+              <CardContent className="py-4">
+                <div className="flex items-start gap-4 flex-wrap">
+                  <div className="flex-shrink-0 min-w-[180px] space-y-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-sm flex-shrink-0 bg-foreground" />
+                      <span className="font-bold text-sm" data-testid="sparkline-name-total">Total Revenue</span>
+                    </div>
+                    <div className="pl-5 space-y-0.5">
+                      {(() => {
+                        const totalSparkData = quarterlyChartData.map(d => {
+                          let sum = 0;
+                          allNames.forEach(name => { sum += (d[name] as number) || 0; });
+                          return sum;
+                        });
+                        const lastTwo = totalSparkData.slice(-2);
+                        const qoq = lastTwo.length === 2 && lastTwo[0] !== 0
+                          ? (lastTwo[1] - lastTwo[0]) / Math.abs(lastTwo[0])
+                          : null;
+                        const totalYoY = calcYoYGrowth(years[years.length - 1]);
+                        const avg = totalSparkData.length > 0 ? totalSparkData.reduce((a, b) => a + b, 0) / totalSparkData.length : 0;
+                        const max = Math.max(...totalSparkData);
+                        const min = Math.min(...totalSparkData);
+                        return (
+                          <>
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="text-xs text-muted-foreground">Latest QoQ</span>
+                              {qoq !== null ? (
+                                <span className={`text-xs font-medium inline-flex items-center gap-0.5 ${qoq >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                                  {qoq >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                                  {formatPercent(qoq)}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">--</span>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="text-xs text-muted-foreground">Latest YoY</span>
+                              {totalYoY !== null ? (
+                                <span className={`text-xs font-medium inline-flex items-center gap-0.5 ${totalYoY >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                                  {totalYoY >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                                  {formatPercent(totalYoY)}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">--</span>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="text-xs text-muted-foreground">Avg / Qtr</span>
+                              <span className="text-xs font-medium">{formatCurrency(avg)}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="text-xs text-muted-foreground">Range</span>
+                              <span className="text-xs font-medium">{formatCurrency(min)} - {formatCurrency(max)}</span>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-[300px] h-[80px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={quarterlyChartData.map(d => {
+                        let sum = 0;
+                        allNames.forEach(name => { sum += (d[name] as number) || 0; });
+                        return { period: d.period, value: sum };
+                      })}>
+                        <XAxis dataKey="period" hide />
+                        <YAxis hide domain={["dataMin", "dataMax"]} />
+                        <Tooltip
+                          contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", fontSize: "12px", padding: "4px 8px" }}
+                          formatter={(v: number) => formatCurrency(v)}
+                          labelStyle={{ fontSize: "10px" }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="value"
+                          stroke="hsl(var(--foreground))"
+                          strokeWidth={2.5}
+                          dot={false}
+                          activeDot={{ r: 3 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
