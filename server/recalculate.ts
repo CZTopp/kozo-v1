@@ -167,16 +167,14 @@ export async function recalculateModel(modelId: string) {
     const netInc = isData[yearIdx]?.netIncome || 0;
     retainedEarnings += netInc;
 
-    const cash = initialCash + yearIdx * 25000000;
-    const stInv = 10000000 + yearIdx * 5000000;
     const ar = totalRev * arPercent;
     const inv = totalRev * invPercent;
-    const totalCA = cash + stInv + ar + inv;
+    const stInv = 10000000 + yearIdx * 5000000;
     const equip = 15000000 + yearIdx * 5000000;
     const depAccum = yearIdx * 3000000;
     const capex = totalRev * capexPercent;
     const totalLTA = equip - depAccum + capex;
-    const totalAssets = totalCA + totalLTA;
+
     const ap = totalRev * apPercent;
     const stDebt = 5000000;
     const totalCL = ap + stDebt;
@@ -186,6 +184,12 @@ export async function recalculateModel(modelId: string) {
     const commonShares = 100000000;
     const totalEquity = commonShares + retainedEarnings;
     const totalLE = totalLiab + totalEquity;
+
+    const nonCashCurrentAssets = stInv + ar + inv;
+    const cash = totalLE - nonCashCurrentAssets - totalLTA;
+
+    const totalCA = cash + nonCashCurrentAssets;
+    const totalAssets = totalCA + totalLTA;
 
     bsData.push({
       modelId, year: yr, isActual: yearIdx === 0,

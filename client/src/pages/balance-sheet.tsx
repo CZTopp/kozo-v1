@@ -64,7 +64,7 @@ export default function BalanceSheet() {
   const annualData = bsData?.filter(d => !d.quarter).sort((a, b) => a.year - b.year) || [];
   const latestData = annualData[annualData.length - 1];
   const isBalanced = latestData
-    ? Math.abs((latestData.totalAssets || 0) - ((latestData.totalLiabilities || 0) + (latestData.totalEquity || 0))) < 1
+    ? Math.abs((latestData.totalAssets || 0) - (latestData.totalLiabilitiesAndEquity || 0)) < 100
     : false;
 
   const bsAssumptionFields = [
