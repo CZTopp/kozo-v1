@@ -315,10 +315,23 @@ export async function recalculateModel(modelId: string) {
 
   const [existingVal] = await db.select().from(valuationComparisons).where(eq(valuationComparisons.modelId, modelId));
   const lastRevenue = annualRevenues[years[years.length - 1]] || 0;
-  const lastEPS = isData[isData.length - 1]?.eps || 0;
-  const earningsGrowth = isData.length >= 2 && isData[isData.length - 2]?.eps
-    ? (lastEPS - isData[isData.length - 2].eps) / Math.abs(isData[isData.length - 2].eps)
-    : 0.25;
+
+  const nonZeroEpsData = isData.filter(d => d.eps !== 0);
+  const lastEPS = nonZeroEpsData.length > 0 ? nonZeroEpsData[nonZeroEpsData.length - 1].eps : (isData[isData.length - 1]?.eps || 0);
+
+  let earningsGrowth = 0.25;
+  if (nonZeroEpsData.length >= 2) {
+    const prev = nonZeroEpsData[nonZeroEpsData.length - 2].eps;
+    const curr = nonZeroEpsData[nonZeroEpsData.length - 1].eps;
+    if (Math.abs(prev) > 0.001) {
+      earningsGrowth = (curr - prev) / Math.abs(prev);
+    }
+  } else if (isData.length >= 2) {
+    const prev = isData[isData.length - 2]?.eps;
+    if (prev && Math.abs(prev) > 0.001) {
+      earningsGrowth = (lastEPS - prev) / Math.abs(prev);
+    }
+  }
 
   const prBullMult = existingVal?.prBullMultiple ?? 10;
   const prBaseMult = existingVal?.prBaseMultiple ?? 7.5;
@@ -328,7 +341,29 @@ export async function recalculateModel(modelId: string) {
   const peBearPeg = existingVal?.peBearPeg ?? 1;
 
   const rps = sharesOut > 0 ? lastRevenue / sharesOut : 0;
-  const growthPct = earningsGrowth * 100;
+  const growthPct = Math.max(earningsGrowth * 100, 1);
+
+  const peTargetPrice = (eps: number, growth: number, peg: number) => {
+    if (Math.abs(eps) < 0.001) return 0;
+    return Math.round(eps * growth * peg * 100) / 100;
+  };
+
+  const bullMult = model.scenarioBullMultiplier ?? 1.2;
+  const baseMult = model.scenarioBaseMultiplier ?? 1.0;
+  const bearMult = model.scenarioBearMultiplier ?? 0.8;
+
+  const scenarioRevenues: Record<string, Record<number, number>> = { bull: {}, base: {}, bear: {} };
+  for (let i = 1; i < years.length; i++) {
+    const yr = years[i];
+    const prevRev = annualRevenues[years[i - 1]] || 0;
+    const curRev = annualRevenues[yr] || 0;
+    if (prevRev > 0 && curRev > 0) {
+      const yoyGrowth = (curRev - prevRev) / prevRev;
+      scenarioRevenues.bull[yr] = Math.round(prevRev * (1 + yoyGrowth * bullMult));
+      scenarioRevenues.base[yr] = Math.round(curRev);
+      scenarioRevenues.bear[yr] = Math.round(prevRev * (1 + yoyGrowth * bearMult));
+    }
+  }
 
   const valPayload = {
     modelId,
@@ -338,12 +373,12 @@ export async function recalculateModel(modelId: string) {
     prBullTarget: Math.round(rps * prBullMult * 100) / 100,
     prBaseTarget: Math.round(rps * prBaseMult * 100) / 100,
     prBearTarget: Math.round(rps * prBearMult * 100) / 100,
-    peBullTarget: Math.round(lastEPS * growthPct * peBullPeg * 100) / 100,
-    peBaseTarget: Math.round(lastEPS * growthPct * peBasePeg * 100) / 100,
-    peBearTarget: Math.round(lastEPS * growthPct * peBearPeg * 100) / 100,
-    dcfBullTarget: Math.round(targetPrice * (model.scenarioBullMultiplier ?? 1.2) * 100) / 100,
-    dcfBaseTarget: Math.round(targetPrice * (model.scenarioBaseMultiplier ?? 1.0) * 100) / 100,
-    dcfBearTarget: Math.round(targetPrice * (model.scenarioBearMultiplier ?? 0.8) * 100) / 100,
+    peBullTarget: peTargetPrice(lastEPS, growthPct, peBullPeg),
+    peBaseTarget: peTargetPrice(lastEPS, growthPct, peBasePeg),
+    peBearTarget: peTargetPrice(lastEPS, growthPct, peBearPeg),
+    dcfBullTarget: Math.round(targetPrice * bullMult * 100) / 100,
+    dcfBaseTarget: Math.round(targetPrice * baseMult * 100) / 100,
+    dcfBearTarget: Math.round(targetPrice * bearMult * 100) / 100,
     averageTarget: 0,
     percentToTarget: 0,
   };
@@ -358,10 +393,16 @@ export async function recalculateModel(modelId: string) {
     ? Math.round((valPayload.averageTarget - currentSharePrice) / currentSharePrice * 10000) / 10000
     : 0;
 
+  const existingValData = (existingVal?.valuationData as Record<string, any>) || {};
+  const fullValPayload = {
+    ...valPayload,
+    valuationData: { ...existingValData, scenarioRevenues },
+  };
+
   if (existingVal) {
-    await db.update(valuationComparisons).set(valPayload).where(eq(valuationComparisons.modelId, modelId));
+    await db.update(valuationComparisons).set(fullValPayload).where(eq(valuationComparisons.modelId, modelId));
   } else {
-    await db.insert(valuationComparisons).values(valPayload);
+    await db.insert(valuationComparisons).values(fullValPayload);
   }
 
   return {
