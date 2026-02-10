@@ -12,7 +12,7 @@ import { formatPercent } from "@/lib/calculations";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { RevenueLineItem, RevenuePeriod } from "@shared/schema";
-import { BarChart, Bar, AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { ComposedChart, Bar, AreaChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Label } from "@/components/ui/label";
 import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil, Sparkles, Settings2, ChevronDown, ChevronUp, AlertTriangle, Percent } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
@@ -524,28 +524,6 @@ export default function RevenueForecast() {
     }
   });
 
-  const sparklineData = useMemo(() => {
-    const data: Record<string, Array<{ year: number; value: number }>> = {};
-    visibleLineItems.forEach(li => {
-      data[li.id] = years.map(year => ({ year, value: getAnnualTotal(li.id, year) }));
-    });
-    data["__total__"] = years.map(year => ({ year, value: getTotalRevenue(year) }));
-    return data;
-  }, [visibleLineItems, years, periods, editedPeriods]);
-
-  const renderSparkline = (dataPoints: Array<{ year: number; value: number }>, color: string = "hsl(var(--chart-1))") => {
-    if (!dataPoints || dataPoints.length < 2) return null;
-    return (
-      <div className="inline-block w-16 h-5 align-middle ml-1">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={dataPoints}>
-            <Line type="monotone" dataKey="value" stroke={color} strokeWidth={1.5} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    );
-  };
-
   const totalColSpan = quarterlyYears.length * 4 + annualOnlyYears.length + 1 + (editMode ? 1 : 0);
 
   const renderYoYPct = (g: number | null) => {
@@ -782,7 +760,6 @@ export default function RevenueForecast() {
             <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-1">
                 {year} Revenue
-                {sparklineData["__total__"] && renderSparkline(sparklineData["__total__"], "hsl(var(--chart-1))")}
               </CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
@@ -872,10 +849,7 @@ export default function RevenueForecast() {
                                   data-testid={`input-name-${li.id}`}
                                 />
                               ) : (
-                                <>
-                                  {li.name}
-                                  {sparklineData[li.id] && renderSparkline(sparklineData[li.id], COLORS[liIdx % COLORS.length])}
-                                </>
+                                <>{li.name}</>
                               )}
                             </div>
                           </TableCell>
@@ -1147,10 +1121,7 @@ export default function RevenueForecast() {
                     <Fragment key={li.id}>
                       <TableRow data-testid={`row-annual-${li.id}`}>
                         <TableCell className="font-medium">
-                          <div className="flex items-center gap-1">
-                            {getLineItemName(li)}
-                            {sparklineData[li.id] && renderSparkline(sparklineData[li.id], COLORS[liIdx % COLORS.length])}
-                          </div>
+                          {getLineItemName(li)}
                         </TableCell>
                         {years.map(year => (
                           <TableCell key={year} className="text-right">
@@ -1189,12 +1160,7 @@ export default function RevenueForecast() {
                     </TableRow>
                   ))}
                   <TableRow className="font-bold border-t-2">
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        Total Revenue
-                        {sparklineData["__total__"] && renderSparkline(sparklineData["__total__"])}
-                      </div>
-                    </TableCell>
+                    <TableCell>Total Revenue</TableCell>
                     {years.map(year => (
                       <TableCell key={year} className="text-right" data-testid={`text-total-${year}`}>
                         {formatWithUnit(getTotalRevenue(year), displayUnit)}
@@ -1221,21 +1187,24 @@ export default function RevenueForecast() {
         <TabsContent value="annual-chart">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-medium flex items-center gap-1">Annual Revenue by Stream <InfoTooltip content="Stacked bar chart showing annual revenue by stream." /></CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center gap-1">Annual Revenue by Stream <InfoTooltip content="Bars show revenue by stream. Lines trace each stream's trend over time." /></CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-80">
+              <div className="h-96">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={annualChartData}>
+                  <ComposedChart data={annualChartData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="year" className="text-xs" />
                     <YAxis className="text-xs" tickFormatter={(v) => formatWithUnit(v, displayUnit)} />
                     <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => formatWithUnit(v, displayUnit)} />
                     <Legend />
                     {allNames.map((name, i) => (
-                      <Bar key={name} dataKey={name} fill={COLORS[i % COLORS.length]} radius={[2, 2, 0, 0]} />
+                      <Bar key={`bar-${name}`} dataKey={name} fill={COLORS[i % COLORS.length]} radius={[2, 2, 0, 0]} fillOpacity={0.7} />
                     ))}
-                  </BarChart>
+                    {allNames.map((name, i) => (
+                      <Line key={`line-${name}`} dataKey={name} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={{ r: 3 }} type="monotone" legendType="none" />
+                    ))}
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
