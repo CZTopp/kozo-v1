@@ -41,15 +41,20 @@ export async function registerRoutes(server: Server, app: Express) {
     const numericFields = [
       "growthDecayRate", "targetNetMargin",
       "scenarioBullMultiplier", "scenarioBaseMultiplier", "scenarioBearMultiplier",
+      "sharesOutstanding", "startYear", "endYear",
     ] as const;
     for (const field of numericFields) {
       if (field in body) {
+        if (body[field] === null || body[field] === undefined) continue;
         const val = Number(body[field]);
         if (isNaN(val)) {
           return res.status(400).json({ message: `${field} must be a number` });
         }
         body[field] = val;
       }
+    }
+    if (body.displayUnit && !["ones", "thousands", "millions", "billions", "trillions"].includes(body.displayUnit)) {
+      return res.status(400).json({ message: "displayUnit must be ones, thousands, millions, billions, or trillions" });
     }
     const model = await storage.updateModel(req.params.id, body);
     res.json(model);

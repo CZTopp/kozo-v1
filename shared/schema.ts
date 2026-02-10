@@ -17,6 +17,7 @@ export const financialModels = pgTable("financial_models", {
   scenarioBullMultiplier: real("scenario_bull_multiplier").default(1.2),
   scenarioBaseMultiplier: real("scenario_base_multiplier").default(1.0),
   scenarioBearMultiplier: real("scenario_bear_multiplier").default(0.8),
+  displayUnit: text("display_unit").notNull().default("ones"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

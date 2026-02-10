@@ -1,5 +1,5 @@
 import { useLocation, Link } from "wouter";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   LayoutDashboard,
@@ -18,6 +18,7 @@ import {
   Check,
   BookOpen,
   LineChart,
+  Pencil,
 } from "lucide-react";
 import {
   Sidebar,
@@ -54,6 +55,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -82,6 +90,7 @@ export function AppSidebar() {
   const { models, selectedModel, setSelectedModelId } = useModel();
   const { toast } = useToast();
   const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [newCompany, setNewCompany] = useState({
@@ -92,6 +101,31 @@ export function AppSidebar() {
     currency: "USD",
     sharesOutstanding: 10000000,
   });
+  const [editCompany, setEditCompany] = useState({
+    name: "",
+    ticker: "",
+    description: "",
+    startYear: 2025,
+    endYear: 2029,
+    currency: "USD",
+    sharesOutstanding: 10000000,
+    displayUnit: "ones",
+  });
+
+  useEffect(() => {
+    if (selectedModel && editOpen) {
+      setEditCompany({
+        name: selectedModel.name,
+        ticker: selectedModel.ticker || "",
+        description: selectedModel.description || "",
+        startYear: selectedModel.startYear,
+        endYear: selectedModel.endYear,
+        currency: selectedModel.currency,
+        sharesOutstanding: selectedModel.sharesOutstanding || 10000000,
+        displayUnit: (selectedModel as any).displayUnit || "ones",
+      });
+    }
+  }, [selectedModel, editOpen]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -118,6 +152,31 @@ export function AppSidebar() {
         sharesOutstanding: 10000000,
       });
       toast({ title: "Company created", description: `${data.name} is ready for analysis.` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const editMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedModel) return;
+      const res = await apiRequest("PATCH", `/api/models/${selectedModel.id}`, {
+        name: editCompany.name,
+        ticker: editCompany.ticker || null,
+        description: editCompany.description || null,
+        startYear: editCompany.startYear,
+        endYear: editCompany.endYear,
+        currency: editCompany.currency,
+        sharesOutstanding: editCompany.sharesOutstanding,
+        displayUnit: editCompany.displayUnit,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      setEditOpen(false);
+      toast({ title: "Company updated", description: "Company details have been saved." });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -162,7 +221,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>Company</SidebarGroupLabel>
           <SidebarGroupContent>
-            <div className="px-2 pb-2">
+            <div className="px-2 pb-2 space-y-1">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -211,6 +270,14 @@ export function AppSidebar() {
                     </DropdownMenuItem>
                   ))}
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setEditOpen(true)}
+                    disabled={!selectedModel}
+                    data-testid="button-edit-company"
+                  >
+                    <Pencil className="h-4 w-4 mr-2" />
+                    <span className="text-xs">Edit Company</span>
+                  </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => setCreateOpen(true)}
                     data-testid="button-new-company"
@@ -362,6 +429,120 @@ export function AppSidebar() {
               data-testid="button-confirm-create"
             >
               {createMutation.isPending ? "Creating..." : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent data-testid="dialog-edit-company">
+          <DialogHeader>
+            <DialogTitle>Edit Company</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-name">Company Name</Label>
+              <Input
+                id="edit-name"
+                value={editCompany.name}
+                onChange={(e) => setEditCompany({ ...editCompany, name: e.target.value })}
+                data-testid="input-edit-name"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-ticker">Ticker Symbol</Label>
+                <Input
+                  id="edit-ticker"
+                  value={editCompany.ticker}
+                  onChange={(e) => setEditCompany({ ...editCompany, ticker: e.target.value.toUpperCase() })}
+                  data-testid="input-edit-ticker"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-currency">Currency</Label>
+                <Input
+                  id="edit-currency"
+                  value={editCompany.currency}
+                  onChange={(e) => setEditCompany({ ...editCompany, currency: e.target.value })}
+                  data-testid="input-edit-currency"
+                />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Input
+                id="edit-description"
+                value={editCompany.description}
+                onChange={(e) => setEditCompany({ ...editCompany, description: e.target.value })}
+                placeholder="Brief description of the company"
+                data-testid="input-edit-description"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-start-year">Start Year</Label>
+                <Input
+                  id="edit-start-year"
+                  type="number"
+                  value={editCompany.startYear}
+                  onChange={(e) => setEditCompany({ ...editCompany, startYear: parseInt(e.target.value) || 2024 })}
+                  data-testid="input-edit-start-year"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-end-year">End Year</Label>
+                <Input
+                  id="edit-end-year"
+                  type="number"
+                  value={editCompany.endYear}
+                  onChange={(e) => setEditCompany({ ...editCompany, endYear: parseInt(e.target.value) || 2028 })}
+                  data-testid="input-edit-end-year"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-shares">Shares Outstanding</Label>
+                <Input
+                  id="edit-shares"
+                  type="number"
+                  value={editCompany.sharesOutstanding}
+                  onChange={(e) => setEditCompany({ ...editCompany, sharesOutstanding: parseFloat(e.target.value) || 0 })}
+                  data-testid="input-edit-shares"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-display-unit">Display Unit</Label>
+                <Select
+                  value={editCompany.displayUnit}
+                  onValueChange={(v) => setEditCompany({ ...editCompany, displayUnit: v })}
+                >
+                  <SelectTrigger data-testid="select-edit-display-unit">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ones">Ones ($)</SelectItem>
+                    <SelectItem value="thousands">Thousands ($K)</SelectItem>
+                    <SelectItem value="millions">Millions ($M)</SelectItem>
+                    <SelectItem value="billions">Billions ($B)</SelectItem>
+                    <SelectItem value="trillions">Trillions ($T)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Controls how values are entered and displayed in tables</p>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)} data-testid="button-cancel-edit-company">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => editMutation.mutate()}
+              disabled={!editCompany.name.trim() || editMutation.isPending}
+              data-testid="button-confirm-edit-company"
+            >
+              {editMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

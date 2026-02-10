@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect } from "react";
+import { Fragment, useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useModel } from "@/lib/model-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,16 +7,70 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatCurrency, formatPercent } from "@/lib/calculations";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatPercent } from "@/lib/calculations";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { RevenueLineItem, RevenuePeriod } from "@shared/schema";
-import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { BarChart, Bar, AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Label } from "@/components/ui/label";
-import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil, Sparkles, Settings2, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil, Sparkles, Settings2, ChevronDown, ChevronUp, AlertTriangle, Percent } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
+
+const UNIT_MULTIPLIERS: Record<string, number> = {
+  ones: 1,
+  thousands: 1e3,
+  millions: 1e6,
+  billions: 1e9,
+  trillions: 1e12,
+};
+
+const UNIT_LABELS: Record<string, string> = {
+  ones: "$",
+  thousands: "$K",
+  millions: "$M",
+  billions: "$B",
+  trillions: "$T",
+};
+
+const UNIT_SHORT: Record<string, string> = {
+  ones: "",
+  thousands: "K",
+  millions: "M",
+  billions: "B",
+  trillions: "T",
+};
+
+function formatWithUnit(val: number, unit: string, decimals = 1): string {
+  const mult = UNIT_MULTIPLIERS[unit] || 1;
+  const scaled = val / mult;
+  if (unit === "ones") {
+    if (Math.abs(val) >= 1e9) return `$${(val / 1e9).toFixed(1)}B`;
+    if (Math.abs(val) >= 1e6) return `$${(val / 1e6).toFixed(1)}M`;
+    if (Math.abs(val) >= 1e3) return `$${(val / 1e3).toFixed(1)}K`;
+    return `$${val.toFixed(0)}`;
+  }
+  const suffix = UNIT_SHORT[unit] || "";
+  return `$${scaled.toFixed(decimals)}${suffix}`;
+}
+
+function parseWithUnit(input: string, unit: string): number {
+  const cleaned = input.replace(/[$,\s]/g, "").replace(/[KkMmBbTt]$/, "");
+  const num = parseFloat(cleaned);
+  if (isNaN(num)) return 0;
+  const mult = UNIT_MULTIPLIERS[unit] || 1;
+  return num * mult;
+}
+
+function displayForInput(val: number, unit: string): string {
+  const mult = UNIT_MULTIPLIERS[unit] || 1;
+  const scaled = val / mult;
+  if (scaled === 0) return "";
+  const rounded = Math.round(scaled * 100) / 100;
+  return rounded.toString();
+}
 
 export default function RevenueForecast() {
   const { toast } = useToast();
@@ -28,6 +82,7 @@ export default function RevenueForecast() {
   const [newLineItems, setNewLineItems] = useState<Array<{ tempId: string; name: string }>>([]);
   const [newLineItemPeriods, setNewLineItemPeriods] = useState<Record<string, Record<string, number>>>({});
   const [showProjectionSettings, setShowProjectionSettings] = useState(false);
+  const [yoyInputMode, setYoyInputMode] = useState(false);
   const [projectionSettings, setProjectionSettings] = useState<{
     growthDecayRate: number;
     targetNetMargin: number | null;
@@ -37,6 +92,9 @@ export default function RevenueForecast() {
   } | null>(null);
 
   const { selectedModel: model, isLoading: modelsLoading } = useModel();
+
+  const displayUnit = (model as any)?.displayUnit || "ones";
+  const MAX_QUARTERLY_YEARS = 6;
 
   const { data: lineItems } = useQuery<RevenueLineItem[]>({
     queryKey: ["/api/models", model?.id, "revenue-line-items"],
@@ -85,15 +143,16 @@ export default function RevenueForecast() {
           const periodsRes = await apiRequest("GET", `/api/models/${model!.id}/revenue-periods`);
           const freshPeriods = await periodsRes.json() as RevenuePeriod[];
           const newPeriods = freshPeriods.filter((p: RevenuePeriod) => p.lineItemId === createdItem.id);
-          const periodUpdates = newPeriods
-            .filter((p: RevenuePeriod) => {
-              const key = `${p.year}-Q${p.quarter}`;
-              return itemPeriods[key] !== undefined && itemPeriods[key] !== 0;
-            })
-            .map((p: RevenuePeriod) => {
-              const key = `${p.year}-Q${p.quarter}`;
-              return apiRequest("PATCH", `/api/revenue-periods/${p.id}`, { amount: itemPeriods[key] });
-            });
+          const periodUpdates: Promise<Response>[] = [];
+          for (const p of newPeriods) {
+            const qKey = `${p.year}-Q${p.quarter}`;
+            const aKey = `${p.year}-A`;
+            if (itemPeriods[qKey] !== undefined && itemPeriods[qKey] !== 0) {
+              periodUpdates.push(apiRequest("PATCH", `/api/revenue-periods/${p.id}`, { amount: itemPeriods[qKey] }));
+            } else if (itemPeriods[aKey] !== undefined && itemPeriods[aKey] !== 0) {
+              periodUpdates.push(apiRequest("PATCH", `/api/revenue-periods/${p.id}`, { amount: itemPeriods[aKey] / 4 }));
+            }
+          }
           await Promise.all(periodUpdates);
         }
       }
@@ -135,6 +194,7 @@ export default function RevenueForecast() {
       setPendingDeletes(new Set());
       setNewLineItems([]);
       setNewLineItemPeriods({});
+      setYoyInputMode(false);
       toast({ title: "Model recalculated", description: "All financial statements have been updated from your revenue changes." });
     },
     onError: (err: Error) => {
@@ -158,7 +218,7 @@ export default function RevenueForecast() {
       queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "assumptions"] });
       const yrs = data?.forecastedYears?.join(", ") || "missing quarters";
       const count = data?.periodsCreated || 0;
-      toast({ title: "Projections complete", description: `Filled ${count} quarter(s) across ${yrs}. All financial statements updated.` });
+      toast({ title: "Projections complete", description: `Filled ${count} period(s) across ${yrs}. All financial statements updated.` });
     },
     onError: (err: Error) => {
       toast({ title: "Forecast failed", description: err.message, variant: "destructive" });
@@ -201,8 +261,13 @@ export default function RevenueForecast() {
   if (!model) return <div className="p-4 text-muted-foreground">Select a company from the sidebar to begin.</div>;
 
   const years = Array.from({ length: model.endYear - model.startYear + 1 }, (_, i) => model.startYear + i);
+  const quarterlyYears = years.slice(0, MAX_QUARTERLY_YEARS);
+  const annualOnlyYears = years.slice(MAX_QUARTERLY_YEARS);
 
-  const getPeriod = (lineItemId: string, year: number, quarter: number): RevenuePeriod | undefined => {
+  const getPeriod = (lineItemId: string, year: number, quarter: number | null): RevenuePeriod | undefined => {
+    if (quarter === null) {
+      return periods?.find(p => p.lineItemId === lineItemId && p.year === year && (p.quarter === null || p.quarter === undefined));
+    }
     return periods?.find(p => p.lineItemId === lineItemId && p.year === year && p.quarter === quarter);
   };
 
@@ -230,6 +295,10 @@ export default function RevenueForecast() {
   };
 
   const getNewItemAnnualTotal = (tempId: string, year: number) => {
+    if (annualOnlyYears.includes(year)) {
+      const key = `${year}-A`;
+      return newLineItemPeriods[tempId]?.[key] || 0;
+    }
     let total = 0;
     for (let q = 1; q <= 4; q++) {
       total += getNewItemQuarterlyAmount(tempId, year, q);
@@ -264,6 +333,13 @@ export default function RevenueForecast() {
     return total;
   };
 
+  const getQuarterTotal = (year: number, quarter: number) => {
+    let total = 0;
+    visibleLineItems.forEach(li => { total += getQuarterlyAmount(li.id, year, quarter); });
+    newLineItems.forEach(ni => { total += getNewItemQuarterlyAmount(ni.tempId, year, quarter); });
+    return total;
+  };
+
   const calcYoYGrowth = (year: number) => {
     const current = getTotalRevenue(year);
     const prior = getTotalRevenue(year - 1);
@@ -278,14 +354,75 @@ export default function RevenueForecast() {
     return (current - prior) / Math.abs(prior);
   };
 
+  const calcStreamQoQGrowth = (lineItemId: string, year: number, quarter: number) => {
+    const current = getQuarterlyAmount(lineItemId, year, quarter);
+    let prior: number;
+    if (quarter === 1) {
+      prior = getQuarterlyAmount(lineItemId, year - 1, 4);
+    } else {
+      prior = getQuarterlyAmount(lineItemId, year, quarter - 1);
+    }
+    if (!prior || prior === 0) return null;
+    return (current - prior) / Math.abs(prior);
+  };
+
+  const calcStreamPercentOfTotal = (lineItemId: string, year: number) => {
+    const total = getTotalRevenue(year);
+    if (!total || total === 0) return null;
+    return getAnnualTotal(lineItemId, year) / total;
+  };
+
+  const calcStreamQPercentOfTotal = (lineItemId: string, year: number, quarter: number) => {
+    const total = getQuarterTotal(year, quarter);
+    if (!total || total === 0) return null;
+    return getQuarterlyAmount(lineItemId, year, quarter) / total;
+  };
+
   const handleEdit = (periodId: string, value: string) => {
-    const num = parseFloat(value.replace(/,/g, "")) || 0;
+    const num = parseWithUnit(value, displayUnit);
     setEditedPeriods(prev => ({ ...prev, [periodId]: num }));
   };
 
-  const handleNewItemEdit = (tempId: string, year: number, quarter: number, value: string) => {
-    const num = parseFloat(value.replace(/,/g, "")) || 0;
-    const key = `${year}-Q${quarter}`;
+  const handleAnnualEdit = (lineItemId: string, year: number, value: string) => {
+    const total = parseWithUnit(value, displayUnit);
+    const perQuarter = total / 4;
+    const updates: Record<string, number> = {};
+    for (let q = 1; q <= 4; q++) {
+      const p = getPeriod(lineItemId, year, q);
+      if (p) {
+        updates[p.id] = perQuarter;
+      }
+    }
+    setEditedPeriods(prev => ({ ...prev, ...updates }));
+  };
+
+  const handleAnnualYoyEdit = (lineItemId: string, year: number, yoyPercent: string) => {
+    const pct = parseFloat(yoyPercent);
+    if (isNaN(pct)) return;
+    const priorTotal = getAnnualTotal(lineItemId, year - 1);
+    if (priorTotal === 0) return;
+    const newTotal = priorTotal * (1 + pct / 100);
+    const perQuarter = newTotal / 4;
+    const updates: Record<string, number> = {};
+    for (let q = 1; q <= 4; q++) {
+      const p = getPeriod(lineItemId, year, q);
+      if (p) {
+        updates[p.id] = perQuarter;
+      }
+    }
+    setEditedPeriods(prev => ({ ...prev, ...updates }));
+  };
+
+  const handleYoyEdit = (periodId: string, yoyPercent: string, priorAmount: number) => {
+    const pct = parseFloat(yoyPercent);
+    if (isNaN(pct)) return;
+    const newAmount = priorAmount * (1 + pct / 100);
+    setEditedPeriods(prev => ({ ...prev, [periodId]: newAmount }));
+  };
+
+  const handleNewItemEdit = (tempId: string, year: number, quarter: number | null, value: string) => {
+    const num = parseWithUnit(value, displayUnit);
+    const key = quarter ? `${year}-Q${quarter}` : `${year}-A`;
     setNewLineItemPeriods(prev => ({
       ...prev,
       [tempId]: { ...(prev[tempId] || {}), [key]: num },
@@ -334,6 +471,7 @@ export default function RevenueForecast() {
     setPendingDeletes(new Set());
     setNewLineItems([]);
     setNewLineItemPeriods({});
+    setYoyInputMode(false);
   };
 
   const hasEdits = Object.keys(editedPeriods).length > 0 ||
@@ -377,7 +515,7 @@ export default function RevenueForecast() {
   ];
 
   const quarterlyChartData: Array<Record<string, number | string>> = [];
-  years.forEach(year => {
+  quarterlyYears.forEach(year => {
     for (let q = 1; q <= 4; q++) {
       const entry: Record<string, number | string> = { period: `${year} Q${q}` };
       visibleLineItems.forEach(li => { entry[getLineItemName(li)] = getQuarterlyAmount(li.id, year, q); });
@@ -386,17 +524,65 @@ export default function RevenueForecast() {
     }
   });
 
+  const sparklineData = useMemo(() => {
+    const data: Record<string, Array<{ year: number; value: number }>> = {};
+    visibleLineItems.forEach(li => {
+      data[li.id] = years.map(year => ({ year, value: getAnnualTotal(li.id, year) }));
+    });
+    data["__total__"] = years.map(year => ({ year, value: getTotalRevenue(year) }));
+    return data;
+  }, [visibleLineItems, years, periods, editedPeriods]);
+
+  const renderSparkline = (dataPoints: Array<{ year: number; value: number }>, color: string = "hsl(var(--chart-1))") => {
+    if (!dataPoints || dataPoints.length < 2) return null;
+    return (
+      <div className="inline-block w-16 h-5 align-middle ml-1">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={dataPoints}>
+            <Line type="monotone" dataKey="value" stroke={color} strokeWidth={1.5} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  };
+
+  const totalColSpan = quarterlyYears.length * 4 + annualOnlyYears.length + 1 + (editMode ? 1 : 0);
+
+  const renderYoYPct = (g: number | null) => {
+    if (g === null) return <span className="text-xs text-muted-foreground">--</span>;
+    return (
+      <span className={`text-[10px] font-medium inline-flex items-center gap-0.5 ${g >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+        {g >= 0 ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
+        {formatPercent(g)}
+      </span>
+    );
+  };
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Revenue Forecast</h1>
-          <p className="text-sm text-muted-foreground">Revenue streams with quarterly breakdown</p>
+          <p className="text-sm text-muted-foreground">
+            Revenue streams &mdash; {years.length} year model
+            {annualOnlyYears.length > 0 && ` (${quarterlyYears.length}yr quarterly + ${annualOnlyYears.length}yr annual)`}
+            {displayUnit !== "ones" && (
+              <Badge variant="secondary" className="ml-2">{UNIT_LABELS[displayUnit]}</Badge>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="outline" data-testid="badge-model-name">{model.name}</Badge>
           {editMode ? (
             <>
+              <Button
+                variant={yoyInputMode ? "default" : "outline"}
+                onClick={() => setYoyInputMode(!yoyInputMode)}
+                data-testid="button-toggle-yoy-input"
+              >
+                <Percent className="h-4 w-4 mr-1" />
+                {yoyInputMode ? "YoY% Mode" : "$ Mode"}
+              </Button>
               <Button
                 variant="outline"
                 onClick={cancelEdit}
@@ -448,7 +634,12 @@ export default function RevenueForecast() {
           <CardContent className="pt-4 pb-3">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <ArrowRight className="h-4 w-4" />
-              <span>Edit revenue stream names and quarterly values, add new streams, or remove existing ones. Changes cascade through all downstream statements.</span>
+              <span>
+                {yoyInputMode
+                  ? "Enter YoY % change to auto-calculate values. Toggle back to $ Mode for direct value entry."
+                  : `Enter values in ${UNIT_LABELS[displayUnit]} (decimals accepted, e.g. 11.5 = ${formatWithUnit(11.5 * (UNIT_MULTIPLIERS[displayUnit] || 1), "ones")}). Changes cascade through all downstream statements.`
+                }
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -459,7 +650,7 @@ export default function RevenueForecast() {
           <CardContent className="pt-4 pb-3">
             <div className="flex items-center gap-2 text-sm text-yellow-600 dark:text-yellow-500">
               <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-              <span>No revenue data entered yet. Click "Edit Revenue" to add quarterly revenue for each stream, or use "Forecast Forward" after entering at least one quarter of data. Revenue is the foundation for all downstream calculations.</span>
+              <span>No revenue data entered yet. Click "Edit Revenue" to add quarterly revenue for each stream, or use "Forecast Forward" after entering at least one quarter of data.</span>
             </div>
           </CardContent>
         </Card>
@@ -473,7 +664,7 @@ export default function RevenueForecast() {
           >
             <div className="flex items-center gap-2">
               <Settings2 className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-sm font-medium flex items-center gap-1">Projection Settings <InfoTooltip content="Advanced settings that control how revenue projections behave. Growth decay slows growth over time, target margin drives cost convergence, and scenario multipliers create bull/base/bear cases." /></CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center gap-1">Projection Settings <InfoTooltip content="Advanced settings that control how revenue projections behave." /></CardTitle>
             </div>
             {showProjectionSettings ? (
               <ChevronUp className="h-4 w-4 text-muted-foreground" />
@@ -487,7 +678,7 @@ export default function RevenueForecast() {
                 <div className="space-y-3">
                   <h4 className="text-sm font-medium text-muted-foreground">Growth Model</h4>
                   <div className="space-y-1">
-                    <Label className="text-xs flex items-center gap-1">Growth Decay Rate <InfoTooltip content="Controls how quickly revenue growth decelerates in projected years. At 0%, growth stays flat. At 15%, each successive year's growth rate declines by 15% of the prior year's rate." /></Label>
+                    <Label className="text-xs flex items-center gap-1">Growth Decay Rate <InfoTooltip content="Controls how quickly revenue growth decelerates in projected years." /></Label>
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
@@ -506,10 +697,9 @@ export default function RevenueForecast() {
                         ({(projectionSettings.growthDecayRate * 100).toFixed(0)}% annual decay)
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground">Each year, the growth rate decreases by this factor. Higher = faster deceleration.</p>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs flex items-center gap-1">Target Net Margin <InfoTooltip content="If set, cost assumptions will gradually converge toward this net margin over the projection period. Leave blank to keep cost percentages fixed." /></Label>
+                    <Label className="text-xs flex items-center gap-1">Target Net Margin <InfoTooltip content="If set, cost assumptions converge toward this net margin." /></Label>
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
@@ -520,7 +710,7 @@ export default function RevenueForecast() {
                         placeholder="None"
                         onChange={(e) => setProjectionSettings({
                           ...projectionSettings,
-                          targetNetMargin: e.target.value === "" ? null : parseFloat(e.target.value) || 0,
+                          targetNetMargin: e.target.value === "" ? null : (parseFloat(e.target.value) || 0),
                         })}
                         className="w-24"
                         data-testid="input-target-margin"
@@ -531,61 +721,39 @@ export default function RevenueForecast() {
                           : "(disabled)"}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground">Cost assumptions converge toward this net margin over the model period. Leave blank to disable.</p>
                   </div>
                 </div>
 
                 <div className="space-y-3 md:col-span-2">
                   <h4 className="text-sm font-medium text-muted-foreground">Scenario Multipliers</h4>
-                  <p className="text-xs text-muted-foreground">Multiplied against the base growth rate to generate bull/base/bear revenue projections for valuation.</p>
+                  <p className="text-xs text-muted-foreground">Multiplied against the base growth rate to generate bull/base/bear revenue projections.</p>
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1">
-                      <Label className="text-xs text-green-500 flex items-center gap-1">Bull Case <InfoTooltip content="Multiplier applied to the base growth rate for bull-case revenue projections. 1.2x means 20% higher growth than base case." /></Label>
+                      <Label className="text-xs text-green-500 flex items-center gap-1">Bull Case <InfoTooltip content="Multiplier for bull-case revenue projections." /></Label>
                       <Input
-                        type="number"
-                        step="0.05"
-                        min="0.1"
-                        max="5"
+                        type="number" step="0.05" min="0.1" max="5"
                         value={projectionSettings.scenarioBullMultiplier}
-                        onChange={(e) => setProjectionSettings({
-                          ...projectionSettings,
-                          scenarioBullMultiplier: parseFloat(e.target.value) || 1,
-                        })}
+                        onChange={(e) => setProjectionSettings({ ...projectionSettings, scenarioBullMultiplier: parseFloat(e.target.value) || 1 })}
                         data-testid="input-bull-multiplier"
                       />
-                      <p className="text-xs text-muted-foreground">{(projectionSettings.scenarioBullMultiplier * 100).toFixed(0)}% of base growth</p>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs flex items-center gap-1">Base Case <InfoTooltip content="Multiplier for the base-case scenario. Typically 1.0x (no adjustment to the projected growth rate)." /></Label>
+                      <Label className="text-xs flex items-center gap-1">Base Case</Label>
                       <Input
-                        type="number"
-                        step="0.05"
-                        min="0.1"
-                        max="5"
+                        type="number" step="0.05" min="0.1" max="5"
                         value={projectionSettings.scenarioBaseMultiplier}
-                        onChange={(e) => setProjectionSettings({
-                          ...projectionSettings,
-                          scenarioBaseMultiplier: parseFloat(e.target.value) || 1,
-                        })}
+                        onChange={(e) => setProjectionSettings({ ...projectionSettings, scenarioBaseMultiplier: parseFloat(e.target.value) || 1 })}
                         data-testid="input-base-multiplier"
                       />
-                      <p className="text-xs text-muted-foreground">{(projectionSettings.scenarioBaseMultiplier * 100).toFixed(0)}% of base growth</p>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs text-red-500 flex items-center gap-1">Bear Case <InfoTooltip content="Multiplier applied for bear-case projections. 0.8x means 20% lower growth than base case." /></Label>
+                      <Label className="text-xs text-red-500 flex items-center gap-1">Bear Case</Label>
                       <Input
-                        type="number"
-                        step="0.05"
-                        min="0.1"
-                        max="5"
+                        type="number" step="0.05" min="0.1" max="5"
                         value={projectionSettings.scenarioBearMultiplier}
-                        onChange={(e) => setProjectionSettings({
-                          ...projectionSettings,
-                          scenarioBearMultiplier: parseFloat(e.target.value) || 1,
-                        })}
+                        onChange={(e) => setProjectionSettings({ ...projectionSettings, scenarioBearMultiplier: parseFloat(e.target.value) || 1 })}
                         data-testid="input-bear-multiplier"
                       />
-                      <p className="text-xs text-muted-foreground">{(projectionSettings.scenarioBearMultiplier * 100).toFixed(0)}% of base growth</p>
                     </div>
                   </div>
                 </div>
@@ -612,11 +780,14 @@ export default function RevenueForecast() {
         {years.slice(-3).map(year => (
           <Card key={year} data-testid={`card-revenue-${year}`}>
             <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-1">{year} Revenue <InfoTooltip content="Total annual revenue across all revenue streams. YoY shows year-over-year growth rate compared to the prior year." /></CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center gap-1">
+                {year} Revenue
+                {sparklineData["__total__"] && renderSparkline(sparklineData["__total__"], "hsl(var(--chart-1))")}
+              </CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid={`text-revenue-${year}`}>{formatCurrency(getTotalRevenue(year))}</div>
+              <div className="text-2xl font-bold" data-testid={`text-revenue-${year}`}>{formatWithUnit(getTotalRevenue(year), displayUnit)}</div>
               {calcYoYGrowth(year) !== null && (
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <TrendingUp className="h-3 w-3" />
@@ -643,8 +814,8 @@ export default function RevenueForecast() {
                 <Table data-testid="table-quarterly-revenue">
                   <TableHeader>
                     <TableRow>
-                      <TableHead rowSpan={2} className="min-w-[200px] align-bottom">Revenue Stream</TableHead>
-                      {years.map(year => (
+                      <TableHead rowSpan={2} className="min-w-[180px] align-bottom sticky left-0 bg-card z-10">Revenue Stream</TableHead>
+                      {quarterlyYears.map(year => (
                         <TableHead key={`year-${year}`} colSpan={4} className="text-center text-xs border-b-0">
                           {editMode ? (
                             <Input
@@ -659,12 +830,27 @@ export default function RevenueForecast() {
                           )}
                         </TableHead>
                       ))}
+                      {annualOnlyYears.map(year => (
+                        <TableHead key={`year-${year}`} rowSpan={2} className="text-center text-xs align-bottom min-w-[90px]">
+                          {editMode ? (
+                            <Input
+                              type="number"
+                              value={getDisplayYear(year)}
+                              onChange={(e) => handleYearEdit(year, e.target.value)}
+                              className={`h-7 text-xs text-center w-20 mx-auto ${editedYears[year] !== undefined ? "border-blue-500" : ""}`}
+                              data-testid={`input-year-${year}`}
+                            />
+                          ) : (
+                            <span data-testid={`text-year-${year}`}>{year}<br /><span className="text-muted-foreground text-[10px]">Annual</span></span>
+                          )}
+                        </TableHead>
+                      ))}
                       {editMode && <TableHead rowSpan={2} className="w-[50px] align-bottom" />}
                     </TableRow>
                     <TableRow>
-                      {years.map(year => (
+                      {quarterlyYears.map(year => (
                         [1, 2, 3, 4].map(q => (
-                          <TableHead key={`${year}-Q${q}`} className="text-right text-xs min-w-[90px]">
+                          <TableHead key={`${year}-Q${q}`} className="text-right text-xs min-w-[85px]">
                             Q{q}
                           </TableHead>
                         ))
@@ -672,69 +858,164 @@ export default function RevenueForecast() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {visibleLineItems.map(li => (
-                      <TableRow key={li.id} data-testid={`row-revenue-${li.id}`}>
-                        <TableCell className="font-medium text-sm">
-                          {editMode ? (
-                            <Input
-                              type="text"
-                              value={getLineItemName(li)}
-                              onChange={(e) => handleNameEdit(li.id, e.target.value)}
-                              className="h-7 text-sm"
-                              data-testid={`input-name-${li.id}`}
-                            />
-                          ) : (
-                            li.name
+                    {visibleLineItems.map((li, liIdx) => (
+                      <Fragment key={li.id}>
+                        <TableRow data-testid={`row-revenue-${li.id}`}>
+                          <TableCell className="font-medium text-sm sticky left-0 bg-card z-10">
+                            <div className="flex items-center gap-1">
+                              {editMode ? (
+                                <Input
+                                  type="text"
+                                  value={getLineItemName(li)}
+                                  onChange={(e) => handleNameEdit(li.id, e.target.value)}
+                                  className="h-7 text-sm"
+                                  data-testid={`input-name-${li.id}`}
+                                />
+                              ) : (
+                                <>
+                                  {li.name}
+                                  {sparklineData[li.id] && renderSparkline(sparklineData[li.id], COLORS[liIdx % COLORS.length])}
+                                </>
+                              )}
+                            </div>
+                          </TableCell>
+                          {quarterlyYears.map(year =>
+                            [1, 2, 3, 4].map(q => {
+                              const period = getPeriod(li.id, year, q);
+                              const amt = period ? getEditedAmount(period.id, period.amount || 0) : 0;
+                              const isEdited = period && editedPeriods[period.id] !== undefined;
+                              const priorAmt = q === 1
+                                ? getQuarterlyAmount(li.id, year - 1, 4)
+                                : getQuarterlyAmount(li.id, year, q - 1);
+                              return (
+                                <TableCell key={`${year}-Q${q}`} className="text-right p-1">
+                                  {editMode && period ? (
+                                    yoyInputMode && priorAmt > 0 ? (
+                                      <div className="space-y-0.5">
+                                        <Input
+                                          type="number"
+                                          step="0.1"
+                                          placeholder="% YoY"
+                                          value={amt > 0 && priorAmt > 0 ? ((amt / priorAmt - 1) * 100).toFixed(1) : ""}
+                                          onChange={(e) => handleYoyEdit(period.id, e.target.value, priorAmt)}
+                                          className={`h-7 text-xs text-right ${isEdited ? "border-blue-500" : ""}`}
+                                          data-testid={`input-yoy-${li.id}-${year}-Q${q}`}
+                                        />
+                                        <span className="text-[10px] text-muted-foreground block text-right">{formatWithUnit(amt, displayUnit)}</span>
+                                      </div>
+                                    ) : (
+                                      <Input
+                                        type="text"
+                                        value={displayForInput(amt, displayUnit)}
+                                        onChange={(e) => handleEdit(period.id, e.target.value)}
+                                        className={`h-7 text-xs text-right ${isEdited ? "border-blue-500" : ""}`}
+                                        data-testid={`input-revenue-${li.id}-${year}-Q${q}`}
+                                      />
+                                    )
+                                  ) : (
+                                    <div>
+                                      <span className="text-xs">{formatWithUnit(amt, displayUnit)}</span>
+                                      <div className="flex flex-col items-end">
+                                        {calcStreamQoQGrowth(li.id, year, q) !== null && (
+                                          <span className={`text-[10px] ${calcStreamQoQGrowth(li.id, year, q)! >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                                            {formatPercent(calcStreamQoQGrowth(li.id, year, q)!)} QoQ
+                                          </span>
+                                        )}
+                                        {calcStreamQPercentOfTotal(li.id, year, q) !== null && (
+                                          <span className="text-[10px] text-muted-foreground">
+                                            {formatPercent(calcStreamQPercentOfTotal(li.id, year, q)!)} of total
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </TableCell>
+                              );
+                            })
                           )}
-                        </TableCell>
-                        {years.map(year =>
-                          [1, 2, 3, 4].map(q => {
-                            const period = getPeriod(li.id, year, q);
-                            const amt = period ? getEditedAmount(period.id, period.amount || 0) : 0;
-                            const isEdited = period && editedPeriods[period.id] !== undefined;
+                          {annualOnlyYears.map(year => {
+                            const annualAmt = getAnnualTotal(li.id, year);
+                            const hasAnyEdited = [1,2,3,4].some(q => {
+                              const p = getPeriod(li.id, year, q);
+                              return p && editedPeriods[p.id] !== undefined;
+                            });
+                            const hasAnyPeriod = [1,2,3,4].some(q => getPeriod(li.id, year, q));
+                            const priorAmt = getAnnualTotal(li.id, year - 1);
                             return (
-                              <TableCell key={`${year}-Q${q}`} className="text-right p-1">
-                                {editMode && period ? (
-                                  <Input
-                                    type="text"
-                                    value={Math.round(amt).toLocaleString()}
-                                    onChange={(e) => handleEdit(period.id, e.target.value)}
-                                    className={`h-7 text-xs text-right ${isEdited ? "border-blue-500" : ""}`}
-                                    data-testid={`input-revenue-${li.id}-${year}-Q${q}`}
-                                  />
+                              <TableCell key={`${year}-A`} className="text-right p-1">
+                                {editMode && hasAnyPeriod ? (
+                                  yoyInputMode && priorAmt > 0 ? (
+                                    <div className="space-y-0.5">
+                                      <Input
+                                        type="number" step="0.1" placeholder="% YoY"
+                                        value={annualAmt > 0 && priorAmt > 0 ? ((annualAmt / priorAmt - 1) * 100).toFixed(1) : ""}
+                                        onChange={(e) => handleAnnualYoyEdit(li.id, year, e.target.value)}
+                                        className={`h-7 text-xs text-right ${hasAnyEdited ? "border-blue-500" : ""}`}
+                                        data-testid={`input-yoy-${li.id}-${year}-A`}
+                                      />
+                                      <span className="text-[10px] text-muted-foreground block text-right">{formatWithUnit(annualAmt, displayUnit)}</span>
+                                    </div>
+                                  ) : (
+                                    <Input
+                                      type="text"
+                                      value={displayForInput(annualAmt, displayUnit)}
+                                      onChange={(e) => handleAnnualEdit(li.id, year, e.target.value)}
+                                      className={`h-7 text-xs text-right ${hasAnyEdited ? "border-blue-500" : ""}`}
+                                      data-testid={`input-revenue-${li.id}-${year}-A`}
+                                    />
+                                  )
                                 ) : (
-                                  <span className="text-xs">{formatCurrency(amt)}</span>
+                                  <div>
+                                    <span className="text-xs">{formatWithUnit(annualAmt, displayUnit)}</span>
+                                    <div className="flex flex-col items-end">
+                                      {calcStreamYoYGrowth(li.id, year) !== null && (
+                                        <span className={`text-[10px] ${calcStreamYoYGrowth(li.id, year)! >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                                          {formatPercent(calcStreamYoYGrowth(li.id, year)!)} YoY
+                                        </span>
+                                      )}
+                                      {calcStreamPercentOfTotal(li.id, year) !== null && (
+                                        <span className="text-[10px] text-muted-foreground">
+                                          {formatPercent(calcStreamPercentOfTotal(li.id, year)!)} of total
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
                                 )}
                               </TableCell>
                             );
-                          })
-                        )}
-                        {editMode && (
-                          <TableCell className="p-1">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => handleDelete(li.id)}
-                              data-testid={`button-delete-${li.id}`}
-                              className="text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        )}
-                      </TableRow>
+                          })}
+                          {editMode && (
+                            <TableCell className="p-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleDelete(li.id)}
+                                data-testid={`button-delete-${li.id}`}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      </Fragment>
                     ))}
 
                     {editMode && pendingDeletes.size > 0 && lineItems?.filter(li => pendingDeletes.has(li.id)).map(li => (
                       <TableRow key={`deleted-${li.id}`} className="opacity-40 line-through">
-                        <TableCell className="font-medium text-sm text-muted-foreground">{li.name}</TableCell>
-                        {years.map(year =>
+                        <TableCell className="font-medium text-sm text-muted-foreground sticky left-0 bg-card z-10">{li.name}</TableCell>
+                        {quarterlyYears.map(year =>
                           [1, 2, 3, 4].map(q => (
                             <TableCell key={`${year}-Q${q}`} className="text-right p-1">
                               <span className="text-xs text-muted-foreground">--</span>
                             </TableCell>
                           ))
                         )}
+                        {annualOnlyYears.map(year => (
+                          <TableCell key={`${year}-A`} className="text-right p-1">
+                            <span className="text-xs text-muted-foreground">--</span>
+                          </TableCell>
+                        ))}
                         <TableCell className="p-1">
                           <Button
                             size="icon"
@@ -750,7 +1031,7 @@ export default function RevenueForecast() {
 
                     {editMode && newLineItems.map(ni => (
                       <TableRow key={ni.tempId} className="bg-muted/30" data-testid={`row-new-${ni.tempId}`}>
-                        <TableCell className="font-medium text-sm">
+                        <TableCell className="font-medium text-sm sticky left-0 bg-muted/30 z-10">
                           <Input
                             type="text"
                             value={ni.name}
@@ -760,7 +1041,7 @@ export default function RevenueForecast() {
                             data-testid={`input-new-name-${ni.tempId}`}
                           />
                         </TableCell>
-                        {years.map(year =>
+                        {quarterlyYears.map(year =>
                           [1, 2, 3, 4].map(q => {
                             const key = `${year}-Q${q}`;
                             const amt = newLineItemPeriods[ni.tempId]?.[key] || 0;
@@ -768,7 +1049,7 @@ export default function RevenueForecast() {
                               <TableCell key={key} className="text-right p-1">
                                 <Input
                                   type="text"
-                                  value={amt === 0 ? "" : Math.round(amt).toLocaleString()}
+                                  value={displayForInput(amt, displayUnit)}
                                   onChange={(e) => handleNewItemEdit(ni.tempId, year, q, e.target.value)}
                                   placeholder="0"
                                   className="h-7 text-xs text-right"
@@ -778,6 +1059,22 @@ export default function RevenueForecast() {
                             );
                           })
                         )}
+                        {annualOnlyYears.map(year => {
+                          const key = `${year}-A`;
+                          const amt = newLineItemPeriods[ni.tempId]?.[key] || 0;
+                          return (
+                            <TableCell key={key} className="text-right p-1">
+                              <Input
+                                type="text"
+                                value={displayForInput(amt, displayUnit)}
+                                onChange={(e) => handleNewItemEdit(ni.tempId, year, null, e.target.value)}
+                                placeholder="0"
+                                className="h-7 text-xs text-right"
+                                data-testid={`input-new-revenue-${ni.tempId}-${year}-A`}
+                              />
+                            </TableCell>
+                          );
+                        })}
                         <TableCell className="p-1">
                           <Button
                             size="icon"
@@ -794,7 +1091,7 @@ export default function RevenueForecast() {
 
                     {editMode && (
                       <TableRow>
-                        <TableCell colSpan={years.length * 4 + 2}>
+                        <TableCell colSpan={totalColSpan}>
                           <Button
                             variant="outline"
                             onClick={handleAddLineItem}
@@ -808,19 +1105,22 @@ export default function RevenueForecast() {
                     )}
 
                     <TableRow className="font-bold border-t-2">
-                      <TableCell>Total</TableCell>
-                      {years.map(year =>
+                      <TableCell className="sticky left-0 bg-card z-10">Total</TableCell>
+                      {quarterlyYears.map(year =>
                         [1, 2, 3, 4].map(q => {
-                          let total = 0;
-                          visibleLineItems.forEach(li => { total += getQuarterlyAmount(li.id, year, q); });
-                          newLineItems.forEach(ni => { total += getNewItemQuarterlyAmount(ni.tempId, year, q); });
+                          const total = getQuarterTotal(year, q);
                           return (
                             <TableCell key={`total-${year}-Q${q}`} className="text-right text-xs">
-                              {formatCurrency(total)}
+                              {formatWithUnit(total, displayUnit)}
                             </TableCell>
                           );
                         })
                       )}
+                      {annualOnlyYears.map(year => (
+                        <TableCell key={`total-${year}-A`} className="text-right text-xs">
+                          {formatWithUnit(getTotalRevenue(year), displayUnit)}
+                        </TableCell>
+                      ))}
                       {editMode && <TableCell />}
                     </TableRow>
                   </TableBody>
@@ -843,13 +1143,25 @@ export default function RevenueForecast() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibleLineItems.map(li => (
+                  {visibleLineItems.map((li, liIdx) => (
                     <Fragment key={li.id}>
                       <TableRow data-testid={`row-annual-${li.id}`}>
-                        <TableCell className="font-medium">{getLineItemName(li)}</TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-1">
+                            {getLineItemName(li)}
+                            {sparklineData[li.id] && renderSparkline(sparklineData[li.id], COLORS[liIdx % COLORS.length])}
+                          </div>
+                        </TableCell>
                         {years.map(year => (
                           <TableCell key={year} className="text-right">
-                            {formatCurrency(getAnnualTotal(li.id, year))}
+                            <div>
+                              <span>{formatWithUnit(getAnnualTotal(li.id, year), displayUnit)}</span>
+                              {calcStreamPercentOfTotal(li.id, year) !== null && (
+                                <div className="text-[10px] text-muted-foreground">
+                                  {formatPercent(calcStreamPercentOfTotal(li.id, year)!)} of total
+                                </div>
+                              )}
+                            </div>
                           </TableCell>
                         ))}
                       </TableRow>
@@ -859,14 +1171,7 @@ export default function RevenueForecast() {
                           const g = calcStreamYoYGrowth(li.id, year);
                           return (
                             <TableCell key={year} className="text-right py-1">
-                              {g !== null ? (
-                                <span className={`text-xs font-medium inline-flex items-center gap-0.5 ${g >= 0 ? "text-emerald-500" : "text-red-500"}`} data-testid={`text-stream-growth-${li.id}-${year}`}>
-                                  {g >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                                  {formatPercent(g)}
-                                </span>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">--</span>
-                              )}
+                              {renderYoYPct(g)}
                             </TableCell>
                           );
                         })}
@@ -878,16 +1183,21 @@ export default function RevenueForecast() {
                       <TableCell className="font-medium">{ni.name}</TableCell>
                       {years.map(year => (
                         <TableCell key={year} className="text-right">
-                          {formatCurrency(getNewItemAnnualTotal(ni.tempId, year))}
+                          {formatWithUnit(getNewItemAnnualTotal(ni.tempId, year), displayUnit)}
                         </TableCell>
                       ))}
                     </TableRow>
                   ))}
                   <TableRow className="font-bold border-t-2">
-                    <TableCell>Total Revenue</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        Total Revenue
+                        {sparklineData["__total__"] && renderSparkline(sparklineData["__total__"])}
+                      </div>
+                    </TableCell>
                     {years.map(year => (
                       <TableCell key={year} className="text-right" data-testid={`text-total-${year}`}>
-                        {formatCurrency(getTotalRevenue(year))}
+                        {formatWithUnit(getTotalRevenue(year), displayUnit)}
                       </TableCell>
                     ))}
                   </TableRow>
@@ -897,14 +1207,7 @@ export default function RevenueForecast() {
                       const growth = calcYoYGrowth(year);
                       return (
                         <TableCell key={year} className="text-right">
-                          {growth !== null ? (
-                            <span className={`text-xs font-semibold inline-flex items-center gap-0.5 ${growth >= 0 ? "text-emerald-500" : "text-red-500"}`} data-testid={`text-total-growth-${year}`}>
-                              {growth >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                              {formatPercent(growth)}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">--</span>
-                          )}
+                          {renderYoYPct(growth)}
                         </TableCell>
                       );
                     })}
@@ -918,7 +1221,7 @@ export default function RevenueForecast() {
         <TabsContent value="annual-chart">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-medium flex items-center gap-1">Annual Revenue by Stream <InfoTooltip content="Quarterly revenue by stream (Subscription, Services, etc.). Annual totals and growth rates are calculated automatically. Click Edit to modify values." /></CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center gap-1">Annual Revenue by Stream <InfoTooltip content="Stacked bar chart showing annual revenue by stream." /></CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-80">
@@ -926,8 +1229,8 @@ export default function RevenueForecast() {
                   <BarChart data={annualChartData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="year" className="text-xs" />
-                    <YAxis className="text-xs" tickFormatter={(v) => formatCurrency(v)} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => formatCurrency(v)} />
+                    <YAxis className="text-xs" tickFormatter={(v) => formatWithUnit(v, displayUnit)} />
+                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => formatWithUnit(v, displayUnit)} />
                     <Legend />
                     {allNames.map((name, i) => (
                       <Bar key={name} dataKey={name} fill={COLORS[i % COLORS.length]} radius={[2, 2, 0, 0]} />
@@ -942,7 +1245,7 @@ export default function RevenueForecast() {
         <TabsContent value="quarterly-chart">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-medium flex items-center gap-1">Quarterly Revenue Trend <InfoTooltip content="Visual trend of total revenue over time. Use this to quickly assess the growth trajectory and identify inflection points." /></CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center gap-1">Quarterly Revenue Trend <InfoTooltip content="Area chart showing quarterly revenue trends." /></CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-80">
@@ -950,8 +1253,8 @@ export default function RevenueForecast() {
                   <AreaChart data={quarterlyChartData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="period" className="text-xs" angle={-45} textAnchor="end" height={60} />
-                    <YAxis className="text-xs" tickFormatter={(v) => formatCurrency(v)} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => formatCurrency(v)} />
+                    <YAxis className="text-xs" tickFormatter={(v) => formatWithUnit(v, displayUnit)} />
+                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => formatWithUnit(v, displayUnit)} />
                     <Legend />
                     {allNames.map((name, i) => (
                       <Area key={name} type="monotone" dataKey={name} fill={COLORS[i % COLORS.length]} stroke={COLORS[i % COLORS.length]} fillOpacity={0.3} />
