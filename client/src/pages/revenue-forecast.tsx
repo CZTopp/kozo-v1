@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { RevenueLineItem, RevenuePeriod } from "@shared/schema";
 import { ComposedChart, Bar, AreaChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Label } from "@/components/ui/label";
-import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil, Sparkles, Settings2, ChevronDown, ChevronUp, AlertTriangle, Percent } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil, Sparkles, Settings2, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
@@ -82,7 +82,6 @@ export default function RevenueForecast() {
   const [newLineItems, setNewLineItems] = useState<Array<{ tempId: string; name: string }>>([]);
   const [newLineItemPeriods, setNewLineItemPeriods] = useState<Record<string, Record<string, number>>>({});
   const [showProjectionSettings, setShowProjectionSettings] = useState(false);
-  const [yoyInputMode, setYoyInputMode] = useState(false);
   const [projectionSettings, setProjectionSettings] = useState<{
     growthDecayRate: number;
     targetNetMargin: number | null;
@@ -194,7 +193,6 @@ export default function RevenueForecast() {
       setPendingDeletes(new Set());
       setNewLineItems([]);
       setNewLineItemPeriods({});
-      setYoyInputMode(false);
       toast({ title: "Model recalculated", description: "All financial statements have been updated from your revenue changes." });
     },
     onError: (err: Error) => {
@@ -366,6 +364,25 @@ export default function RevenueForecast() {
     return (current - prior) / Math.abs(prior);
   };
 
+  const calcStreamQYoYGrowth = (lineItemId: string, year: number, quarter: number) => {
+    const current = getQuarterlyAmount(lineItemId, year, quarter);
+    const prior = getQuarterlyAmount(lineItemId, year - 1, quarter);
+    if (!prior || prior === 0) return null;
+    return (current - prior) / Math.abs(prior);
+  };
+
+  const handleQYoYEdit = (lineItemId: string, year: number, quarter: number, yoyPercent: string) => {
+    const pct = parseFloat(yoyPercent);
+    if (isNaN(pct)) return;
+    const priorAmt = getQuarterlyAmount(lineItemId, year - 1, quarter);
+    if (priorAmt === 0) return;
+    const newAmount = priorAmt * (1 + pct / 100);
+    const period = getPeriod(lineItemId, year, quarter);
+    if (period) {
+      setEditedPeriods(prev => ({ ...prev, [period.id]: newAmount }));
+    }
+  };
+
   const calcStreamPercentOfTotal = (lineItemId: string, year: number) => {
     const total = getTotalRevenue(year);
     if (!total || total === 0) return null;
@@ -411,13 +428,6 @@ export default function RevenueForecast() {
       }
     }
     setEditedPeriods(prev => ({ ...prev, ...updates }));
-  };
-
-  const handleYoyEdit = (periodId: string, yoyPercent: string, priorAmount: number) => {
-    const pct = parseFloat(yoyPercent);
-    if (isNaN(pct)) return;
-    const newAmount = priorAmount * (1 + pct / 100);
-    setEditedPeriods(prev => ({ ...prev, [periodId]: newAmount }));
   };
 
   const handleNewItemEdit = (tempId: string, year: number, quarter: number | null, value: string) => {
@@ -471,7 +481,6 @@ export default function RevenueForecast() {
     setPendingDeletes(new Set());
     setNewLineItems([]);
     setNewLineItemPeriods({});
-    setYoyInputMode(false);
   };
 
   const hasEdits = Object.keys(editedPeriods).length > 0 ||
@@ -554,14 +563,6 @@ export default function RevenueForecast() {
           {editMode ? (
             <>
               <Button
-                variant={yoyInputMode ? "default" : "outline"}
-                onClick={() => setYoyInputMode(!yoyInputMode)}
-                data-testid="button-toggle-yoy-input"
-              >
-                <Percent className="h-4 w-4 mr-1" />
-                {yoyInputMode ? "YoY% Mode" : "$ Mode"}
-              </Button>
-              <Button
                 variant="outline"
                 onClick={cancelEdit}
                 data-testid="button-cancel-edit"
@@ -613,10 +614,7 @@ export default function RevenueForecast() {
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <ArrowRight className="h-4 w-4" />
               <span>
-                {yoyInputMode
-                  ? "Enter YoY % change to auto-calculate values. Toggle back to $ Mode for direct value entry."
-                  : `Enter values in ${UNIT_LABELS[displayUnit]} (decimals accepted, e.g. 11.5 = ${formatWithUnit(11.5 * (UNIT_MULTIPLIERS[displayUnit] || 1), "ones")}). Changes cascade through all downstream statements.`
-                }
+{`Enter values in ${UNIT_LABELS[displayUnit]} (decimals accepted). Edit YoY % to auto-calculate amounts from prior year. Changes cascade through all downstream statements.`}
               </span>
             </div>
           </CardContent>
@@ -858,51 +856,57 @@ export default function RevenueForecast() {
                               const period = getPeriod(li.id, year, q);
                               const amt = period ? getEditedAmount(period.id, period.amount || 0) : 0;
                               const isEdited = period && editedPeriods[period.id] !== undefined;
-                              const priorAmt = q === 1
-                                ? getQuarterlyAmount(li.id, year - 1, 4)
-                                : getQuarterlyAmount(li.id, year, q - 1);
+                              const qoq = calcStreamQoQGrowth(li.id, year, q);
+                              const yoy = calcStreamQYoYGrowth(li.id, year, q);
+                              const pctOfTotal = calcStreamQPercentOfTotal(li.id, year, q);
                               return (
                                 <TableCell key={`${year}-Q${q}`} className="text-right p-1">
-                                  {editMode && period ? (
-                                    yoyInputMode && priorAmt > 0 ? (
-                                      <div className="space-y-0.5">
-                                        <Input
-                                          type="number"
-                                          step="0.1"
-                                          placeholder="% YoY"
-                                          value={amt > 0 && priorAmt > 0 ? ((amt / priorAmt - 1) * 100).toFixed(1) : ""}
-                                          onChange={(e) => handleYoyEdit(period.id, e.target.value, priorAmt)}
-                                          className={`h-7 text-xs text-right ${isEdited ? "border-blue-500" : ""}`}
-                                          data-testid={`input-yoy-${li.id}-${year}-Q${q}`}
-                                        />
-                                        <span className="text-[10px] text-muted-foreground block text-right">{formatWithUnit(amt, displayUnit)}</span>
-                                      </div>
-                                    ) : (
+                                  <div>
+                                    {editMode && period ? (
                                       <Input
                                         type="text"
                                         value={displayForInput(amt, displayUnit)}
                                         onChange={(e) => handleEdit(period.id, e.target.value)}
-                                        className={`h-7 text-xs text-right ${isEdited ? "border-blue-500" : ""}`}
+                                        className={`h-6 text-xs text-right ${isEdited ? "border-blue-500" : ""}`}
                                         data-testid={`input-revenue-${li.id}-${year}-Q${q}`}
                                       />
-                                    )
-                                  ) : (
-                                    <div>
+                                    ) : (
                                       <span className="text-xs">{formatWithUnit(amt, displayUnit)}</span>
-                                      <div className="flex flex-col items-end">
-                                        {calcStreamQoQGrowth(li.id, year, q) !== null && (
-                                          <span className={`text-[10px] ${calcStreamQoQGrowth(li.id, year, q)! >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                                            {formatPercent(calcStreamQoQGrowth(li.id, year, q)!)} QoQ
+                                    )}
+                                    <div className="flex flex-col items-end mt-0.5">
+                                      {qoq !== null && (
+                                        <span className={`text-[10px] ${qoq >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                                          {formatPercent(qoq)} QoQ
+                                        </span>
+                                      )}
+                                      {editMode && period ? (
+                                        yoy !== null || getQuarterlyAmount(li.id, year - 1, q) > 0 ? (
+                                          <div className="flex items-center gap-0.5 justify-end">
+                                            <Input
+                                              type="number"
+                                              step="0.1"
+                                              value={yoy !== null ? (yoy * 100).toFixed(1) : ""}
+                                              onChange={(e) => handleQYoYEdit(li.id, year, q, e.target.value)}
+                                              className="h-5 w-14 text-[10px] text-right p-0.5"
+                                              data-testid={`input-yoy-${li.id}-${year}-Q${q}`}
+                                            />
+                                            <span className="text-[10px] text-muted-foreground">YoY</span>
+                                          </div>
+                                        ) : null
+                                      ) : (
+                                        yoy !== null && (
+                                          <span className={`text-[10px] ${yoy >= 0 ? "text-blue-500" : "text-orange-500"}`}>
+                                            {formatPercent(yoy)} YoY
                                           </span>
-                                        )}
-                                        {calcStreamQPercentOfTotal(li.id, year, q) !== null && (
-                                          <span className="text-[10px] text-muted-foreground">
-                                            {formatPercent(calcStreamQPercentOfTotal(li.id, year, q)!)} of total
-                                          </span>
-                                        )}
-                                      </div>
+                                        )
+                                      )}
+                                      {pctOfTotal !== null && (
+                                        <span className="text-[10px] text-muted-foreground">
+                                          {formatPercent(pctOfTotal)} of total
+                                        </span>
+                                      )}
                                     </div>
-                                  )}
+                                  </div>
                                 </TableCell>
                               );
                             })
@@ -915,46 +919,51 @@ export default function RevenueForecast() {
                             });
                             const hasAnyPeriod = [1,2,3,4].some(q => getPeriod(li.id, year, q));
                             const priorAmt = getAnnualTotal(li.id, year - 1);
+                            const yoyGrowth = calcStreamYoYGrowth(li.id, year);
+                            const pctOfTotal = calcStreamPercentOfTotal(li.id, year);
                             return (
                               <TableCell key={`${year}-A`} className="text-right p-1">
-                                {editMode && hasAnyPeriod ? (
-                                  yoyInputMode && priorAmt > 0 ? (
-                                    <div className="space-y-0.5">
-                                      <Input
-                                        type="number" step="0.1" placeholder="% YoY"
-                                        value={annualAmt > 0 && priorAmt > 0 ? ((annualAmt / priorAmt - 1) * 100).toFixed(1) : ""}
-                                        onChange={(e) => handleAnnualYoyEdit(li.id, year, e.target.value)}
-                                        className={`h-7 text-xs text-right ${hasAnyEdited ? "border-blue-500" : ""}`}
-                                        data-testid={`input-yoy-${li.id}-${year}-A`}
-                                      />
-                                      <span className="text-[10px] text-muted-foreground block text-right">{formatWithUnit(annualAmt, displayUnit)}</span>
-                                    </div>
-                                  ) : (
+                                <div>
+                                  {editMode && hasAnyPeriod ? (
                                     <Input
                                       type="text"
                                       value={displayForInput(annualAmt, displayUnit)}
                                       onChange={(e) => handleAnnualEdit(li.id, year, e.target.value)}
-                                      className={`h-7 text-xs text-right ${hasAnyEdited ? "border-blue-500" : ""}`}
+                                      className={`h-6 text-xs text-right ${hasAnyEdited ? "border-blue-500" : ""}`}
                                       data-testid={`input-revenue-${li.id}-${year}-A`}
                                     />
-                                  )
-                                ) : (
-                                  <div>
+                                  ) : (
                                     <span className="text-xs">{formatWithUnit(annualAmt, displayUnit)}</span>
-                                    <div className="flex flex-col items-end">
-                                      {calcStreamYoYGrowth(li.id, year) !== null && (
-                                        <span className={`text-[10px] ${calcStreamYoYGrowth(li.id, year)! >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                                          {formatPercent(calcStreamYoYGrowth(li.id, year)!)} YoY
+                                  )}
+                                  <div className="flex flex-col items-end mt-0.5">
+                                    {editMode && hasAnyPeriod ? (
+                                      priorAmt > 0 ? (
+                                        <div className="flex items-center gap-0.5 justify-end">
+                                          <Input
+                                            type="number"
+                                            step="0.1"
+                                            value={yoyGrowth !== null ? (yoyGrowth * 100).toFixed(1) : ""}
+                                            onChange={(e) => handleAnnualYoyEdit(li.id, year, e.target.value)}
+                                            className="h-5 w-14 text-[10px] text-right p-0.5"
+                                            data-testid={`input-yoy-${li.id}-${year}-A`}
+                                          />
+                                          <span className="text-[10px] text-muted-foreground">YoY</span>
+                                        </div>
+                                      ) : null
+                                    ) : (
+                                      yoyGrowth !== null && (
+                                        <span className={`text-[10px] ${yoyGrowth >= 0 ? "text-blue-500" : "text-orange-500"}`}>
+                                          {formatPercent(yoyGrowth)} YoY
                                         </span>
-                                      )}
-                                      {calcStreamPercentOfTotal(li.id, year) !== null && (
-                                        <span className="text-[10px] text-muted-foreground">
-                                          {formatPercent(calcStreamPercentOfTotal(li.id, year)!)} of total
-                                        </span>
-                                      )}
-                                    </div>
+                                      )
+                                    )}
+                                    {pctOfTotal !== null && (
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {formatPercent(pctOfTotal)} of total
+                                      </span>
+                                    )}
                                   </div>
-                                )}
+                                </div>
                               </TableCell>
                             );
                           })}
