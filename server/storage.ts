@@ -6,6 +6,7 @@ import {
   dcfValuations, valuationComparisons, portfolioPositions, portfolioLots,
   macroIndicators, marketIndices, portfolioRedFlags,
   scenarios, assumptions, actuals, reports,
+  cryptoProjects, tokenSupplySchedules, tokenIncentives, protocolMetrics,
   type FinancialModel, type InsertFinancialModel,
   type RevenueLineItem, type InsertRevenueLineItem,
   type RevenuePeriod, type InsertRevenuePeriod,
@@ -23,6 +24,10 @@ import {
   type Assumptions, type InsertAssumptions,
   type Actual, type InsertActual,
   type Report, type InsertReport,
+  type CryptoProject, type InsertCryptoProject,
+  type TokenSupplySchedule, type InsertTokenSupplySchedule,
+  type TokenIncentive, type InsertTokenIncentive,
+  type ProtocolMetric, type InsertProtocolMetric,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -104,6 +109,26 @@ export interface IStorage {
   getReports(modelId: string): Promise<Report[]>;
   createReport(data: InsertReport): Promise<Report>;
   deleteReport(id: string): Promise<void>;
+
+  getCryptoProjects(): Promise<CryptoProject[]>;
+  getCryptoProject(id: string): Promise<CryptoProject | undefined>;
+  createCryptoProject(data: InsertCryptoProject): Promise<CryptoProject>;
+  updateCryptoProject(id: string, data: Partial<InsertCryptoProject>): Promise<CryptoProject>;
+  deleteCryptoProject(id: string): Promise<void>;
+
+  getTokenSupplySchedules(projectId: string): Promise<TokenSupplySchedule[]>;
+  createTokenSupplySchedule(data: InsertTokenSupplySchedule): Promise<TokenSupplySchedule>;
+  updateTokenSupplySchedule(id: string, data: Partial<InsertTokenSupplySchedule>): Promise<TokenSupplySchedule>;
+  deleteTokenSupplySchedule(id: string): Promise<void>;
+
+  getTokenIncentives(projectId: string): Promise<TokenIncentive[]>;
+  createTokenIncentive(data: InsertTokenIncentive): Promise<TokenIncentive>;
+  updateTokenIncentive(id: string, data: Partial<InsertTokenIncentive>): Promise<TokenIncentive>;
+  deleteTokenIncentive(id: string): Promise<void>;
+
+  getProtocolMetrics(projectId: string): Promise<ProtocolMetric[]>;
+  upsertProtocolMetrics(data: InsertProtocolMetric[]): Promise<ProtocolMetric[]>;
+  deleteProtocolMetrics(projectId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -438,6 +463,85 @@ export class DatabaseStorage implements IStorage {
 
   async deleteReport(id: string) {
     await db.delete(reports).where(eq(reports.id, id));
+  }
+
+  async getCryptoProjects() {
+    return db.select().from(cryptoProjects);
+  }
+
+  async getCryptoProject(id: string) {
+    const [project] = await db.select().from(cryptoProjects).where(eq(cryptoProjects.id, id));
+    return project;
+  }
+
+  async createCryptoProject(data: InsertCryptoProject) {
+    const [project] = await db.insert(cryptoProjects).values(data).returning();
+    return project;
+  }
+
+  async updateCryptoProject(id: string, data: Partial<InsertCryptoProject>) {
+    const [project] = await db.update(cryptoProjects).set(data).where(eq(cryptoProjects.id, id)).returning();
+    return project;
+  }
+
+  async deleteCryptoProject(id: string) {
+    await db.delete(cryptoProjects).where(eq(cryptoProjects.id, id));
+  }
+
+  async getTokenSupplySchedules(projectId: string) {
+    return db.select().from(tokenSupplySchedules).where(eq(tokenSupplySchedules.projectId, projectId));
+  }
+
+  async createTokenSupplySchedule(data: InsertTokenSupplySchedule) {
+    const [schedule] = await db.insert(tokenSupplySchedules).values(data).returning();
+    return schedule;
+  }
+
+  async updateTokenSupplySchedule(id: string, data: Partial<InsertTokenSupplySchedule>) {
+    const [schedule] = await db.update(tokenSupplySchedules).set(data).where(eq(tokenSupplySchedules.id, id)).returning();
+    return schedule;
+  }
+
+  async deleteTokenSupplySchedule(id: string) {
+    await db.delete(tokenSupplySchedules).where(eq(tokenSupplySchedules.id, id));
+  }
+
+  async getTokenIncentives(projectId: string) {
+    return db.select().from(tokenIncentives).where(eq(tokenIncentives.projectId, projectId));
+  }
+
+  async createTokenIncentive(data: InsertTokenIncentive) {
+    const [incentive] = await db.insert(tokenIncentives).values(data).returning();
+    return incentive;
+  }
+
+  async updateTokenIncentive(id: string, data: Partial<InsertTokenIncentive>) {
+    const [incentive] = await db.update(tokenIncentives).set(data).where(eq(tokenIncentives.id, id)).returning();
+    return incentive;
+  }
+
+  async deleteTokenIncentive(id: string) {
+    await db.delete(tokenIncentives).where(eq(tokenIncentives.id, id));
+  }
+
+  async getProtocolMetrics(projectId: string) {
+    return db.select().from(protocolMetrics).where(eq(protocolMetrics.projectId, projectId));
+  }
+
+  async upsertProtocolMetrics(data: InsertProtocolMetric[]) {
+    if (data.length === 0) return [];
+    const CHUNK_SIZE = 500;
+    const results: ProtocolMetric[] = [];
+    for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+      const chunk = data.slice(i, i + CHUNK_SIZE);
+      const inserted = await db.insert(protocolMetrics).values(chunk).returning();
+      results.push(...inserted);
+    }
+    return results;
+  }
+
+  async deleteProtocolMetrics(projectId: string) {
+    await db.delete(protocolMetrics).where(eq(protocolMetrics.projectId, projectId));
   }
 }
 

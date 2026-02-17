@@ -21,6 +21,7 @@ import {
   Pencil,
   Globe,
   RefreshCw,
+  Coins,
 } from "lucide-react";
 import {
   Sidebar,
@@ -80,6 +81,10 @@ const modelingItems = [
   { title: "DCF Valuation", url: "/dcf", icon: Calculator },
   { title: "Valuation Compare", url: "/valuation", icon: Scale },
   { title: "Company Chart", url: "/chart", icon: LineChart },
+];
+
+const cryptoItems = [
+  { title: "Crypto Dashboard", url: "/crypto", icon: Coins },
 ];
 
 const portfolioItems = [
@@ -351,6 +356,26 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Crypto Analysis</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {cryptoItems.map((item) => {
+                const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s/g, "-")}`}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

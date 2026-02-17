@@ -17,7 +17,14 @@ import {
   insertMarketIndexSchema, insertPortfolioRedFlagSchema,
   insertScenarioSchema, insertAssumptionsSchema,
   insertActualsSchema, insertReportSchema,
+  insertCryptoProjectSchema, insertTokenSupplyScheduleSchema,
+  insertTokenIncentiveSchema,
 } from "@shared/schema";
+import {
+  searchCoins, getCoinMarketData, getMultipleCoinMarketData, mapCoinGeckoToProject,
+  searchDefiLlamaProtocols, getProtocolTVLHistory, getProtocolFees, getProtocolRevenue,
+  INCENTIVE_TEMPLATES,
+} from "./crypto-data";
 
 type Params = Record<string, string>;
 
@@ -964,6 +971,206 @@ export async function registerRoutes(server: Server, app: Express) {
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "SEC import failed" });
+    }
+  });
+
+  app.get("/api/crypto/search", async (req: Request, res: Response) => {
+    try {
+      const q = req.query.q as string;
+      if (!q) return res.json([]);
+      const results = await searchCoins(q);
+      res.json(results);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/crypto/projects", async (_req: Request, res: Response) => {
+    const projects = await storage.getCryptoProjects();
+    res.json(projects);
+  });
+
+  app.get("/api/crypto/projects/:id", async (req: Request<Params>, res: Response) => {
+    const project = await storage.getCryptoProject(req.params.id);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    res.json(project);
+  });
+
+  app.post("/api/crypto/projects", async (req: Request<Params>, res: Response) => {
+    try {
+      const { coingeckoId } = req.body;
+      if (!coingeckoId) return res.status(400).json({ message: "coingeckoId is required" });
+      const coinData = await getCoinMarketData(coingeckoId);
+      if (!coinData) return res.status(400).json({ message: `Could not find data for "${coingeckoId}"` });
+      const projectData = mapCoinGeckoToProject(coinData);
+      const project = await storage.createCryptoProject(projectData);
+
+      const templateKey = coingeckoId.toLowerCase();
+      if (INCENTIVE_TEMPLATES[templateKey]) {
+        for (let i = 0; i < INCENTIVE_TEMPLATES[templateKey].length; i++) {
+          const t = INCENTIVE_TEMPLATES[templateKey][i];
+          await storage.createTokenIncentive({
+            projectId: project.id,
+            ...t,
+            sortOrder: i,
+          });
+        }
+      }
+
+      res.json(project);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/crypto/projects/:id", async (req: Request<Params>, res: Response) => {
+    try {
+      const allowedFields = ["name", "symbol", "coingeckoId", "defiLlamaId", "category", "currentPrice", "marketCap", "fullyDilutedValuation", "volume24h", "priceChange24h", "priceChange7d", "circulatingSupply", "totalSupply", "maxSupply", "ath", "athDate", "sparklineData", "image"];
+      const filtered: Record<string, any> = {};
+      for (const key of Object.keys(req.body)) {
+        if (allowedFields.includes(key)) filtered[key] = req.body[key];
+      }
+      const project = await storage.updateCryptoProject(req.params.id, filtered);
+      res.json(project);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/crypto/projects/:id", async (req: Request<Params>, res: Response) => {
+    await storage.deleteCryptoProject(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.post("/api/crypto/projects/refresh", async (_req: Request, res: Response) => {
+    try {
+      const projects = await storage.getCryptoProjects();
+      if (projects.length === 0) return res.json({ updated: 0 });
+      const ids = projects.map(p => p.coingeckoId);
+      const marketData = await getMultipleCoinMarketData(ids);
+      let updated = 0;
+      for (const coin of marketData) {
+        const project = projects.find(p => p.coingeckoId === coin.id);
+        if (project) {
+          const mapped = mapCoinGeckoToProject(coin);
+          await storage.updateCryptoProject(project.id, mapped);
+          updated++;
+        }
+      }
+      res.json({ updated });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/crypto/projects/:id/supply-schedules", async (req: Request<Params>, res: Response) => {
+    const schedules = await storage.getTokenSupplySchedules(req.params.id);
+    res.json(schedules);
+  });
+
+  app.post("/api/crypto/supply-schedules", async (req: Request<Params>, res: Response) => {
+    const parsed = insertTokenSupplyScheduleSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const schedule = await storage.createTokenSupplySchedule(parsed.data);
+    res.json(schedule);
+  });
+
+  app.patch("/api/crypto/supply-schedules/:id", async (req: Request<Params>, res: Response) => {
+    const schedule = await storage.updateTokenSupplySchedule(req.params.id, req.body);
+    res.json(schedule);
+  });
+
+  app.delete("/api/crypto/supply-schedules/:id", async (req: Request<Params>, res: Response) => {
+    await storage.deleteTokenSupplySchedule(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.get("/api/crypto/projects/:id/incentives", async (req: Request<Params>, res: Response) => {
+    const incentives = await storage.getTokenIncentives(req.params.id);
+    res.json(incentives);
+  });
+
+  app.post("/api/crypto/incentives", async (req: Request<Params>, res: Response) => {
+    const parsed = insertTokenIncentiveSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const incentive = await storage.createTokenIncentive(parsed.data);
+    res.json(incentive);
+  });
+
+  app.patch("/api/crypto/incentives/:id", async (req: Request<Params>, res: Response) => {
+    const incentive = await storage.updateTokenIncentive(req.params.id, req.body);
+    res.json(incentive);
+  });
+
+  app.delete("/api/crypto/incentives/:id", async (req: Request<Params>, res: Response) => {
+    await storage.deleteTokenIncentive(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.get("/api/crypto/incentive-templates/:key", async (req: Request<Params>, res: Response) => {
+    const key = req.params.key.toLowerCase();
+    const template = INCENTIVE_TEMPLATES[key];
+    res.json(template || []);
+  });
+
+  app.get("/api/crypto/projects/:id/protocol-metrics", async (req: Request<Params>, res: Response) => {
+    const metrics = await storage.getProtocolMetrics(req.params.id);
+    res.json(metrics);
+  });
+
+  app.post("/api/crypto/projects/:id/fetch-defi-data", async (req: Request<Params>, res: Response) => {
+    try {
+      const project = await storage.getCryptoProject(req.params.id);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      const slug = project.defiLlamaId || project.name.toLowerCase().replace(/\s+/g, "-");
+
+      const [tvlHistory, feesData, revenueData] = await Promise.all([
+        getProtocolTVLHistory(slug),
+        getProtocolFees(slug),
+        getProtocolRevenue(slug),
+      ]);
+
+      const metricsMap: Record<string, any> = {};
+      for (const t of tvlHistory) {
+        metricsMap[t.date] = { date: t.date, tvl: t.tvl, dailyFees: 0, dailyRevenue: 0, dailyVolume: 0 };
+      }
+      for (const f of feesData) {
+        if (!metricsMap[f.date]) metricsMap[f.date] = { date: f.date, tvl: 0, dailyFees: 0, dailyRevenue: 0, dailyVolume: 0 };
+        metricsMap[f.date].dailyFees = f.dailyFees;
+      }
+      for (const r of revenueData) {
+        if (!metricsMap[r.date]) metricsMap[r.date] = { date: r.date, tvl: 0, dailyFees: 0, dailyRevenue: 0, dailyVolume: 0 };
+        metricsMap[r.date].dailyRevenue = r.dailyRevenue;
+      }
+
+      const metrics = Object.values(metricsMap).map((m: any) => ({
+        projectId: project.id,
+        ...m,
+      }));
+
+      await storage.deleteProtocolMetrics(project.id);
+      if (metrics.length > 0) {
+        await storage.upsertProtocolMetrics(metrics);
+      }
+
+      if (!project.defiLlamaId) {
+        await storage.updateCryptoProject(project.id, { defiLlamaId: slug });
+      }
+
+      res.json({ imported: metrics.length, slug });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/crypto/defillama/search", async (req: Request, res: Response) => {
+    try {
+      const q = req.query.q as string;
+      if (!q) return res.json([]);
+      const results = await searchDefiLlamaProtocols(q);
+      res.json(results);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
     }
   });
 }

@@ -44,11 +44,22 @@ Foresight is a comprehensive financial modeling and valuation platform designed 
 - **Market Data Customization**: Users can add/remove custom market indices and FRED macro indicators.
 - **Data Validation**: Model Readiness checklist on Dashboard and inline warnings on pages for missing data.
 
+### Crypto Analysis Module
+- **4 new DB tables**: crypto_projects, token_supply_schedules, token_incentives, protocol_metrics
+- **Crypto Dashboard** (/crypto): Search and add coins via CoinGecko, project cards with market data and sparklines, refresh prices
+- **Tokenomics Modeler** (/crypto/tokenomics/:id): Supply schedule management, vesting pie charts, incentive mapping with sustainability flags, pre-loaded templates for BTC/ETH/SOL/UNI/AAVE
+- **Protocol Financials** (/crypto/financials/:id): TVL/fees/revenue charts from DefiLlama, DefiLlama protocol search, revenue sustainability analysis
+- **Crypto Valuation** (/crypto/valuation/:id): Discounted Fee Revenue model for DeFi protocols, Comparable Analysis with classification (Revenue-Generating/Speculative/Meme), Scenario Analysis with bull/base/bear, honest "no fundamental basis" notices for speculative tokens, key risk cards
+- **Backend**: CoinGecko integration (market data, free API), DefiLlama integration (protocol revenue/TVL, free API), incentive templates for 5 major protocols
+- **Key files**: server/crypto-data.ts, client/src/pages/crypto-dashboard.tsx, crypto-tokenomics.tsx, crypto-financials.tsx, crypto-valuation.tsx
+
 ## External Dependencies
 - **Yahoo Finance**: Used for live market data (global indices, stock prices, technical indicators, company fundamentals).
 - **FRED API**: Used for live macro economic indicators (rates, inflation, GDP, labor, sentiment, volatility).
 - **SEC EDGAR API**: Used for fetching and parsing 10-K financial filings. Ticker-based CIK lookup, filing list retrieval, unified multi-statement parsing (IS+BS+CF). No API key required.
 - **TradingView**: Integrated for interactive charting widgets.
+- **CoinGecko API**: Used for crypto market data (price, supply, volume, sparklines). Free API, no key required.
+- **DefiLlama API**: Used for DeFi protocol financials (TVL, fees, revenue). Free API, no key required.
 
 ### IPO/INVEST Mode Architecture
 - `modelMode` field on financial_models: `'ipo'` (default) or `'invest'`

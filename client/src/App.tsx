@@ -20,6 +20,10 @@ import Portfolio from "@/pages/portfolio";
 import MarketDataPage from "@/pages/market-data";
 import AnalysisGuide from "@/pages/analysis-guide";
 import CompanyChart from "@/pages/company-chart";
+import CryptoDashboard from "@/pages/crypto-dashboard";
+import CryptoTokenomics from "@/pages/crypto-tokenomics";
+import CryptoFinancials from "@/pages/crypto-financials";
+import CryptoValuation from "@/pages/crypto-valuation";
 
 function Router() {
   return (
@@ -35,6 +39,10 @@ function Router() {
       <Route path="/market-data" component={MarketDataPage} />
       <Route path="/chart" component={CompanyChart} />
       <Route path="/guide" component={AnalysisGuide} />
+      <Route path="/crypto" component={CryptoDashboard} />
+      <Route path="/crypto/tokenomics/:id" component={CryptoTokenomics} />
+      <Route path="/crypto/financials/:id" component={CryptoFinancials} />
+      <Route path="/crypto/valuation/:id" component={CryptoValuation} />
       <Route component={NotFound} />
     </Switch>
   );

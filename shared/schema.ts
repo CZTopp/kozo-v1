@@ -308,6 +308,71 @@ export const reports = pgTable("reports", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const cryptoProjects = pgTable("crypto_projects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coingeckoId: text("coingecko_id").notNull(),
+  name: text("name").notNull(),
+  symbol: text("symbol").notNull(),
+  category: text("category"),
+  currentPrice: real("current_price").default(0),
+  marketCap: real("market_cap").default(0),
+  fullyDilutedValuation: real("fully_diluted_valuation").default(0),
+  volume24h: real("volume_24h").default(0),
+  priceChange24h: real("price_change_24h").default(0),
+  priceChange7d: real("price_change_7d").default(0),
+  circulatingSupply: real("circulating_supply").default(0),
+  totalSupply: real("total_supply"),
+  maxSupply: real("max_supply"),
+  ath: real("ath").default(0),
+  athDate: text("ath_date"),
+  sparklineData: jsonb("sparkline_data"),
+  image: text("image"),
+  defiLlamaId: text("defi_llama_id"),
+  discountRate: real("discount_rate").default(0.15),
+  feeGrowthRate: real("fee_growth_rate").default(0.10),
+  terminalGrowthRate: real("terminal_growth_rate").default(0.02),
+  projectionYears: integer("projection_years").default(5),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const tokenSupplySchedules = pgTable("token_supply_schedules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => cryptoProjects.id, { onDelete: "cascade" }),
+  eventType: text("event_type").notNull(),
+  label: text("label").notNull(),
+  date: text("date"),
+  amount: real("amount").notNull().default(0),
+  isRecurring: boolean("is_recurring").default(false),
+  recurringIntervalMonths: integer("recurring_interval_months"),
+  notes: text("notes"),
+  sortOrder: integer("sort_order").default(0),
+});
+
+export const tokenIncentives = pgTable("token_incentives", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => cryptoProjects.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
+  contribution: text("contribution").notNull(),
+  rewardType: text("reward_type").notNull(),
+  rewardSource: text("reward_source").notNull(),
+  allocationPercent: real("allocation_percent").default(0),
+  estimatedApy: real("estimated_apy"),
+  vestingMonths: integer("vesting_months"),
+  isSustainable: boolean("is_sustainable").default(true),
+  sustainabilityNotes: text("sustainability_notes"),
+  sortOrder: integer("sort_order").default(0),
+});
+
+export const protocolMetrics = pgTable("protocol_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => cryptoProjects.id, { onDelete: "cascade" }),
+  date: text("date").notNull(),
+  tvl: real("tvl").default(0),
+  dailyFees: real("daily_fees").default(0),
+  dailyRevenue: real("daily_revenue").default(0),
+  dailyVolume: real("daily_volume").default(0),
+});
+
 export const insertFinancialModelSchema = createInsertSchema(financialModels, {
   sharesOutstanding: z.number().min(0).max(100000000000).optional(),
 }).omit({ id: true, createdAt: true });
@@ -334,6 +399,10 @@ export const insertAssumptionsSchema = createInsertSchema(assumptions).omit({ id
 export const insertScenarioSchema = createInsertSchema(scenarios).omit({ id: true });
 export const insertActualsSchema = createInsertSchema(actuals).omit({ id: true });
 export const insertReportSchema = createInsertSchema(reports).omit({ id: true, createdAt: true });
+export const insertCryptoProjectSchema = createInsertSchema(cryptoProjects).omit({ id: true, updatedAt: true });
+export const insertTokenSupplyScheduleSchema = createInsertSchema(tokenSupplySchedules).omit({ id: true });
+export const insertTokenIncentiveSchema = createInsertSchema(tokenIncentives).omit({ id: true });
+export const insertProtocolMetricSchema = createInsertSchema(protocolMetrics).omit({ id: true });
 
 export type FinancialModel = typeof financialModels.$inferSelect;
 export type InsertFinancialModel = z.infer<typeof insertFinancialModelSchema>;
@@ -369,3 +438,11 @@ export type Actual = typeof actuals.$inferSelect;
 export type InsertActual = z.infer<typeof insertActualsSchema>;
 export type Report = typeof reports.$inferSelect;
 export type InsertReport = z.infer<typeof insertReportSchema>;
+export type CryptoProject = typeof cryptoProjects.$inferSelect;
+export type InsertCryptoProject = z.infer<typeof insertCryptoProjectSchema>;
+export type TokenSupplySchedule = typeof tokenSupplySchedules.$inferSelect;
+export type InsertTokenSupplySchedule = z.infer<typeof insertTokenSupplyScheduleSchema>;
+export type TokenIncentive = typeof tokenIncentives.$inferSelect;
+export type InsertTokenIncentive = z.infer<typeof insertTokenIncentiveSchema>;
+export type ProtocolMetric = typeof protocolMetrics.$inferSelect;
+export type InsertProtocolMetric = z.infer<typeof insertProtocolMetricSchema>;
