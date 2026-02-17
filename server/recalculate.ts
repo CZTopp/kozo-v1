@@ -104,13 +104,10 @@ export async function recalculateModel(modelId: string) {
   }
 
   const projectedISYears = years.filter(yr => !actualISYears.has(yr));
-  if (projectedISYears.length > 0) {
-    for (const yr of projectedISYears) {
-      const existing = existingIS.find(r => r.year === yr);
-      if (existing) {
-        await db.delete(incomeStatementLines).where(and(eq(incomeStatementLines.modelId, modelId), eq(incomeStatementLines.year, yr)));
-      }
-    }
+  for (const yr of projectedISYears) {
+    await db.delete(incomeStatementLines).where(
+      and(eq(incomeStatementLines.modelId, modelId), eq(incomeStatementLines.year, yr))
+    );
   }
 
   type ISRow = {
@@ -211,10 +208,9 @@ export async function recalculateModel(modelId: string) {
 
   const projectedBSYears = years.filter(yr => !actualBSYears.has(yr));
   for (const yr of projectedBSYears) {
-    const existing = existingBS.find(r => r.year === yr);
-    if (existing) {
-      await db.delete(balanceSheetLines).where(and(eq(balanceSheetLines.modelId, modelId), eq(balanceSheetLines.year, yr)));
-    }
+    await db.delete(balanceSheetLines).where(
+      and(eq(balanceSheetLines.modelId, modelId), eq(balanceSheetLines.year, yr))
+    );
   }
 
   const bsData: Array<Record<string, any>> = [];
@@ -315,10 +311,9 @@ export async function recalculateModel(modelId: string) {
 
   const projectedCFYears = years.filter(yr => !actualCFYears.has(yr));
   for (const yr of projectedCFYears) {
-    const existing = existingCF.find(r => r.year === yr);
-    if (existing) {
-      await db.delete(cashFlowLines).where(and(eq(cashFlowLines.modelId, modelId), eq(cashFlowLines.year, yr)));
-    }
+    await db.delete(cashFlowLines).where(
+      and(eq(cashFlowLines.modelId, modelId), eq(cashFlowLines.year, yr))
+    );
   }
 
   const cfData: Array<Record<string, any>> = [];

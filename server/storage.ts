@@ -213,6 +213,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertIncomeStatementLine(data: InsertIncomeStatementLine) {
+    const existing = await db.select().from(incomeStatementLines).where(
+      and(eq(incomeStatementLines.modelId, data.modelId), eq(incomeStatementLines.year, data.year))
+    );
+    if (existing.length > 0) {
+      const [updated] = await db.update(incomeStatementLines)
+        .set(data)
+        .where(eq(incomeStatementLines.id, existing[0].id))
+        .returning();
+      return updated;
+    }
     const [line] = await db.insert(incomeStatementLines).values(data).returning();
     return line;
   }
@@ -226,6 +236,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertBalanceSheetLine(data: InsertBalanceSheetLine) {
+    const existing = await db.select().from(balanceSheetLines).where(
+      and(eq(balanceSheetLines.modelId, data.modelId), eq(balanceSheetLines.year, data.year))
+    );
+    if (existing.length > 0) {
+      const [updated] = await db.update(balanceSheetLines)
+        .set(data)
+        .where(eq(balanceSheetLines.id, existing[0].id))
+        .returning();
+      return updated;
+    }
     const [line] = await db.insert(balanceSheetLines).values(data).returning();
     return line;
   }
@@ -246,6 +266,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertCashFlowLine(data: InsertCashFlowLine) {
+    const existing = await db.select().from(cashFlowLines).where(
+      and(eq(cashFlowLines.modelId, data.modelId), eq(cashFlowLines.year, data.year))
+    );
+    if (existing.length > 0) {
+      const [updated] = await db.update(cashFlowLines)
+        .set(data)
+        .where(eq(cashFlowLines.id, existing[0].id))
+        .returning();
+      return updated;
+    }
     const [line] = await db.insert(cashFlowLines).values(data).returning();
     return line;
   }
