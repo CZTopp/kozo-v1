@@ -857,11 +857,11 @@ export async function registerRoutes(server: Server, app: Express) {
           const rdExpense = Math.abs(isData.rdExpense || 0);
           const depreciation = Math.abs(isData.depreciation || 0);
           const totalExpenses = cogs + sgaExpense + rdExpense + depreciation;
-          const operatingIncome = isData.operatingIncome || (grossProfit - sgaExpense - rdExpense - depreciation);
+          const operatingIncome = grossProfit - sgaExpense - rdExpense - depreciation;
           const ebitda = operatingIncome + depreciation;
           const otherIncome = isData.otherIncome || 0;
           const interestExpense = Math.abs(isData.interestExpense || 0);
-          const preTaxIncome = isData.preTaxIncome || (operatingIncome + otherIncome - interestExpense);
+          const preTaxIncome = operatingIncome + otherIncome - interestExpense;
           const taxExpense = Math.abs(isData.taxExpense || 0);
           const netIncome = isData.netIncome || (preTaxIncome - taxExpense);
 

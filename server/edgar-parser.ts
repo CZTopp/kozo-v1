@@ -160,9 +160,17 @@ export async function fetchAndParseEdgar(url: string, requestedType?: string): P
   const $ = cheerio.load(html);
 
   const contexts: Record<string, ContextPeriod> = {};
+  const segmentContextIds = new Set<string>();
   $("xbrli\\:context, context").each((_i, el) => {
     const id = $(el).attr("id");
     if (!id) return;
+
+    const hasSegment = $(el).find("xbrldi\\:explicitMember, xbrldi\\:explicitMember, explicitMember").length > 0;
+    if (hasSegment) {
+      segmentContextIds.add(id);
+      return;
+    }
+
     const startDate = $(el).find("xbrli\\:startDate, startDate").text();
     const endDate = $(el).find("xbrli\\:endDate, endDate").text();
     const instant = $(el).find("xbrli\\:instant, instant").text();
@@ -240,7 +248,7 @@ export async function fetchAndParseEdgar(url: string, requestedType?: string): P
     const appField = fieldMap[val.name];
     if (appField) {
       if (!data[year]) data[year] = {};
-      if (data[year][appField] === undefined || Math.abs(val.value) > Math.abs(data[year][appField])) {
+      if (data[year][appField] === undefined) {
         data[year][appField] = val.value;
       }
       matchedFieldsSet.add(appField);
