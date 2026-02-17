@@ -12,9 +12,10 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { BalanceSheetLine, Assumptions } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { CheckCircle, AlertCircle, Save, RefreshCw, ArrowDown, ArrowRight, ClipboardPaste, Pencil } from "lucide-react";
+import { CheckCircle, AlertCircle, Save, RefreshCw, ArrowDown, ArrowRight, ClipboardPaste, Pencil, Globe } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { PasteDataModal } from "@/components/paste-data-modal";
+import { ImportEdgarModal } from "@/components/import-edgar-modal";
 
 const editableFields: Array<{ key: keyof BalanceSheetLine; label: string; isEditable?: boolean }> = [
   { key: "cash", label: "Cash", isEditable: true },
@@ -37,6 +38,7 @@ export default function BalanceSheet() {
   const [editedAssumptions, setEditedAssumptions] = useState<Record<string, string>>({});
   const [editedCells, setEditedCells] = useState<Record<string, Record<string, number>>>({});
   const [showPasteModal, setShowPasteModal] = useState(false);
+  const [showEdgarModal, setShowEdgarModal] = useState(false);
 
   const { selectedModel: model, isLoading } = useModel();
 
@@ -277,6 +279,9 @@ export default function BalanceSheet() {
               <Button variant="outline" onClick={() => setShowPasteModal(true)} data-testid="button-paste-data">
                 <ClipboardPaste className="h-4 w-4 mr-1" /> Paste Data
               </Button>
+              <Button variant="outline" onClick={() => setShowEdgarModal(true)} data-testid="button-import-edgar">
+                <Globe className="h-4 w-4 mr-1" /> SEC Filing
+              </Button>
               <Button
                 onClick={() => {
                   if (Object.keys(editedCells).length > 0) {
@@ -498,6 +503,15 @@ export default function BalanceSheet() {
         onImport={handlePasteImport}
         title="Paste Balance Sheet Data"
         description="Import actual balance sheet data from SEC EDGAR filings, Excel, or Google Sheets. Matched years will be marked as Actual."
+      />
+
+      <ImportEdgarModal
+        open={showEdgarModal}
+        onOpenChange={setShowEdgarModal}
+        statementType="balance-sheet"
+        fieldDefs={pasteFieldDefs}
+        years={allYears}
+        onImport={handlePasteImport}
       />
     </div>
   );

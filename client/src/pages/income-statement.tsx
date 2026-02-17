@@ -12,13 +12,15 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { IncomeStatementLine, Assumptions } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line } from "recharts";
-import { TrendingUp, TrendingDown, Save, RefreshCw, ArrowRight, ArrowDown, AlertTriangle } from "lucide-react";
+import { TrendingUp, TrendingDown, Save, RefreshCw, ArrowRight, ArrowDown, AlertTriangle, Globe } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
+import { ImportEdgarModal } from "@/components/import-edgar-modal";
 
 export default function IncomeStatement() {
   const { toast } = useToast();
   const [editMode, setEditMode] = useState(false);
   const [editedAssumptions, setEditedAssumptions] = useState<Record<string, string>>({});
+  const [showEdgarModal, setShowEdgarModal] = useState(false);
 
   const { selectedModel: model, isLoading } = useModel();
 
@@ -62,6 +64,60 @@ export default function IncomeStatement() {
   if (!model) return <div className="p-4 text-muted-foreground">Select a company from the sidebar to begin.</div>;
 
   const annualData = incomeData?.filter(d => !d.quarter).sort((a, b) => a.year - b.year) || [];
+
+  const allYears = annualData.map(d => d.year);
+
+  const edgarFieldDefs = [
+    { key: "totalRevenue", label: "Total Revenue" },
+    { key: "cogs", label: "COGS" },
+    { key: "grossProfit", label: "Gross Profit" },
+    { key: "sgaExpense", label: "SG&A Expense" },
+    { key: "rdExpense", label: "R&D Expense" },
+    { key: "operatingIncome", label: "Operating Income" },
+    { key: "interestExpense", label: "Interest Expense" },
+    { key: "otherIncome", label: "Other Income" },
+    { key: "taxExpense", label: "Tax Expense" },
+    { key: "netIncome", label: "Net Income" },
+    { key: "depreciation", label: "Depreciation" },
+  ];
+
+  const handleEdgarImport = (data: Record<number, Record<string, number>>) => {
+    const bulkPromises: Promise<any>[] = [];
+    for (const [yearStr, fields] of Object.entries(data)) {
+      const year = parseInt(yearStr);
+      const mapped: Record<string, any> = { isActual: true };
+      if (fields.totalRevenue !== undefined) mapped.revenue = fields.totalRevenue;
+      if (fields.cogs !== undefined) mapped.cogs = Math.abs(fields.cogs);
+      if (fields.grossProfit !== undefined) mapped.grossProfit = fields.grossProfit;
+      if (fields.sgaExpense !== undefined) mapped.salesMarketing = Math.abs(fields.sgaExpense);
+      if (fields.rdExpense !== undefined) mapped.rd = Math.abs(fields.rdExpense);
+      if (fields.operatingIncome !== undefined) mapped.operatingIncome = fields.operatingIncome;
+      if (fields.interestExpense !== undefined) mapped.interestExpense = Math.abs(fields.interestExpense);
+      if (fields.otherIncome !== undefined) mapped.otherIncome = fields.otherIncome;
+      if (fields.taxExpense !== undefined) mapped.taxExpense = Math.abs(fields.taxExpense);
+      if (fields.netIncome !== undefined) mapped.netIncome = fields.netIncome;
+      if (fields.depreciation !== undefined) mapped.depreciation = Math.abs(fields.depreciation);
+
+      bulkPromises.push(
+        apiRequest("PATCH", `/api/models/${model!.id}/income-statement/${year}`, mapped)
+      );
+    }
+
+    Promise.all(bulkPromises)
+      .then(() => apiRequest("POST", `/api/models/${model!.id}/recalculate`))
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "income-statement"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "balance-sheet"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "cash-flow"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "dcf"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "valuation-comparison"] });
+        toast({ title: "SEC filing data imported", description: `Imported income statement data for ${Object.keys(data).length} year(s). Model recalculated.` });
+      })
+      .catch((err: Error) => {
+        toast({ title: "Import error", description: err.message, variant: "destructive" });
+      });
+  };
 
   const hasNoRevenue = annualData.length === 0 || annualData.every(d => !d.revenue || d.revenue === 0);
   const hasDefaultAssumptions = !baseAssumptions || (
@@ -150,6 +206,9 @@ export default function IncomeStatement() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="outline" data-testid="badge-model-name">{model.name}</Badge>
+          <Button variant="outline" onClick={() => setShowEdgarModal(true)} data-testid="button-import-edgar">
+            <Globe className="h-4 w-4 mr-1" /> SEC Filing
+          </Button>
           {editMode ? (
             <>
               <Button variant="outline" onClick={() => { setEditMode(false); setEditedAssumptions({}); }} data-testid="button-cancel">Cancel</Button>
@@ -345,6 +404,15 @@ export default function IncomeStatement() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <ImportEdgarModal
+        open={showEdgarModal}
+        onOpenChange={setShowEdgarModal}
+        statementType="income-statement"
+        fieldDefs={edgarFieldDefs}
+        years={allYears}
+        onImport={handleEdgarImport}
+      />
     </div>
   );
 }

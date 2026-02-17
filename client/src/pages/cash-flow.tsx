@@ -12,9 +12,10 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { CashFlowLine } from "@shared/schema";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { TrendingUp, TrendingDown, DollarSign, ArrowDown, Save, RefreshCw, ClipboardPaste, Pencil } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, ArrowDown, Save, RefreshCw, ClipboardPaste, Pencil, Globe } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { PasteDataModal } from "@/components/paste-data-modal";
+import { ImportEdgarModal } from "@/components/import-edgar-modal";
 
 const editableFields: Array<{ key: keyof CashFlowLine; label: string }> = [
   { key: "netIncome", label: "Net Income" },
@@ -43,6 +44,7 @@ export default function CashFlow() {
   const [editMode, setEditMode] = useState(false);
   const [editedCells, setEditedCells] = useState<Record<string, Record<string, number>>>({});
   const [showPasteModal, setShowPasteModal] = useState(false);
+  const [showEdgarModal, setShowEdgarModal] = useState(false);
 
   const { data: cfData } = useQuery<CashFlowLine[]>({
     queryKey: ["/api/models", model?.id, "cash-flow"],
@@ -203,6 +205,9 @@ export default function CashFlow() {
               <Button variant="outline" onClick={() => { setEditMode(false); setEditedCells({}); }} data-testid="button-cancel">Cancel</Button>
               <Button variant="outline" onClick={() => setShowPasteModal(true)} data-testid="button-paste-data">
                 <ClipboardPaste className="h-4 w-4 mr-1" /> Paste Data
+              </Button>
+              <Button variant="outline" onClick={() => setShowEdgarModal(true)} data-testid="button-import-edgar">
+                <Globe className="h-4 w-4 mr-1" /> SEC Filing
               </Button>
               <Button
                 onClick={() => saveCellsMutation.mutate()}
@@ -412,6 +417,15 @@ export default function CashFlow() {
         onImport={handlePasteImport}
         title="Paste Cash Flow Data"
         description="Import actual cash flow data from SEC EDGAR filings, Excel, or Google Sheets. Matched years will be marked as Actual."
+      />
+
+      <ImportEdgarModal
+        open={showEdgarModal}
+        onOpenChange={setShowEdgarModal}
+        statementType="cash-flow"
+        fieldDefs={pasteFieldDefs}
+        years={allYears}
+        onImport={handlePasteImport}
       />
     </div>
   );

@@ -3,6 +3,7 @@ import { Server } from "http";
 import { storage } from "./storage";
 import { recalculateModel, forecastForward } from "./recalculate";
 import { fetchLiveIndices, fetchFredIndicators, fetchPortfolioQuotes, fetchSingleIndexQuote, fetchSingleFredSeries, fetchCompanyFundamentals } from "./live-data";
+import { fetchAndParseEdgar } from "./edgar-parser";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 import { revenuePeriods } from "@shared/schema";
@@ -734,6 +735,19 @@ export async function registerRoutes(server: Server, app: Express) {
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Sync failed" });
+    }
+  });
+
+  app.post("/api/parse-edgar", async (req: Request, res: Response) => {
+    try {
+      const { url, statementType } = req.body;
+      if (!url || typeof url !== "string") {
+        return res.status(400).json({ message: "URL is required" });
+      }
+      const result = await fetchAndParseEdgar(url, statementType);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to parse SEC EDGAR filing" });
     }
   });
 }
