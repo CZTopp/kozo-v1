@@ -1122,43 +1122,91 @@ export default function RevenueForecast() {
                   <TableRow>
                     <TableHead className="min-w-[200px]">Revenue Stream</TableHead>
                     {years.map(year => (
-                      <TableHead key={year} className="text-right">{year}</TableHead>
+                      <TableHead key={year} className="text-right min-w-[110px]">{year}</TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibleLineItems.map((li, liIdx) => (
-                    <Fragment key={li.id}>
-                      <TableRow data-testid={`row-annual-${li.id}`}>
-                        <TableCell className="font-medium">
-                          {getLineItemName(li)}
-                        </TableCell>
-                        {years.map(year => (
-                          <TableCell key={year} className="text-right">
-                            <div>
-                              <span>{formatWithUnit(getAnnualTotal(li.id, year), displayUnit)}</span>
-                              {calcStreamPercentOfTotal(li.id, year) !== null && (
-                                <div className="text-[10px] text-muted-foreground">
-                                  {formatPercent(calcStreamPercentOfTotal(li.id, year)!)} of total
-                                </div>
-                              )}
-                            </div>
+                  {visibleLineItems.map((li, liIdx) => {
+                    return (
+                      <Fragment key={li.id}>
+                        <TableRow data-testid={`row-annual-${li.id}`}>
+                          <TableCell className="font-medium">
+                            {getLineItemName(li)}
                           </TableCell>
-                        ))}
-                      </TableRow>
-                      <TableRow key={`growth-${li.id}`} className="border-b">
-                        <TableCell className="text-xs text-muted-foreground pl-6 py-1">YoY Growth</TableCell>
-                        {years.map(year => {
-                          const g = calcStreamYoYGrowth(li.id, year);
-                          return (
-                            <TableCell key={year} className="text-right py-1">
-                              {renderYoYPct(g)}
-                            </TableCell>
-                          );
-                        })}
-                      </TableRow>
-                    </Fragment>
-                  ))}
+                          {years.map(year => {
+                            const annualAmt = getAnnualTotal(li.id, year);
+                            const hasAnyEdited = [1,2,3,4].some(q => {
+                              const p = getPeriod(li.id, year, q);
+                              return p && editedPeriods[p.id] !== undefined;
+                            });
+                            const hasAnyPeriod = [1,2,3,4].some(q => getPeriod(li.id, year, q));
+                            const priorAmt = getAnnualTotal(li.id, year - 1);
+                            const yoyGrowth = calcStreamYoYGrowth(li.id, year);
+                            const pctOfTotal = calcStreamPercentOfTotal(li.id, year);
+                            return (
+                              <TableCell key={year} className="text-right p-1">
+                                <div>
+                                  {editMode && hasAnyPeriod ? (
+                                    <Input
+                                      type="text"
+                                      value={displayForInput(annualAmt, displayUnit)}
+                                      onChange={(e) => handleAnnualEdit(li.id, year, e.target.value)}
+                                      className={`h-7 text-xs text-right ${hasAnyEdited ? "border-blue-500" : ""}`}
+                                      data-testid={`input-annual-revenue-${li.id}-${year}`}
+                                    />
+                                  ) : (
+                                    <span>{formatWithUnit(annualAmt, displayUnit)}</span>
+                                  )}
+                                  <div className="flex flex-col items-end mt-0.5">
+                                    {editMode && hasAnyPeriod ? (
+                                      priorAmt > 0 ? (
+                                        <div className="flex items-center gap-0.5 justify-end">
+                                          <Input
+                                            type="number"
+                                            step="0.1"
+                                            value={yoyGrowth !== null ? (yoyGrowth * 100).toFixed(1) : ""}
+                                            onChange={(e) => handleAnnualYoyEdit(li.id, year, e.target.value)}
+                                            className="h-5 w-14 text-[10px] text-right p-0.5"
+                                            data-testid={`input-annual-yoy-${li.id}-${year}`}
+                                          />
+                                          <span className="text-[10px] text-muted-foreground">YoY</span>
+                                        </div>
+                                      ) : null
+                                    ) : (
+                                      yoyGrowth !== null && (
+                                        <span className={`text-[10px] ${yoyGrowth >= 0 ? "text-blue-500" : "text-orange-500"}`}>
+                                          {formatPercent(yoyGrowth)} YoY
+                                        </span>
+                                      )
+                                    )}
+                                    {pctOfTotal !== null && (
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {formatPercent(pctOfTotal)} of total
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </TableCell>
+                            );
+                          })}
+                        </TableRow>
+                        {!editMode && (
+                          <TableRow key={`growth-${li.id}`} className="border-b">
+                            <TableCell className="text-xs text-muted-foreground pl-6 py-1">YoY Growth</TableCell>
+                            {years.map(year => {
+                              const g = calcStreamYoYGrowth(li.id, year);
+                              return (
+                                <TableCell key={year} className="text-right py-1">
+                                  {renderYoYPct(g)}
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                   {newLineItems.filter(ni => ni.name.trim()).map(ni => (
                     <TableRow key={ni.tempId}>
                       <TableCell className="font-medium">{ni.name}</TableCell>
