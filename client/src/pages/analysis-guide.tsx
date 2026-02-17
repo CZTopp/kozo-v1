@@ -23,6 +23,11 @@ import {
   LineChart,
   List,
   AlertTriangle,
+  Wrench,
+  Layers,
+  Clipboard,
+  ToggleLeft,
+  Table2,
 } from "lucide-react";
 
 const sections = [
@@ -523,9 +528,381 @@ const walkthroughSteps = [
   },
 ];
 
+const featureGuides = [
+  {
+    id: "company-management",
+    title: "Company Management",
+    icon: Building2,
+    features: [
+      {
+        name: "Create a New Company",
+        steps: [
+          "Open the company selector dropdown at the top of the sidebar.",
+          "Click the \"New Company\" button.",
+          "Enter the company name, ticker symbol, currency, start/end year range, shares outstanding, and display unit (ones, thousands, millions, billions, or trillions).",
+          "Click \"Create\" to generate a blank financial model.",
+        ],
+        notes: "New companies start with no data. You build the entire analysis from scratch. The display unit controls how numbers are entered and shown across all pages (e.g., in Millions means you type 11.5 to represent $11,500,000).",
+      },
+      {
+        name: "Edit Company Settings",
+        steps: [
+          "Click the pencil icon next to the company name in the sidebar.",
+          "Modify any field: name, ticker, description, currency, shares outstanding, year range, or display unit.",
+          "Click \"Save\" to apply changes.",
+        ],
+        notes: "Changing the display unit affects how all values are entered and displayed. Changing shares outstanding affects EPS calculations. Changing the year range may add or remove forecast years.",
+      },
+      {
+        name: "Switch Between Companies",
+        steps: [
+          "Use the company selector dropdown at the top of the sidebar.",
+          "Click any company name to switch to it.",
+          "All pages update to show that company's data.",
+        ],
+        notes: "Each company has completely isolated data. Switching companies does not affect any other company's model.",
+      },
+      {
+        name: "Delete a Company",
+        steps: [
+          "Click the trash icon next to the company name in the sidebar.",
+          "Confirm the deletion in the dialog.",
+        ],
+        notes: "This permanently deletes the company and all its financial data. This cannot be undone.",
+      },
+    ],
+  },
+  {
+    id: "revenue-editing",
+    title: "Revenue Data Entry",
+    icon: DollarSign,
+    features: [
+      {
+        name: "Quarterly Detail Editing",
+        steps: [
+          "Navigate to Revenue Forecast and click \"Edit\".",
+          "On the Quarterly Detail tab, click any cell to type a value directly.",
+          "Values are entered in the display unit you set when creating the company (e.g., if display unit is Millions, type 11.5 for $11,500,000).",
+          "YoY % inputs appear below each cell -- type a percentage to auto-calculate the value based on the same quarter last year.",
+          "Click \"Save & Recalculate\" when done.",
+        ],
+        notes: "Quarterly Detail gives you the most granular control. Each quarter of each revenue stream can be edited independently.",
+      },
+      {
+        name: "Annual Summary Editing",
+        steps: [
+          "Switch to the Annual Summary tab while in edit mode.",
+          "Type an annual total for any revenue stream in any year.",
+          "The system automatically distributes the annual amount across four quarters:",
+          "  -- If the revenue stream already has quarterly data with different amounts per quarter (seasonal pattern), the system uses proportional scaling to preserve that pattern.",
+          "  -- If the quarterly amounts are equal or the stream has no prior data, the system splits the annual amount evenly across four quarters.",
+          "You can also type a YoY % growth rate to calculate the annual total from the prior year.",
+          "Click \"Save & Recalculate\" to persist.",
+        ],
+        notes: "Annual Summary is the fastest way to enter data for a new company. You can type annual totals for each stream and the system creates the quarterly breakdown automatically. For existing companies with seasonal patterns, editing the annual total preserves the quarterly seasonality ratios.",
+      },
+      {
+        name: "Add / Remove Revenue Streams",
+        steps: [
+          "While in edit mode, click \"Add Revenue Stream\" at the bottom of the revenue table.",
+          "Type a name for the new stream in the first column.",
+          "Enter quarterly or annual amounts for the new stream.",
+          "To delete a stream, click the trash icon at the end of its row.",
+          "Click \"Save & Recalculate\" to persist changes.",
+        ],
+        notes: "Deleted streams are permanently removed along with all their historical data.",
+      },
+      {
+        name: "Rename Revenue Streams",
+        steps: [
+          "While in edit mode, click the name of any revenue stream in the first column.",
+          "Type the new name.",
+          "Click \"Save & Recalculate\" to persist.",
+        ],
+        notes: "Renaming does not affect any data values -- only the label changes.",
+      },
+      {
+        name: "Forecast Forward (Auto-Projection)",
+        steps: [
+          "Enter at least one year of revenue data first.",
+          "Click the \"Forecast Forward\" button (available when there are empty future years).",
+          "The system calculates the average historical growth rate from your entered data and projects revenue into all empty future years.",
+          "Review the projected values and adjust as needed.",
+          "Click \"Save & Recalculate\" to persist.",
+        ],
+        notes: "Forecast Forward only fills empty years -- it never overwrites data you have already entered. Growth rates are calculated per revenue stream, so each stream grows at its own historical pace. If Projection Settings include a Growth Decay Rate, the growth rate will naturally slow down over time.",
+      },
+    ],
+  },
+  {
+    id: "projection-settings",
+    title: "Projection Settings",
+    icon: Settings2,
+    features: [
+      {
+        name: "Growth Decay Rate",
+        steps: [
+          "On the Revenue Forecast page, open the Projection Settings panel.",
+          "Set the Growth Decay Rate (0 to 1). For example, 0.10 means the growth rate decays by 10% each year.",
+          "Formula: Effective Growth = Base Growth x (1 - Decay Rate) ^ Years From Last Data.",
+          "Click \"Save & Recalculate\" to apply.",
+        ],
+        notes: "A rate of 0 means no decay (constant growth). A rate of 0.15 models realistic deceleration as companies mature. Growth Decay only affects projected (future) years, not your entered actuals.",
+      },
+      {
+        name: "Target Net Margin Convergence",
+        steps: [
+          "Set a Target Net Margin percentage in Projection Settings.",
+          "The recalculation engine gradually adjusts cost assumptions across projected years so that net margin converges toward your target by the final year.",
+        ],
+        notes: "This models operating leverage -- as a company scales, margins typically improve. Set to 0 or leave blank to disable convergence.",
+      },
+      {
+        name: "Scenario Multipliers (Bull/Base/Bear)",
+        steps: [
+          "Set three multipliers: Bull (e.g., 1.3), Base (1.0), and Bear (e.g., 0.7).",
+          "These multiply revenue and DCF targets to create optimistic, realistic, and pessimistic scenarios.",
+          "Results appear on the Valuation Comparison page under each valuation method.",
+        ],
+        notes: "Base should typically be 1.0. Bull above 1.0 models upside. Bear below 1.0 models downside. The multipliers also appear in the scenario revenue table on the Valuation Comparison page.",
+      },
+    ],
+  },
+  {
+    id: "bulk-data-import",
+    title: "Bulk Data Import (Paste Data)",
+    icon: Clipboard,
+    features: [
+      {
+        name: "Paste Balance Sheet Data",
+        steps: [
+          "Navigate to the Balance Sheet page and click \"Edit / Enter Actuals\".",
+          "Click the \"Paste Data\" button to open the import modal.",
+          "Copy data from SEC EDGAR, Excel, Google Sheets, or any spreadsheet. The data should be tab-separated (TSV) or comma-separated (CSV).",
+          "Paste the data into the text area in the modal.",
+          "The system automatically detects and matches column headers to balance sheet fields (Cash, Accounts Receivable, Inventory, Equipment, etc.).",
+          "Review the preview table to verify the field matching is correct.",
+          "Click \"Import\" to populate the balance sheet with the pasted data.",
+          "Toggle the year badge to \"Actual\" for years with real data.",
+          "Click \"Save & Recalculate\" to persist.",
+        ],
+        notes: "The paste modal supports common formats from SEC EDGAR (HTML tables), Excel (copy-paste produces TSV), and Google Sheets. Field matching is fuzzy -- it handles variations like \"Accounts Receivable\" vs \"A/R\" vs \"AR\". You can correct any mismatched fields in the preview before importing.",
+      },
+      {
+        name: "Paste Cash Flow Data",
+        steps: [
+          "Navigate to the Cash Flow page and click \"Edit / Enter Actuals\".",
+          "Click \"Paste Data\" and follow the same workflow as Balance Sheet paste above.",
+          "Fields are matched to cash flow line items: Net Income, Depreciation, Working Capital Changes, CapEx, Debt Changes, etc.",
+        ],
+        notes: "Cash flow paste is particularly useful for importing data from 10-K or 10-Q filings. The system handles the sign conventions automatically.",
+      },
+    ],
+  },
+  {
+    id: "actual-vs-projected",
+    title: "Actual vs. Projected Data",
+    icon: ToggleLeft,
+    features: [
+      {
+        name: "Toggle Year Type (Balance Sheet & Cash Flow)",
+        steps: [
+          "Enter edit mode on the Balance Sheet or Cash Flow page.",
+          "Click the badge above any year column -- it toggles between \"Actual\" and \"Projected\".",
+          "Actual years: cells become editable for manual data entry. These values are preserved during recalculation and never overwritten by the engine.",
+          "Projected years: values are auto-calculated from assumptions and upstream data. The engine recalculates these whenever you click Save & Recalculate.",
+        ],
+        notes: "Use Actual for years where you have real financial data (from SEC filings, annual reports, etc.). Use Projected for future years that the model should calculate. The recalculation engine respects this boundary -- it only rewrites Projected years.",
+      },
+      {
+        name: "Enter Historical Data Inline",
+        steps: [
+          "After toggling a year to \"Actual\", click any cell in that column to edit it.",
+          "Type the value directly. Totals (Total Assets, Total Equity, etc.) are auto-computed server-side when you save.",
+          "Click \"Save & Recalculate\" to persist. The server recomputes row totals for actual years and fully recalculates all projected years.",
+        ],
+        notes: "For Balance Sheet, the server automatically computes Total Current Assets, Total Assets, Total Liabilities, and Total Equity from the individual line items you enter. You do not need to enter totals manually.",
+      },
+    ],
+  },
+  {
+    id: "portfolio-features",
+    title: "Portfolio Features",
+    icon: Briefcase,
+    features: [
+      {
+        name: "Add a Stock Position",
+        steps: [
+          "Navigate to Portfolio and click \"Add Position\".",
+          "Fill in the form: Ticker, Company Name, Sector, Shares, Purchase Price, Current Price, and optionally Beta, P/E, Moving Averages, Stop Loss, etc.",
+          "Click \"Add Position\" to save.",
+        ],
+        notes: "Most fields are optional on creation. You can fill in just ticker, company, shares, and purchase price, then use \"Refresh Prices\" to auto-populate the rest from Yahoo Finance.",
+      },
+      {
+        name: "Add a Cryptocurrency Position",
+        steps: [
+          "Click \"Add Position\" and check the \"Crypto\" checkbox.",
+          "Enter the crypto ticker (e.g., BTC, ETH, SOL). The system automatically formats it for Yahoo Finance (adds -USD suffix).",
+          "Fill in shares (amount held) and purchase price.",
+          "Stock-specific fields (P/E, EPS, Dividend Yield) are automatically zeroed for crypto.",
+        ],
+        notes: "Crypto positions display a \"Crypto\" badge in the portfolio table. When refreshing prices, the system queries Yahoo Finance using the -USD format (e.g., BTC-USD).",
+      },
+      {
+        name: "Tax Lot Tracking",
+        steps: [
+          "In the portfolio table, click the expand arrow on any position row to reveal tax lots.",
+          "Click \"Add Lot\" to record a new purchase: enter shares, price per share, purchase date, and optional notes.",
+          "Each lot tracks its own P&L based on the current price vs. the lot's purchase price.",
+          "The position's overall average cost and total shares are auto-aggregated from all lots.",
+          "Edit or delete individual lots using the icons in each lot row.",
+        ],
+        notes: "Tax lots let you track multiple purchases of the same stock at different prices and dates. This is essential for tax-loss harvesting and understanding your cost basis. The position-level weighted average cost updates automatically as you add or remove lots.",
+      },
+      {
+        name: "Refresh Live Prices",
+        steps: [
+          "Click \"Refresh Prices\" on the Portfolio page.",
+          "The system fetches live quotes from Yahoo Finance for every position in your portfolio.",
+          "Updated fields: Current Price, P/E Ratio, Beta, MA50, MA200, 52-Week High/Low, Volume, Market Cap, EPS, Dividend Yield.",
+          "P&L, golden/death cross signals, and stop-loss proximity are recalculated automatically.",
+        ],
+        notes: "Crypto positions are queried using their -USD ticker format. The refresh updates all positions in parallel. If any position fails to fetch (delisted, invalid ticker), the rest still update successfully.",
+      },
+      {
+        name: "Portfolio Analytics Tabs",
+        steps: [
+          "All Positions: Full table with every position's details, expandable for tax lots.",
+          "Analytics: Sector allocation pie chart, position-level P&L bar chart, top gainers, worst performers.",
+          "Risk & Flags: Red flag checklist, golden/death cross signals, positions near stop-loss, beta exposure chart.",
+          "Macro & Indices: US and international market indices, macroeconomic indicators by category.",
+        ],
+        notes: "The Signal Definitions card on the Analytics tab explains what Golden Cross, Death Cross, Near Stop Loss, MA50/MA200, Beta, and 52-Week Range mean.",
+      },
+    ],
+  },
+  {
+    id: "market-data-features",
+    title: "Market Data Customization",
+    icon: TrendingUp,
+    features: [
+      {
+        name: "Add a Custom Market Index",
+        steps: [
+          "Navigate to the Market Data page.",
+          "Click \"Add Index\" on the Global Indices tab.",
+          "Enter a Yahoo Finance symbol (e.g., ^GSPC for S&P 500, ^IXIC for Nasdaq, BTC-USD for Bitcoin, TSLA for Tesla).",
+          "The system fetches the latest quote and adds it to your tracked indices.",
+        ],
+        notes: "You can track any symbol available on Yahoo Finance -- stock tickers, crypto pairs, ETFs, commodities, and international indices. Use the ^ prefix for major indices (e.g., ^DJI for Dow Jones).",
+      },
+      {
+        name: "Remove a Market Index",
+        steps: [
+          "On the Global Indices tab, click the remove button next to any index.",
+          "The index is permanently removed from your tracked list.",
+        ],
+        notes: "Removing an index only removes it from your display. It does not affect any portfolio positions or model data.",
+      },
+      {
+        name: "Add a Custom FRED Macro Indicator",
+        steps: [
+          "On the Macro Indicators tab, click \"Add Indicator\".",
+          "Enter a FRED series ID (e.g., UNRATE for unemployment rate, CPIAUCSL for CPI, GDP for GDP, DFF for Fed Funds Rate).",
+          "The system fetches the latest value from the FRED API and adds it to your indicator dashboard.",
+        ],
+        notes: "FRED series IDs can be found at fred.stlouisfed.org. Common IDs: UNRATE (unemployment), CPIAUCSL (CPI), GDP (GDP), DFF (Fed Funds), T10Y2Y (yield curve), VIXCLS (VIX).",
+      },
+      {
+        name: "Remove a Macro Indicator",
+        steps: [
+          "Click the remove button next to any macro indicator.",
+          "The indicator is permanently removed from your display.",
+        ],
+        notes: "Default indicators can be re-added by entering their FRED series ID again.",
+      },
+      {
+        name: "Refresh All Live Data",
+        steps: [
+          "Click \"Refresh Live Data\" on the Market Data page.",
+          "The system fetches the latest prices for all tracked indices from Yahoo Finance and the latest values for all tracked macro indicators from the FRED API.",
+          "Daily change %, MTD, and YTD returns are recalculated for indices. Prior values are tracked for change indicators on macro data.",
+        ],
+        notes: "The FRED API requires an API key (configured as FRED_API_KEY). Yahoo Finance data is fetched without an API key. If either service is temporarily unavailable, partial results are still saved.",
+      },
+    ],
+  },
+  {
+    id: "income-statement-editing",
+    title: "Income Statement Editing",
+    icon: FileSpreadsheet,
+    features: [
+      {
+        name: "Edit Cost Assumptions",
+        steps: [
+          "Navigate to the Income Statement page and click \"Edit Assumptions\".",
+          "Modify cost percentages: COGS %, Sales & Marketing %, R&D %, G&A %, Depreciation %, and Tax Rate.",
+          "Each cost line is calculated as a percentage of revenue. When revenue changes, costs scale proportionally.",
+          "Click \"Save & Recalculate\" to cascade changes through the entire model.",
+        ],
+        notes: "Cost percentages apply uniformly across all projected years unless Target Net Margin convergence is enabled (see Projection Settings).",
+      },
+      {
+        name: "Edit Individual Year Data",
+        steps: [
+          "While in edit mode, click any cell in the Income Statement table to modify it.",
+          "Toggle year badges between Actual and Projected.",
+          "Actual years preserve your entered values during recalculation.",
+        ],
+        notes: "Actual year data is locked during recalculation. Only projected year values are recomputed when you save.",
+      },
+    ],
+  },
+  {
+    id: "dcf-editing",
+    title: "DCF & WACC Configuration",
+    icon: Calculator,
+    features: [
+      {
+        name: "Configure WACC Parameters",
+        steps: [
+          "Navigate to DCF Valuation and click \"Edit WACC Params\".",
+          "Set Cost of Equity inputs: Risk-Free Rate, Beta, Expected Market Return.",
+          "Set Cost of Debt inputs: Pre-Tax Cost of Debt, Tax Rate.",
+          "Set Capital Structure: Equity Weight, Debt Weight.",
+          "Set Terminal Value inputs: Long-Term Growth Rate.",
+          "Set Current Share Price and Total Debt for upside/downside calculation.",
+          "Click \"Save & Recalculate\".",
+        ],
+        notes: "WACC = (Cost of Equity x Equity Weight) + (After-Tax Cost of Debt x Debt Weight). The sensitivity analysis table automatically shows target prices across a range of WACC and growth assumptions.",
+      },
+    ],
+  },
+  {
+    id: "display-units",
+    title: "Display Units & Number Formatting",
+    icon: Table2,
+    features: [
+      {
+        name: "Change Display Unit",
+        steps: [
+          "Click the pencil icon next to the company name in the sidebar to open Edit Company.",
+          "Change the Display Unit dropdown to: Ones, Thousands, Millions, Billions, or Trillions.",
+          "Click \"Save\".",
+          "All pages now show and accept values in the selected unit.",
+        ],
+        notes: "When display unit is Millions, you type 11.5 to represent $11,500,000. The system handles all conversions internally. This applies to Revenue, Income Statement, Balance Sheet, Cash Flow, and DCF pages. Decimal input is supported (e.g., 11.5M = $11,500,000).",
+      },
+    ],
+  },
+];
+
 const tocItems = [
   { id: "toc-cascade", label: "How the Cascade Works" },
   { id: "toc-workflow", label: "Recommended Workflow" },
+  { id: "toc-features", label: "Feature Reference" },
+  ...featureGuides.map((f) => ({ id: `toc-feature-${f.id}`, label: `  ${f.title}` })),
   { id: "toc-required-inputs", label: "Required Inputs Reference" },
   { id: "toc-walkthrough", label: "Walkthrough: CloudSync Corp" },
   { id: "toc-pages", label: "Page-by-Page Breakdown" },
@@ -693,6 +1070,51 @@ export default function AnalysisGuide() {
                 </div>
               </CardContent>
             </Card>
+          </div>
+
+          <div id="toc-features">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Wrench className="h-5 w-5" />
+              Feature Reference
+            </h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Step-by-step instructions for every interactive feature in the application. Use this as a quick reference when you need to perform a specific action.
+            </p>
+
+            <div className="space-y-4">
+              {featureGuides.map((guide) => (
+                <div key={guide.id} id={`toc-feature-${guide.id}`}>
+                  <Card data-testid={`card-feature-${guide.id}`}>
+                    <CardHeader>
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <guide.icon className="h-4 w-4" />
+                        {guide.title}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {guide.features.map((feature, fi) => (
+                        <div key={fi} className="space-y-2" data-testid={`feature-${guide.id}-${fi}`}>
+                          <h4 className="text-sm font-medium flex items-center gap-1.5">
+                            <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                            {feature.name}
+                          </h4>
+                          <ol className="space-y-1 ml-5">
+                            {feature.steps.map((step, si) => (
+                              <li key={si} className={`text-sm text-muted-foreground ${step.startsWith("  --") ? "ml-4 list-none" : ""}`}>
+                                {step.startsWith("  --") ? step : `${si + 1}. ${step}`}
+                              </li>
+                            ))}
+                          </ol>
+                          <div className="p-2 rounded-md bg-muted/50">
+                            <p className="text-xs text-muted-foreground">{feature.notes}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div id="toc-required-inputs">
