@@ -6,8 +6,8 @@ import { fetchLiveIndices, fetchFredIndicators, fetchPortfolioQuotes, fetchSingl
 import { fetchAndParseEdgar } from "./edgar-parser";
 import { searchCompanyByTicker, getCompanyFilings, fetchAndParseAllStatements } from "./sec-search";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
-import { revenuePeriods } from "@shared/schema";
+import { eq, and, sql } from "drizzle-orm";
+import { revenuePeriods, incomeStatementLines, balanceSheetLines, cashFlowLines } from "@shared/schema";
 import {
   insertFinancialModelSchema, insertRevenueLineItemSchema,
   insertRevenuePeriodSchema, insertIncomeStatementLineSchema,
@@ -1169,6 +1169,47 @@ export async function registerRoutes(server: Server, app: Express) {
       if (!q) return res.json([]);
       const results = await searchDefiLlamaProtocols(q);
       res.json(results);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/cleanup-duplicates", async (_req: Request, res: Response) => {
+    try {
+      const dedupQuery = (table: string, groupCols: string) => `
+        DELETE FROM ${table}
+        WHERE id NOT IN (
+          SELECT DISTINCT ON (${groupCols}) id
+          FROM ${table}
+          ORDER BY ${groupCols}, is_actual DESC NULLS LAST, id DESC
+        )
+      `;
+
+      const r1 = await db.execute(sql.raw(dedupQuery("income_statement_lines", "model_id, year")));
+      const r2 = await db.execute(sql.raw(dedupQuery("balance_sheet_lines", "model_id, year")));
+      const r3 = await db.execute(sql.raw(dedupQuery("cash_flow_lines", "model_id, year")));
+
+      const rpDedup = `
+        DELETE FROM revenue_periods
+        WHERE id NOT IN (
+          SELECT DISTINCT ON (line_item_id, model_id, year, quarter) id
+          FROM revenue_periods
+          ORDER BY line_item_id, model_id, year, quarter, is_actual DESC NULLS LAST, id DESC
+        )
+      `;
+      const r4 = await db.execute(sql.raw(rpDedup));
+
+      const affectedModels = await db.execute(sql.raw(`SELECT DISTINCT model_id FROM income_statement_lines`));
+      for (const row of affectedModels.rows) {
+        try {
+          await recalculateModel(row.model_id as string);
+        } catch (e) {}
+      }
+
+      res.json({
+        cleaned: { incomeStatement: r1.rowCount, balanceSheet: r2.rowCount, cashFlow: r3.rowCount, revenuePeriods: r4.rowCount },
+        modelsRecalculated: affectedModels.rows.length,
+      });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
