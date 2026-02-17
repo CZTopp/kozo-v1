@@ -943,15 +943,15 @@ export default function AnalysisGuide() {
     <div className="p-4 max-w-5xl mx-auto">
       <div className="flex gap-6">
         <div className="hidden lg:block w-56 shrink-0">
-          <div className="sticky top-16">
-            <Card data-testid="card-table-of-contents">
-              <CardHeader className="pb-2">
+          <div className="sticky top-4 max-h-[calc(100vh-2rem)] flex flex-col">
+            <Card data-testid="card-table-of-contents" className="flex flex-col overflow-hidden">
+              <CardHeader className="pb-2 shrink-0">
                 <CardTitle className="text-xs font-medium flex items-center gap-1.5">
                   <List className="h-3.5 w-3.5" />
                   Contents
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-2">
+              <CardContent className="p-2 overflow-y-auto flex-1">
                 <nav className="space-y-0.5">
                   {tocItems.map((item) => {
                     const isSubItem = item.label.startsWith("  ");
