@@ -81,6 +81,7 @@ export default function RevenueForecast() {
   const [pendingDeletes, setPendingDeletes] = useState<Set<string>>(new Set());
   const [newLineItems, setNewLineItems] = useState<Array<{ tempId: string; name: string }>>([]);
   const [newLineItemPeriods, setNewLineItemPeriods] = useState<Record<string, Record<string, number>>>({});
+  const [pendingAnnualEdits, setPendingAnnualEdits] = useState<Record<string, number>>({});
   const [showProjectionSettings, setShowProjectionSettings] = useState(false);
   const [projectionSettings, setProjectionSettings] = useState<{
     growthDecayRate: number;
@@ -161,6 +162,20 @@ export default function RevenueForecast() {
       );
       await Promise.all(periodUpdates);
 
+      if (Object.keys(pendingAnnualEdits).length > 0) {
+        const bulkPeriods: Array<{ lineItemId: string; modelId: string; year: number; quarter: number; amount: number; isActual: boolean }> = [];
+        for (const [key, total] of Object.entries(pendingAnnualEdits)) {
+          const [lineItemId, yearStr] = key.split(":");
+          const year = parseInt(yearStr);
+          if (isNaN(year) || !lineItemId || isNaN(total)) continue;
+          const perQuarter = total / 4;
+          for (let q = 1; q <= 4; q++) {
+            bulkPeriods.push({ lineItemId, modelId: model!.id, year, quarter: q, amount: perQuarter, isActual: false });
+          }
+        }
+        await apiRequest("POST", "/api/revenue-periods/bulk", bulkPeriods);
+      }
+
       if (Object.keys(editedYears).length > 0) {
         const yearMapping: Record<number, number> = {};
         years.forEach(y => { yearMapping[y] = editedYears[y] !== undefined ? editedYears[y] : y; });
@@ -190,6 +205,7 @@ export default function RevenueForecast() {
       setEditedPeriods({});
       setEditedNames({});
       setEditedYears({});
+      setPendingAnnualEdits({});
       setPendingDeletes(new Set());
       setNewLineItems([]);
       setNewLineItemPeriods({});
@@ -326,7 +342,11 @@ export default function RevenueForecast() {
   const hasNoRevenueData = !periods || periods.length === 0 || !periods.some(p => (p.amount || 0) > 0);
 
   const getTotalRevenue = (year: number) => {
-    let total = visibleLineItems.reduce((sum, li) => sum + getAnnualTotal(li.id, year), 0);
+    let total = visibleLineItems.reduce((sum, li) => {
+      const periodsExist = [1,2,3,4].some(q => getPeriod(li.id, year, q));
+      if (periodsExist) return sum + getAnnualTotal(li.id, year);
+      return sum + (getPendingAnnualAmount(li.id, year) || 0);
+    }, 0);
     newLineItems.forEach(ni => { total += getNewItemAnnualTotal(ni.tempId, year); });
     return total;
   };
@@ -346,8 +366,8 @@ export default function RevenueForecast() {
   };
 
   const calcStreamYoYGrowth = (lineItemId: string, year: number) => {
-    const current = getAnnualTotal(lineItemId, year);
-    const prior = getAnnualTotal(lineItemId, year - 1);
+    const current = getAnnualTotalWithPending(lineItemId, year);
+    const prior = getAnnualTotalWithPending(lineItemId, year - 1);
     if (!prior || prior === 0) return null;
     return (current - prior) / Math.abs(prior);
   };
@@ -386,7 +406,7 @@ export default function RevenueForecast() {
   const calcStreamPercentOfTotal = (lineItemId: string, year: number) => {
     const total = getTotalRevenue(year);
     if (!total || total === 0) return null;
-    return getAnnualTotal(lineItemId, year) / total;
+    return getAnnualTotalWithPending(lineItemId, year) / total;
   };
 
   const calcStreamQPercentOfTotal = (lineItemId: string, year: number, quarter: number) => {
@@ -429,20 +449,43 @@ export default function RevenueForecast() {
     return updates;
   };
 
+  const getPendingAnnualAmount = (lineItemId: string, year: number): number | undefined => {
+    const key = `${lineItemId}:${year}`;
+    return pendingAnnualEdits[key];
+  };
+
+  const getAnnualTotalWithPending = (lineItemId: string, year: number): number => {
+    const fromPeriods = getAnnualTotal(lineItemId, year);
+    if (fromPeriods > 0) return fromPeriods;
+    return getPendingAnnualAmount(lineItemId, year) || 0;
+  };
+
   const handleAnnualEdit = (lineItemId: string, year: number, value: string) => {
     const total = parseWithUnit(value, displayUnit);
-    const updates = splitAnnualToQuarters(lineItemId, year, total);
-    setEditedPeriods(prev => ({ ...prev, ...updates }));
+    const hasPeriodsForYear = [1,2,3,4].some(q => getPeriod(lineItemId, year, q));
+    if (hasPeriodsForYear) {
+      const updates = splitAnnualToQuarters(lineItemId, year, total);
+      setEditedPeriods(prev => ({ ...prev, ...updates }));
+    } else {
+      const key = `${lineItemId}:${year}`;
+      setPendingAnnualEdits(prev => ({ ...prev, [key]: total }));
+    }
   };
 
   const handleAnnualYoyEdit = (lineItemId: string, year: number, yoyPercent: string) => {
     const pct = parseFloat(yoyPercent);
     if (isNaN(pct)) return;
-    const priorTotal = getAnnualTotal(lineItemId, year - 1);
+    const priorTotal = getAnnualTotalWithPending(lineItemId, year - 1);
     if (priorTotal === 0) return;
     const newTotal = priorTotal * (1 + pct / 100);
-    const updates = splitAnnualToQuarters(lineItemId, year, newTotal);
-    setEditedPeriods(prev => ({ ...prev, ...updates }));
+    const hasPeriodsForYear = [1,2,3,4].some(q => getPeriod(lineItemId, year, q));
+    if (hasPeriodsForYear) {
+      const updates = splitAnnualToQuarters(lineItemId, year, newTotal);
+      setEditedPeriods(prev => ({ ...prev, ...updates }));
+    } else {
+      const key = `${lineItemId}:${year}`;
+      setPendingAnnualEdits(prev => ({ ...prev, [key]: newTotal }));
+    }
   };
 
   const handleNewItemEdit = (tempId: string, year: number, quarter: number | null, value: string) => {
@@ -493,6 +536,7 @@ export default function RevenueForecast() {
     setEditedPeriods({});
     setEditedNames({});
     setEditedYears({});
+    setPendingAnnualEdits({});
     setPendingDeletes(new Set());
     setNewLineItems([]);
     setNewLineItemPeriods({});
@@ -501,6 +545,7 @@ export default function RevenueForecast() {
   const hasEdits = Object.keys(editedPeriods).length > 0 ||
     Object.keys(editedNames).length > 0 ||
     Object.keys(editedYears).length > 0 ||
+    Object.keys(pendingAnnualEdits).length > 0 ||
     pendingDeletes.size > 0 ||
     newLineItems.some(ni => ni.name.trim() !== "");
 
@@ -928,19 +973,18 @@ export default function RevenueForecast() {
                             })
                           )}
                           {annualOnlyYears.map(year => {
-                            const annualAmt = getAnnualTotal(li.id, year);
-                            const hasAnyEdited = [1,2,3,4].some(q => {
-                              const p = getPeriod(li.id, year, q);
-                              return p && editedPeriods[p.id] !== undefined;
-                            });
-                            const hasAnyPeriod = [1,2,3,4].some(q => getPeriod(li.id, year, q));
-                            const priorAmt = getAnnualTotal(li.id, year - 1);
-                            const yoyGrowth = calcStreamYoYGrowth(li.id, year);
+                            const periodsExist = [1,2,3,4].some(q => getPeriod(li.id, year, q));
+                            const annualAmt = periodsExist ? getAnnualTotal(li.id, year) : (getPendingAnnualAmount(li.id, year) || 0);
+                            const hasAnyEdited = periodsExist
+                              ? [1,2,3,4].some(q => { const p = getPeriod(li.id, year, q); return p && editedPeriods[p.id] !== undefined; })
+                              : pendingAnnualEdits[`${li.id}:${year}`] !== undefined;
+                            const priorAmt = getAnnualTotalWithPending(li.id, year - 1);
+                            const yoyGrowth = annualAmt > 0 && priorAmt > 0 ? (annualAmt - priorAmt) / priorAmt : null;
                             const pctOfTotal = calcStreamPercentOfTotal(li.id, year);
                             return (
                               <TableCell key={`${year}-A`} className="text-right p-1">
                                 <div>
-                                  {editMode && hasAnyPeriod ? (
+                                  {editMode ? (
                                     <Input
                                       type="text"
                                       value={displayForInput(annualAmt, displayUnit)}
@@ -952,7 +996,7 @@ export default function RevenueForecast() {
                                     <span className="text-xs">{formatWithUnit(annualAmt, displayUnit)}</span>
                                   )}
                                   <div className="flex flex-col items-end mt-0.5">
-                                    {editMode && hasAnyPeriod ? (
+                                    {editMode ? (
                                       priorAmt > 0 ? (
                                         <div className="flex items-center gap-0.5 justify-end">
                                           <Input
@@ -1150,19 +1194,19 @@ export default function RevenueForecast() {
                             {getLineItemName(li)}
                           </TableCell>
                           {years.map(year => {
-                            const annualAmt = getAnnualTotal(li.id, year);
-                            const hasAnyEdited = [1,2,3,4].some(q => {
-                              const p = getPeriod(li.id, year, q);
-                              return p && editedPeriods[p.id] !== undefined;
-                            });
-                            const hasAnyPeriod = [1,2,3,4].some(q => getPeriod(li.id, year, q));
-                            const priorAmt = getAnnualTotal(li.id, year - 1);
-                            const yoyGrowth = calcStreamYoYGrowth(li.id, year);
-                            const pctOfTotal = calcStreamPercentOfTotal(li.id, year);
+                            const periodsExist = [1,2,3,4].some(q => getPeriod(li.id, year, q));
+                            const annualAmt = periodsExist ? getAnnualTotal(li.id, year) : (getPendingAnnualAmount(li.id, year) || 0);
+                            const hasAnyEdited = periodsExist
+                              ? [1,2,3,4].some(q => { const p = getPeriod(li.id, year, q); return p && editedPeriods[p.id] !== undefined; })
+                              : pendingAnnualEdits[`${li.id}:${year}`] !== undefined;
+                            const priorAmt = getAnnualTotalWithPending(li.id, year - 1);
+                            const yoyGrowth = annualAmt > 0 && priorAmt > 0 ? (annualAmt - priorAmt) / priorAmt : null;
+                            const totalRev = years.reduce((s, y) => s + (periodsExist ? getAnnualTotal(li.id, y) : (getPendingAnnualAmount(li.id, y) || 0)), 0);
+                            const pctOfTotal = totalRev > 0 ? annualAmt / totalRev : null;
                             return (
                               <TableCell key={year} className="text-right p-1">
                                 <div>
-                                  {editMode && hasAnyPeriod ? (
+                                  {editMode ? (
                                     <Input
                                       type="text"
                                       value={displayForInput(annualAmt, displayUnit)}
@@ -1174,7 +1218,7 @@ export default function RevenueForecast() {
                                     <span>{formatWithUnit(annualAmt, displayUnit)}</span>
                                   )}
                                   <div className="flex flex-col items-end mt-0.5">
-                                    {editMode && hasAnyPeriod ? (
+                                    {editMode ? (
                                       priorAmt > 0 ? (
                                         <div className="flex items-center gap-0.5 justify-end">
                                           <Input
