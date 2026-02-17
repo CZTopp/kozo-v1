@@ -6,8 +6,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCurrency, formatPercent } from "@/lib/calculations";
 import type { ValuationComparison, FinancialModel } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
-import { TrendingUp, TrendingDown, Target, ArrowDown, AlertTriangle } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, ArrowDown, AlertTriangle, Globe } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
+
+interface YahooFundamentals {
+  currentPrice: number;
+  sharesOutstanding: number;
+  marketCap: number;
+  trailingPE: number;
+  forwardPE: number;
+  eps: number;
+  beta: number;
+  dividendYield: number;
+  priceToBook: number;
+  bookValue: number;
+  week52Low: number;
+  week52High: number;
+  sector: string;
+  industry: string;
+}
 
 export default function ValuationComparisonPage() {
   const { selectedModel: model, isLoading } = useModel();
@@ -15,6 +32,13 @@ export default function ValuationComparisonPage() {
   const { data: valData } = useQuery<ValuationComparison>({
     queryKey: ["/api/models", model?.id, "valuation-comparison"],
     enabled: !!model,
+  });
+
+  const { data: yahooData } = useQuery<YahooFundamentals>({
+    queryKey: ["/api/models", model?.id, "yahoo-fundamentals"],
+    enabled: !!model?.ticker,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
   });
 
   if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
@@ -163,6 +187,39 @@ export default function ValuationComparisonPage() {
           </CardContent>
         </Card>
       </div>
+
+      {yahooData && (
+        <Card data-testid="card-yahoo-market-context">
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-1">
+              <Globe className="h-4 w-4" /> Market Benchmarks ({model.ticker})
+              <InfoTooltip content="Live valuation metrics from Yahoo Finance. Compare your model's assumptions against what the market currently prices." />
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-2">
+              {[
+                { label: "Market Price", value: `$${yahooData.currentPrice.toFixed(2)}` },
+                { label: "Market Cap", value: yahooData.marketCap > 1e9 ? `$${(yahooData.marketCap / 1e9).toFixed(1)}B` : yahooData.marketCap > 1e6 ? `$${(yahooData.marketCap / 1e6).toFixed(1)}M` : formatCurrency(yahooData.marketCap) },
+                { label: "Trailing P/E", value: yahooData.trailingPE > 0 ? yahooData.trailingPE.toFixed(1) : "--" },
+                { label: "Forward P/E", value: yahooData.forwardPE > 0 ? yahooData.forwardPE.toFixed(1) : "--" },
+                { label: "EPS (TTM)", value: yahooData.eps !== 0 ? `$${yahooData.eps.toFixed(2)}` : "--" },
+                { label: "P/B Ratio", value: yahooData.priceToBook > 0 ? yahooData.priceToBook.toFixed(2) : "--" },
+                { label: "Beta", value: yahooData.beta.toFixed(2) },
+                { label: "Div Yield", value: yahooData.dividendYield > 0 ? formatPercent(yahooData.dividendYield) : "--" },
+                { label: "52W Range", value: `$${yahooData.week52Low.toFixed(0)} - $${yahooData.week52High.toFixed(0)}` },
+                { label: "Sector", value: yahooData.sector || "--" },
+                { label: "Industry", value: yahooData.industry || "--" },
+              ].map(item => (
+                <div key={item.label} className="flex flex-col" data-testid={`yahoo-val-${item.label.toLowerCase().replace(/[^a-z]/g, "-")}`}>
+                  <span className="text-xs text-muted-foreground">{item.label}</span>
+                  <span className="text-sm font-medium">{item.value}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {methods.map(m => (

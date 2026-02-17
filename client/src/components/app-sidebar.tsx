@@ -19,6 +19,8 @@ import {
   BookOpen,
   LineChart,
   Pencil,
+  Globe,
+  RefreshCw,
 } from "lucide-react";
 import {
   Sidebar,
@@ -157,6 +159,32 @@ export function AppSidebar() {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
+
+  const [syncingYahoo, setSyncingYahoo] = useState(false);
+
+  const handleSyncYahoo = async () => {
+    if (!selectedModel || !editCompany.ticker) return;
+    setSyncingYahoo(true);
+    try {
+      const tempModel = { ...selectedModel };
+      if (editCompany.ticker !== selectedModel.ticker) {
+        await apiRequest("PATCH", `/api/models/${selectedModel.id}`, { ticker: editCompany.ticker });
+      }
+      const res = await apiRequest("POST", `/api/models/${selectedModel.id}/sync-yahoo`);
+      const result = await res.json();
+      if (result.data) {
+        if (result.data.sharesOutstanding > 0) {
+          setEditCompany(prev => ({ ...prev, sharesOutstanding: result.data.sharesOutstanding }));
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      toast({ title: "Yahoo data synced", description: `Shares outstanding, price, and beta updated from Yahoo Finance.` });
+    } catch (err: any) {
+      toast({ title: "Sync failed", description: err.message || "Could not fetch data from Yahoo Finance.", variant: "destructive" });
+    } finally {
+      setSyncingYahoo(false);
+    }
+  };
 
   const editMutation = useMutation({
     mutationFn: async () => {
@@ -452,12 +480,25 @@ export function AppSidebar() {
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="edit-ticker">Ticker Symbol</Label>
-                <Input
-                  id="edit-ticker"
-                  value={editCompany.ticker}
-                  onChange={(e) => setEditCompany({ ...editCompany, ticker: e.target.value.toUpperCase() })}
-                  data-testid="input-edit-ticker"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="edit-ticker"
+                    value={editCompany.ticker}
+                    onChange={(e) => setEditCompany({ ...editCompany, ticker: e.target.value.toUpperCase() })}
+                    data-testid="input-edit-ticker"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={handleSyncYahoo}
+                    disabled={!editCompany.ticker || syncingYahoo}
+                    title="Sync shares outstanding from Yahoo Finance"
+                    data-testid="button-sync-yahoo-sidebar"
+                  >
+                    {syncingYahoo ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Click the globe to auto-fill shares outstanding from Yahoo Finance</p>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-currency">Currency</Label>

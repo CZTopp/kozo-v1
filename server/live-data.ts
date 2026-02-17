@@ -203,6 +203,82 @@ export async function fetchPortfolioQuotes(tickers: string[]): Promise<{ results
   return { results, errors };
 }
 
+export interface CompanyFundamentals {
+  currentPrice: number;
+  sharesOutstanding: number;
+  marketCap: number;
+  trailingPE: number;
+  forwardPE: number;
+  eps: number;
+  beta: number;
+  grossMargin: number;
+  operatingMargin: number;
+  netMargin: number;
+  debtToEquity: number;
+  trailingFCF: number;
+  sector: string;
+  industry: string;
+  dividendYield: number;
+  revenuePerShare: number;
+  bookValue: number;
+  priceToBook: number;
+  week52Low: number;
+  week52High: number;
+}
+
+export async function fetchCompanyFundamentals(ticker: string): Promise<CompanyFundamentals | null> {
+  try {
+    const quote: any = await yahooFinance.quote(ticker);
+    if (!quote || !quote.regularMarketPrice) return null;
+
+    let trailingFCF = 0;
+    let grossMargin = 0;
+    let operatingMargin = 0;
+    let netMargin = 0;
+    let debtToEquity = 0;
+    let sector = quote.sector ?? "";
+    let industry = quote.industry ?? "";
+    try {
+      const summary: any = await yahooFinance.quoteSummary(ticker, { modules: ["financialData", "defaultKeyStatistics", "assetProfile"] });
+      trailingFCF = summary?.financialData?.freeCashflow ?? 0;
+      grossMargin = summary?.financialData?.grossMargins ?? 0;
+      operatingMargin = summary?.financialData?.operatingMargins ?? 0;
+      netMargin = summary?.financialData?.profitMargins ?? 0;
+      debtToEquity = summary?.financialData?.debtToEquity ?? 0;
+      if (summary?.assetProfile?.sector) sector = summary.assetProfile.sector;
+      if (summary?.assetProfile?.industry) industry = summary.assetProfile.industry;
+    } catch {
+      trailingFCF = 0;
+    }
+
+    return {
+      currentPrice: quote.regularMarketPrice ?? 0,
+      sharesOutstanding: quote.sharesOutstanding ?? 0,
+      marketCap: quote.marketCap ?? 0,
+      trailingPE: quote.trailingPE ?? 0,
+      forwardPE: quote.forwardPE ?? 0,
+      eps: quote.epsTrailingTwelveMonths ?? quote.epsForward ?? 0,
+      beta: quote.beta ?? 1,
+      grossMargin,
+      operatingMargin,
+      netMargin,
+      debtToEquity,
+      trailingFCF,
+      sector,
+      industry,
+      dividendYield: quote.dividendYield ? quote.dividendYield / 100 : 0,
+      revenuePerShare: quote.revenuePerShare ?? 0,
+      bookValue: quote.bookValue ?? 0,
+      priceToBook: quote.priceToBook ?? 0,
+      week52Low: quote.fiftyTwoWeekLow ?? 0,
+      week52High: quote.fiftyTwoWeekHigh ?? 0,
+    };
+  } catch (err: any) {
+    console.warn(`Failed to fetch fundamentals for ${ticker}:`, err.message || err);
+    return null;
+  }
+}
+
 export async function fetchSingleIndexQuote(symbol: string): Promise<IndexResult | null> {
   try {
     const quote: any = await yahooFinance.quote(symbol);

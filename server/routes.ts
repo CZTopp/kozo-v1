@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { Server } from "http";
 import { storage } from "./storage";
 import { recalculateModel, forecastForward } from "./recalculate";
-import { fetchLiveIndices, fetchFredIndicators, fetchPortfolioQuotes, fetchSingleIndexQuote, fetchSingleFredSeries } from "./live-data";
+import { fetchLiveIndices, fetchFredIndicators, fetchPortfolioQuotes, fetchSingleIndexQuote, fetchSingleFredSeries, fetchCompanyFundamentals } from "./live-data";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 import { revenuePeriods } from "@shared/schema";
@@ -679,6 +679,61 @@ export async function registerRoutes(server: Server, app: Express) {
     } else {
       const created = await storage.createAssumptions({ modelId: req.params.modelId, ...req.body });
       res.json(created);
+    }
+  });
+
+  app.get("/api/models/:modelId/yahoo-fundamentals", async (req: Request, res: Response) => {
+    try {
+      const model = await storage.getModel(req.params.modelId);
+      if (!model) return res.status(404).json({ message: "Model not found" });
+      if (!model.ticker) return res.status(400).json({ message: "No ticker set for this company. Set a ticker in Edit Company first." });
+
+      const data = await fetchCompanyFundamentals(model.ticker);
+      if (!data) return res.status(404).json({ message: `Could not fetch data for ticker ${model.ticker}` });
+
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch Yahoo data" });
+    }
+  });
+
+  app.post("/api/models/:modelId/sync-yahoo", async (req: Request, res: Response) => {
+    try {
+      const model = await storage.getModel(req.params.modelId);
+      if (!model) return res.status(404).json({ message: "Model not found" });
+      if (!model.ticker) return res.status(400).json({ message: "No ticker set for this company." });
+
+      const data = await fetchCompanyFundamentals(model.ticker);
+      if (!data) return res.status(404).json({ message: `Could not fetch data for ticker ${model.ticker}` });
+
+      const updates: Record<string, any> = {};
+      if (data.sharesOutstanding > 0) updates.sharesOutstanding = data.sharesOutstanding;
+
+      if (Object.keys(updates).length > 0) {
+        await storage.updateModel(model.id, updates);
+      }
+
+      const dcf = await storage.getDcfValuation(req.params.modelId);
+      if (dcf) {
+        const dcfUpdates: Record<string, any> = {};
+        if (data.currentPrice > 0) dcfUpdates.currentSharePrice = data.currentPrice;
+        if (data.beta > 0) dcfUpdates.beta = data.beta;
+        if (Object.keys(dcfUpdates).length > 0) {
+          await storage.upsertDcfValuation({ ...dcf, ...dcfUpdates });
+        }
+      }
+
+      res.json({
+        message: "Synced successfully",
+        data,
+        applied: {
+          sharesOutstanding: data.sharesOutstanding,
+          currentPrice: data.currentPrice,
+          beta: data.beta,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Sync failed" });
     }
   });
 }

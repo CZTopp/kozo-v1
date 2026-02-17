@@ -11,8 +11,31 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { DcfValuation, CashFlowLine } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { TrendingUp, TrendingDown, Target, Save, RefreshCw, ArrowDown, ArrowRight, AlertTriangle } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, Save, RefreshCw, ArrowDown, ArrowRight, AlertTriangle, Download, Globe } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
+
+interface YahooFundamentals {
+  currentPrice: number;
+  sharesOutstanding: number;
+  marketCap: number;
+  trailingPE: number;
+  forwardPE: number;
+  eps: number;
+  beta: number;
+  grossMargin: number;
+  operatingMargin: number;
+  netMargin: number;
+  debtToEquity: number;
+  trailingFCF: number;
+  sector: string;
+  industry: string;
+  dividendYield: number;
+  revenuePerShare: number;
+  bookValue: number;
+  priceToBook: number;
+  week52Low: number;
+  week52High: number;
+}
 
 export default function DcfValuationPage() {
   const { toast } = useToast();
@@ -29,6 +52,32 @@ export default function DcfValuationPage() {
   const { data: cfData } = useQuery<CashFlowLine[]>({
     queryKey: ["/api/models", model?.id, "cash-flow"],
     enabled: !!model,
+  });
+
+  const { data: yahooData, isLoading: yahooLoading } = useQuery<YahooFundamentals>({
+    queryKey: ["/api/models", model?.id, "yahoo-fundamentals"],
+    enabled: !!model?.ticker,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/models/${model!.id}/sync-yahoo`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "dcf"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "yahoo-fundamentals"] });
+      toast({
+        title: "Live data synced",
+        description: `Updated price ($${data.applied?.currentPrice?.toFixed(2) || "N/A"}), beta (${data.applied?.beta?.toFixed(2) || "N/A"}), and shares outstanding.`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Sync failed", description: err.message, variant: "destructive" });
+    },
   });
 
   const recalcMutation = useMutation({
@@ -104,10 +153,14 @@ export default function DcfValuationPage() {
     { label: "Target Price Per Share", value: `$${dcfResult.targetPricePerShare.toFixed(2)}` },
   ] : [];
 
-  const hasZeroPrice = currentPrice === 0;
+  const hasZeroPrice = currentPrice === 0 && !yahooData?.currentPrice;
   const hasDefaultWacc = getDcfVal("riskFreeRate") === 0 && getDcfVal("beta") === 0 && getDcfVal("marketReturn") === 0;
   const hasNoFCF = fcfProjections.length === 0 || fcfProjections.every(f => f === 0);
   const hasIssues = hasZeroPrice || hasDefaultWacc || hasNoFCF;
+
+  const livePrice = yahooData?.currentPrice || 0;
+  const displayPrice = currentPrice > 0 ? currentPrice : livePrice;
+  const displayUpside = displayPrice > 0 ? (targetPrice - displayPrice) / displayPrice : 0;
 
   return (
     <div className="p-4 space-y-4">
@@ -123,13 +176,23 @@ export default function DcfValuationPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="outline" data-testid="badge-model-name">{model.name}</Badge>
-          <Badge variant={upside >= 0 ? "default" : "destructive"} data-testid="badge-upside">
-            {upside >= 0 ? (
-              <span className="flex items-center gap-1"><TrendingUp className="h-3 w-3" /> {formatPercent(upside)} Upside</span>
+          <Badge variant={displayUpside >= 0 ? "default" : "destructive"} data-testid="badge-upside">
+            {displayUpside >= 0 ? (
+              <span className="flex items-center gap-1"><TrendingUp className="h-3 w-3" /> {formatPercent(displayUpside)} Upside</span>
             ) : (
-              <span className="flex items-center gap-1"><TrendingDown className="h-3 w-3" /> {formatPercent(Math.abs(upside))} Downside</span>
+              <span className="flex items-center gap-1"><TrendingDown className="h-3 w-3" /> {formatPercent(Math.abs(displayUpside))} Downside</span>
             )}
           </Badge>
+          {model.ticker && (
+            <Button
+              variant="outline"
+              onClick={() => syncMutation.mutate()}
+              disabled={syncMutation.isPending}
+              data-testid="button-sync-yahoo"
+            >
+              {syncMutation.isPending ? <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Syncing...</> : <><Globe className="h-4 w-4 mr-1" /> Sync Live Data</>}
+            </Button>
+          )}
           {editMode ? (
             <>
               <Button variant="outline" onClick={() => { setEditMode(false); setEditedDcf({}); }} data-testid="button-cancel">Cancel</Button>
@@ -147,9 +210,15 @@ export default function DcfValuationPage() {
         <Card data-testid="card-current-price">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">Current Price <InfoTooltip content="The current market share price. Used as the baseline to determine upside or downside from the DCF target." /></CardTitle>
+            {yahooData && currentPrice === 0 && livePrice > 0 && (
+              <Badge variant="outline" className="text-[10px]">Live</Badge>
+            )}
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-current-price">${currentPrice.toFixed(2)}</div>
+            <div className="text-2xl font-bold" data-testid="text-current-price">${displayPrice.toFixed(2)}</div>
+            {yahooData && currentPrice > 0 && livePrice > 0 && livePrice !== currentPrice && (
+              <p className="text-xs text-muted-foreground mt-1">Live: ${livePrice.toFixed(2)}</p>
+            )}
           </CardContent>
         </Card>
         <Card data-testid="card-target-price">
@@ -193,6 +262,47 @@ export default function DcfValuationPage() {
                   <span className="text-sm text-yellow-600 dark:text-yellow-500">No Free Cash Flow data found. Enter revenue on the Revenue Forecast page and run 'Forecast Forward' to generate FCF projections.</span>
                 </div>
               )}
+              {hasZeroPrice && model.ticker && (
+                <div className="flex gap-2" data-testid="warning-sync-hint">
+                  <Globe className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                  <span className="text-sm text-blue-600 dark:text-blue-400">Ticker "{model.ticker}" is set. Click "Sync Live Data" to auto-populate the current price and beta from Yahoo Finance.</span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {yahooData && (
+        <Card data-testid="card-yahoo-context">
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-1">
+              <Globe className="h-4 w-4" /> Market Data ({model.ticker})
+              <InfoTooltip content="Live market data from Yahoo Finance for reference. Use 'Sync Live Data' to apply current price and beta to your DCF model." />
+            </CardTitle>
+            {yahooLoading && <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />}
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-2">
+              {[
+                { label: "Market Price", value: `$${yahooData.currentPrice.toFixed(2)}` },
+                { label: "Market Cap", value: yahooData.marketCap > 1e9 ? `$${(yahooData.marketCap / 1e9).toFixed(1)}B` : yahooData.marketCap > 1e6 ? `$${(yahooData.marketCap / 1e6).toFixed(1)}M` : formatCurrency(yahooData.marketCap) },
+                { label: "Trailing P/E", value: yahooData.trailingPE > 0 ? yahooData.trailingPE.toFixed(1) : "--" },
+                { label: "Forward P/E", value: yahooData.forwardPE > 0 ? yahooData.forwardPE.toFixed(1) : "--" },
+                { label: "EPS (TTM)", value: yahooData.eps !== 0 ? `$${yahooData.eps.toFixed(2)}` : "--" },
+                { label: "Beta", value: yahooData.beta.toFixed(2) },
+                { label: "Div Yield", value: yahooData.dividendYield > 0 ? formatPercent(yahooData.dividendYield) : "--" },
+                { label: "P/B Ratio", value: yahooData.priceToBook > 0 ? yahooData.priceToBook.toFixed(2) : "--" },
+                { label: "Book Value", value: yahooData.bookValue > 0 ? `$${yahooData.bookValue.toFixed(2)}` : "--" },
+                { label: "52W Low", value: `$${yahooData.week52Low.toFixed(2)}` },
+                { label: "52W High", value: `$${yahooData.week52High.toFixed(2)}` },
+                { label: "Sector", value: yahooData.sector || "--" },
+              ].map(item => (
+                <div key={item.label} className="flex flex-col" data-testid={`yahoo-${item.label.toLowerCase().replace(/[^a-z]/g, "-")}`}>
+                  <span className="text-xs text-muted-foreground">{item.label}</span>
+                  <span className="text-sm font-medium">{item.value}</span>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
