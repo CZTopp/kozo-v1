@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { recalculateModel, forecastForward } from "./recalculate";
 import { fetchLiveIndices, fetchFredIndicators, fetchPortfolioQuotes, fetchSingleIndexQuote, fetchSingleFredSeries, fetchCompanyFundamentals } from "./live-data";
 import { fetchAndParseEdgar } from "./edgar-parser";
+import { searchCompanyByTicker, getCompanyFilings, fetchAndParseAllStatements } from "./sec-search";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 import { revenuePeriods } from "@shared/schema";
@@ -18,26 +19,28 @@ import {
   insertActualsSchema, insertReportSchema,
 } from "@shared/schema";
 
+type Params = Record<string, string>;
+
 export async function registerRoutes(server: Server, app: Express) {
   app.get("/api/models", async (_req: Request, res: Response) => {
     const models = await storage.getModels();
     res.json(models);
   });
 
-  app.get("/api/models/:id", async (req: Request, res: Response) => {
+  app.get("/api/models/:id", async (req: Request<Params>, res: Response) => {
     const model = await storage.getModel(req.params.id);
     if (!model) return res.status(404).json({ message: "Model not found" });
     res.json(model);
   });
 
-  app.post("/api/models", async (req: Request, res: Response) => {
+  app.post("/api/models", async (req: Request<Params>, res: Response) => {
     const parsed = insertFinancialModelSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const model = await storage.createModel(parsed.data);
     res.json(model);
   });
 
-  app.patch("/api/models/:id", async (req: Request, res: Response) => {
+  app.patch("/api/models/:id", async (req: Request<Params>, res: Response) => {
     const body = req.body;
     const numericFields = [
       "growthDecayRate", "targetNetMargin",
@@ -57,11 +60,14 @@ export async function registerRoutes(server: Server, app: Express) {
     if (body.displayUnit && !["ones", "thousands", "millions", "billions", "trillions"].includes(body.displayUnit)) {
       return res.status(400).json({ message: "displayUnit must be ones, thousands, millions, billions, or trillions" });
     }
+    if (body.modelMode && !["ipo", "invest"].includes(body.modelMode)) {
+      return res.status(400).json({ message: "modelMode must be 'ipo' or 'invest'" });
+    }
     const model = await storage.updateModel(req.params.id, body);
     res.json(model);
   });
 
-  app.patch("/api/models/:id/update-years", async (req: Request, res: Response) => {
+  app.patch("/api/models/:id/update-years", async (req: Request<Params>, res: Response) => {
     const { yearMapping, startYear, endYear } = req.body;
     if (!yearMapping || typeof yearMapping !== "object") {
       return res.status(400).json({ message: "yearMapping is required" });
@@ -88,24 +94,24 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(model);
   });
 
-  app.delete("/api/models/:id", async (req: Request, res: Response) => {
+  app.delete("/api/models/:id", async (req: Request<Params>, res: Response) => {
     await storage.deleteModel(req.params.id);
     res.json({ success: true });
   });
 
-  app.get("/api/models/:modelId/revenue-line-items", async (req: Request, res: Response) => {
+  app.get("/api/models/:modelId/revenue-line-items", async (req: Request<Params>, res: Response) => {
     const items = await storage.getRevenueLineItems(req.params.modelId);
     res.json(items);
   });
 
-  app.post("/api/revenue-line-items", async (req: Request, res: Response) => {
+  app.post("/api/revenue-line-items", async (req: Request<Params>, res: Response) => {
     const parsed = insertRevenueLineItemSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const item = await storage.createRevenueLineItem(parsed.data);
     res.json(item);
   });
 
-  app.patch("/api/revenue-line-items/:id", async (req: Request, res: Response) => {
+  app.patch("/api/revenue-line-items/:id", async (req: Request<Params>, res: Response) => {
     const { name, sortOrder } = req.body;
     if (name !== undefined && (typeof name !== "string" || name.trim().length === 0)) {
       return res.status(400).json({ message: "Name must be a non-empty string" });
@@ -114,12 +120,12 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(item);
   });
 
-  app.delete("/api/revenue-line-items/:id", async (req: Request, res: Response) => {
+  app.delete("/api/revenue-line-items/:id", async (req: Request<Params>, res: Response) => {
     await storage.deleteRevenueLineItem(req.params.id);
     res.json({ success: true });
   });
 
-  app.post("/api/models/:modelId/revenue-line-items-with-periods", async (req: Request, res: Response) => {
+  app.post("/api/models/:modelId/revenue-line-items-with-periods", async (req: Request<Params>, res: Response) => {
     const { name, sortOrder } = req.body;
     if (!name || typeof name !== "string" || name.trim().length === 0) {
       return res.status(400).json({ message: "Name is required" });
@@ -142,39 +148,39 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(lineItem);
   });
 
-  app.get("/api/models/:modelId/revenue-periods", async (req: Request, res: Response) => {
+  app.get("/api/models/:modelId/revenue-periods", async (req: Request<Params>, res: Response) => {
     const periods = await storage.getRevenuePeriods(req.params.modelId);
     res.json(periods);
   });
 
-  app.post("/api/revenue-periods", async (req: Request, res: Response) => {
+  app.post("/api/revenue-periods", async (req: Request<Params>, res: Response) => {
     const parsed = insertRevenuePeriodSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const period = await storage.createRevenuePeriod(parsed.data);
     res.json(period);
   });
 
-  app.post("/api/revenue-periods/bulk", async (req: Request, res: Response) => {
+  app.post("/api/revenue-periods/bulk", async (req: Request<Params>, res: Response) => {
     const periods = await storage.upsertRevenuePeriods(req.body);
     res.json(periods);
   });
 
-  app.patch("/api/revenue-periods/:id", async (req: Request, res: Response) => {
+  app.patch("/api/revenue-periods/:id", async (req: Request<Params>, res: Response) => {
     const period = await storage.updateRevenuePeriod(req.params.id, req.body);
     res.json(period);
   });
 
-  app.get("/api/models/:modelId/income-statement", async (req: Request, res: Response) => {
+  app.get("/api/models/:modelId/income-statement", async (req: Request<Params>, res: Response) => {
     const lines = await storage.getIncomeStatementLines(req.params.modelId);
     res.json(lines);
   });
 
-  app.post("/api/income-statement", async (req: Request, res: Response) => {
+  app.post("/api/income-statement", async (req: Request<Params>, res: Response) => {
     const line = await storage.upsertIncomeStatementLine(req.body);
     res.json(line);
   });
 
-  app.post("/api/income-statement/bulk", async (req: Request, res: Response) => {
+  app.post("/api/income-statement/bulk", async (req: Request<Params>, res: Response) => {
     const results = [];
     for (const item of req.body) {
       const line = await storage.upsertIncomeStatementLine(item);
@@ -183,22 +189,22 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(results);
   });
 
-  app.delete("/api/models/:modelId/income-statement", async (req: Request, res: Response) => {
+  app.delete("/api/models/:modelId/income-statement", async (req: Request<Params>, res: Response) => {
     await storage.deleteIncomeStatementLines(req.params.modelId);
     res.json({ success: true });
   });
 
-  app.get("/api/models/:modelId/balance-sheet", async (req: Request, res: Response) => {
+  app.get("/api/models/:modelId/balance-sheet", async (req: Request<Params>, res: Response) => {
     const lines = await storage.getBalanceSheetLines(req.params.modelId);
     res.json(lines);
   });
 
-  app.post("/api/balance-sheet", async (req: Request, res: Response) => {
+  app.post("/api/balance-sheet", async (req: Request<Params>, res: Response) => {
     const line = await storage.upsertBalanceSheetLine(req.body);
     res.json(line);
   });
 
-  app.post("/api/balance-sheet/bulk", async (req: Request, res: Response) => {
+  app.post("/api/balance-sheet/bulk", async (req: Request<Params>, res: Response) => {
     const results = [];
     for (const item of req.body) {
       const line = await storage.upsertBalanceSheetLine(item);
@@ -207,7 +213,7 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(results);
   });
 
-  app.patch("/api/models/:modelId/balance-sheet/:year", async (req: Request, res: Response) => {
+  app.patch("/api/models/:modelId/balance-sheet/:year", async (req: Request<Params>, res: Response) => {
     const { modelId, year } = req.params;
     const yearNum = parseInt(year);
     const data = { ...req.body };
@@ -246,17 +252,17 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(line);
   });
 
-  app.get("/api/models/:modelId/cash-flow", async (req: Request, res: Response) => {
+  app.get("/api/models/:modelId/cash-flow", async (req: Request<Params>, res: Response) => {
     const lines = await storage.getCashFlowLines(req.params.modelId);
     res.json(lines);
   });
 
-  app.post("/api/cash-flow", async (req: Request, res: Response) => {
+  app.post("/api/cash-flow", async (req: Request<Params>, res: Response) => {
     const line = await storage.upsertCashFlowLine(req.body);
     res.json(line);
   });
 
-  app.post("/api/cash-flow/bulk", async (req: Request, res: Response) => {
+  app.post("/api/cash-flow/bulk", async (req: Request<Params>, res: Response) => {
     const results = [];
     for (const item of req.body) {
       const line = await storage.upsertCashFlowLine(item);
@@ -265,34 +271,34 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(results);
   });
 
-  app.patch("/api/models/:modelId/cash-flow/:year", async (req: Request, res: Response) => {
+  app.patch("/api/models/:modelId/cash-flow/:year", async (req: Request<Params>, res: Response) => {
     const { modelId, year } = req.params;
     const line = await storage.updateCashFlowLineByYear(modelId, parseInt(year), req.body);
     res.json(line);
   });
 
-  app.patch("/api/models/:modelId/income-statement/:year", async (req: Request, res: Response) => {
+  app.patch("/api/models/:modelId/income-statement/:year", async (req: Request<Params>, res: Response) => {
     const { modelId, year } = req.params;
     const line = await storage.updateIncomeStatementLineByYear(modelId, parseInt(year), req.body);
     res.json(line);
   });
 
-  app.get("/api/models/:modelId/dcf", async (req: Request, res: Response) => {
+  app.get("/api/models/:modelId/dcf", async (req: Request<Params>, res: Response) => {
     const val = await storage.getDcfValuation(req.params.modelId);
     res.json(val || null);
   });
 
-  app.post("/api/dcf", async (req: Request, res: Response) => {
+  app.post("/api/dcf", async (req: Request<Params>, res: Response) => {
     const val = await storage.upsertDcfValuation(req.body);
     res.json(val);
   });
 
-  app.get("/api/models/:modelId/valuation-comparison", async (req: Request, res: Response) => {
+  app.get("/api/models/:modelId/valuation-comparison", async (req: Request<Params>, res: Response) => {
     const val = await storage.getValuationComparison(req.params.modelId);
     res.json(val || null);
   });
 
-  app.post("/api/valuation-comparison", async (req: Request, res: Response) => {
+  app.post("/api/valuation-comparison", async (req: Request<Params>, res: Response) => {
     const val = await storage.upsertValuationComparison(req.body);
     res.json(val);
   });
@@ -302,7 +308,7 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(positions);
   });
 
-  app.post("/api/portfolio", async (req: Request, res: Response) => {
+  app.post("/api/portfolio", async (req: Request<Params>, res: Response) => {
     const parsed = insertPortfolioPositionSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const pos = await storage.createPortfolioPosition(parsed.data);
@@ -316,12 +322,12 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(pos);
   });
 
-  app.patch("/api/portfolio/:id", async (req: Request, res: Response) => {
+  app.patch("/api/portfolio/:id", async (req: Request<Params>, res: Response) => {
     const pos = await storage.updatePortfolioPosition(req.params.id, req.body);
     res.json(pos);
   });
 
-  app.delete("/api/portfolio/:id", async (req: Request, res: Response) => {
+  app.delete("/api/portfolio/:id", async (req: Request<Params>, res: Response) => {
     await storage.deletePortfolioPosition(req.params.id);
     res.json({ success: true });
   });
@@ -331,12 +337,12 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(lots);
   });
 
-  app.get("/api/portfolio/:positionId/lots", async (req: Request, res: Response) => {
+  app.get("/api/portfolio/:positionId/lots", async (req: Request<Params>, res: Response) => {
     const lots = await storage.getPortfolioLots(req.params.positionId as string);
     res.json(lots);
   });
 
-  app.post("/api/portfolio/:positionId/lots", async (req: Request, res: Response) => {
+  app.post("/api/portfolio/:positionId/lots", async (req: Request<Params>, res: Response) => {
     const parsed = insertPortfolioLotSchema.safeParse({
       ...req.body,
       positionId: req.params.positionId,
@@ -347,13 +353,13 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json({ lot, position });
   });
 
-  app.patch("/api/portfolio/lots/:lotId", async (req: Request, res: Response) => {
+  app.patch("/api/portfolio/lots/:lotId", async (req: Request<Params>, res: Response) => {
     const lot = await storage.updatePortfolioLot(req.params.lotId as string, req.body);
     const position = await storage.recomputePositionFromLots(lot.positionId);
     res.json({ lot, position });
   });
 
-  app.delete("/api/portfolio/lots/:lotId", async (req: Request, res: Response) => {
+  app.delete("/api/portfolio/lots/:lotId", async (req: Request<Params>, res: Response) => {
     const allLots = await storage.getAllPortfolioLots();
     const targetLot = allLots.find(l => l.id === req.params.lotId);
     if (!targetLot) return res.status(404).json({ message: "Lot not found" });
@@ -368,7 +374,7 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(indicators);
   });
 
-  app.post("/api/macro-indicators", async (req: Request, res: Response) => {
+  app.post("/api/macro-indicators", async (req: Request<Params>, res: Response) => {
     const ind = await storage.upsertMacroIndicator(req.body);
     res.json(ind);
   });
@@ -378,7 +384,7 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(indices);
   });
 
-  app.post("/api/market-indices", async (req: Request, res: Response) => {
+  app.post("/api/market-indices", async (req: Request<Params>, res: Response) => {
     const idx = await storage.upsertMarketIndex(req.body);
     res.json(idx);
   });
@@ -497,12 +503,12 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
-  app.delete("/api/market-indices/:id", async (req: Request, res: Response) => {
+  app.delete("/api/market-indices/:id", async (req: Request<Params>, res: Response) => {
     await storage.deleteMarketIndex(req.params.id);
     res.json({ success: true });
   });
 
-  app.post("/api/market-indices/add-custom", async (req: Request, res: Response) => {
+  app.post("/api/market-indices/add-custom", async (req: Request<Params>, res: Response) => {
     try {
       const { symbol, name, region } = req.body;
       if (!symbol || typeof symbol !== "string") {
@@ -527,12 +533,12 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
-  app.delete("/api/macro-indicators/:id", async (req: Request, res: Response) => {
+  app.delete("/api/macro-indicators/:id", async (req: Request<Params>, res: Response) => {
     await storage.deleteMacroIndicator(req.params.id);
     res.json({ success: true });
   });
 
-  app.post("/api/macro-indicators/add-custom", async (req: Request, res: Response) => {
+  app.post("/api/macro-indicators/add-custom", async (req: Request<Params>, res: Response) => {
     try {
       const { seriesId, name, category, displayFormat } = req.body;
       if (!seriesId || typeof seriesId !== "string") {
@@ -564,85 +570,85 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(flags);
   });
 
-  app.post("/api/portfolio-red-flags", async (req: Request, res: Response) => {
+  app.post("/api/portfolio-red-flags", async (req: Request<Params>, res: Response) => {
     const flag = await storage.upsertPortfolioRedFlag(req.body);
     res.json(flag);
   });
 
-  app.get("/api/models/:modelId/scenarios", async (req: Request, res: Response) => {
+  app.get("/api/models/:modelId/scenarios", async (req: Request<Params>, res: Response) => {
     const s = await storage.getScenarios(req.params.modelId);
     res.json(s);
   });
 
-  app.post("/api/scenarios", async (req: Request, res: Response) => {
+  app.post("/api/scenarios", async (req: Request<Params>, res: Response) => {
     const parsed = insertScenarioSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const s = await storage.createScenario(parsed.data);
     res.json(s);
   });
 
-  app.delete("/api/scenarios/:id", async (req: Request, res: Response) => {
+  app.delete("/api/scenarios/:id", async (req: Request<Params>, res: Response) => {
     await storage.deleteScenario(req.params.id);
     res.json({ success: true });
   });
 
-  app.get("/api/models/:modelId/assumptions", async (req: Request, res: Response) => {
+  app.get("/api/models/:modelId/assumptions", async (req: Request<Params>, res: Response) => {
     const a = await storage.getAssumptions(req.params.modelId);
     res.json(a);
   });
 
-  app.post("/api/assumptions", async (req: Request, res: Response) => {
+  app.post("/api/assumptions", async (req: Request<Params>, res: Response) => {
     const parsed = insertAssumptionsSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const a = await storage.createAssumptions(parsed.data);
     res.json(a);
   });
 
-  app.patch("/api/assumptions/:id", async (req: Request, res: Response) => {
+  app.patch("/api/assumptions/:id", async (req: Request<Params>, res: Response) => {
     const a = await storage.updateAssumptions(req.params.id, req.body);
     res.json(a);
   });
 
-  app.get("/api/models/:modelId/actuals", async (req: Request, res: Response) => {
+  app.get("/api/models/:modelId/actuals", async (req: Request<Params>, res: Response) => {
     const a = await storage.getActuals(req.params.modelId);
     res.json(a);
   });
 
-  app.post("/api/actuals", async (req: Request, res: Response) => {
+  app.post("/api/actuals", async (req: Request<Params>, res: Response) => {
     const parsed = insertActualsSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const a = await storage.createActual(parsed.data);
     res.json(a);
   });
 
-  app.delete("/api/actuals/:id", async (req: Request, res: Response) => {
+  app.delete("/api/actuals/:id", async (req: Request<Params>, res: Response) => {
     await storage.deleteActual(req.params.id);
     res.json({ success: true });
   });
 
-  app.get("/api/models/:modelId/reports", async (req: Request, res: Response) => {
+  app.get("/api/models/:modelId/reports", async (req: Request<Params>, res: Response) => {
     const r = await storage.getReports(req.params.modelId);
     res.json(r);
   });
 
-  app.post("/api/reports", async (req: Request, res: Response) => {
+  app.post("/api/reports", async (req: Request<Params>, res: Response) => {
     const parsed = insertReportSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const r = await storage.createReport(parsed.data);
     res.json(r);
   });
 
-  app.delete("/api/reports/:id", async (req: Request, res: Response) => {
+  app.delete("/api/reports/:id", async (req: Request<Params>, res: Response) => {
     await storage.deleteReport(req.params.id);
     res.json({ success: true });
   });
 
-  app.patch("/api/revenue-periods/:id", async (req: Request, res: Response) => {
+  app.patch("/api/revenue-periods/:id", async (req: Request<Params>, res: Response) => {
     const updated = await storage.updateRevenuePeriod(req.params.id, req.body);
     res.json(updated);
   });
 
-  app.patch("/api/models/:modelId/dcf-params", async (req: Request, res: Response) => {
+  app.patch("/api/models/:modelId/dcf-params", async (req: Request<Params>, res: Response) => {
     const existing = await storage.getDcfValuation(req.params.modelId);
     if (existing) {
       const updated = { ...existing, ...req.body };
@@ -653,7 +659,7 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
-  app.post("/api/models/:modelId/recalculate", async (req: Request, res: Response) => {
+  app.post("/api/models/:modelId/recalculate", async (req: Request<Params>, res: Response) => {
     try {
       const result = await recalculateModel(req.params.modelId);
       res.json(result);
@@ -662,7 +668,7 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
-  app.post("/api/models/:modelId/forecast-forward", async (req: Request, res: Response) => {
+  app.post("/api/models/:modelId/forecast-forward", async (req: Request<Params>, res: Response) => {
     try {
       const result = await forecastForward(req.params.modelId);
       res.json(result);
@@ -671,7 +677,7 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
-  app.patch("/api/models/:modelId/assumptions", async (req: Request, res: Response) => {
+  app.patch("/api/models/:modelId/assumptions", async (req: Request<Params>, res: Response) => {
     const allAssumptions = await storage.getAssumptions(req.params.modelId);
     const base = allAssumptions.find(a => !a.scenarioId);
     if (base) {
@@ -683,7 +689,7 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
-  app.get("/api/models/:modelId/yahoo-fundamentals", async (req: Request, res: Response) => {
+  app.get("/api/models/:modelId/yahoo-fundamentals", async (req: Request<Params>, res: Response) => {
     try {
       const model = await storage.getModel(req.params.modelId);
       if (!model) return res.status(404).json({ message: "Model not found" });
@@ -698,7 +704,7 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
-  app.post("/api/models/:modelId/sync-yahoo", async (req: Request, res: Response) => {
+  app.post("/api/models/:modelId/sync-yahoo", async (req: Request<Params>, res: Response) => {
     try {
       const model = await storage.getModel(req.params.modelId);
       if (!model) return res.status(404).json({ message: "Model not found" });
@@ -720,7 +726,7 @@ export async function registerRoutes(server: Server, app: Express) {
         if (data.currentPrice > 0) dcfUpdates.currentSharePrice = data.currentPrice;
         if (data.beta > 0) dcfUpdates.beta = data.beta;
         if (Object.keys(dcfUpdates).length > 0) {
-          await storage.upsertDcfValuation({ ...dcf, ...dcfUpdates });
+          await storage.upsertDcfValuation({ ...dcf, ...dcfUpdates } as any);
         }
       }
 
@@ -738,7 +744,7 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
-  app.post("/api/parse-edgar", async (req: Request, res: Response) => {
+  app.post("/api/parse-edgar", async (req: Request<Params>, res: Response) => {
     try {
       const { url, statementType } = req.body;
       if (!url || typeof url !== "string") {
@@ -748,6 +754,216 @@ export async function registerRoutes(server: Server, app: Express) {
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to parse SEC EDGAR filing" });
+    }
+  });
+
+  app.get("/api/sec/search/:ticker", async (req: Request<Params>, res: Response) => {
+    try {
+      const result = await searchCompanyByTicker(req.params.ticker);
+      if (!result) return res.status(404).json({ message: `Ticker "${req.params.ticker}" not found on SEC EDGAR` });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "SEC search failed" });
+    }
+  });
+
+  app.get("/api/sec/filings/:cik", async (req: Request<Params>, res: Response) => {
+    try {
+      const filings = await getCompanyFilings(req.params.cik);
+      res.json(filings);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch filings" });
+    }
+  });
+
+  app.post("/api/sec/parse-all-statements", async (req: Request<Params>, res: Response) => {
+    try {
+      const { filingUrl } = req.body;
+      if (!filingUrl || typeof filingUrl !== "string") {
+        return res.status(400).json({ message: "filingUrl is required" });
+      }
+      const result = await fetchAndParseAllStatements(filingUrl);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to parse SEC filing" });
+    }
+  });
+
+  app.post("/api/models/:modelId/import-sec", async (req: Request<Params>, res: Response) => {
+    try {
+      const modelId = req.params.modelId;
+      const model = await storage.getModel(modelId);
+      if (!model) return res.status(404).json({ message: "Model not found" });
+
+      const { filingUrl, years: selectedYears } = req.body;
+      if (!filingUrl) return res.status(400).json({ message: "filingUrl is required" });
+
+      const allData = await fetchAndParseAllStatements(filingUrl);
+      
+      const importedYears = selectedYears || Array.from(new Set([
+        ...allData.incomeStatement.years,
+        ...allData.balanceSheet.years,
+        ...allData.cashFlow.years,
+      ])).sort();
+
+      let newStartYear = model.startYear;
+      let newEndYear = model.endYear;
+      const minImportYear = Math.min(...importedYears);
+      const maxImportYear = Math.max(...importedYears);
+      if (minImportYear < newStartYear) newStartYear = minImportYear;
+      if (maxImportYear > newEndYear) newEndYear = maxImportYear;
+
+      if (newStartYear !== model.startYear || newEndYear !== model.endYear) {
+        await storage.updateModel(modelId, { startYear: newStartYear, endYear: newEndYear });
+      }
+
+      const existingLineItems = await storage.getRevenueLineItems(modelId);
+      let totalRevLineItem = existingLineItems.find(li => li.name === "Total Revenue");
+      if (!totalRevLineItem) {
+        totalRevLineItem = await storage.createRevenueLineItem({
+          modelId,
+          name: "Total Revenue",
+          sortOrder: 0,
+        });
+      }
+      
+      for (const year of importedYears) {
+        const isData = allData.incomeStatement.data[year];
+        const totalRevenue = isData?.totalRevenue || isData?.revenue || 0;
+        if (totalRevenue > 0) {
+          const perQuarter = totalRevenue / 4;
+          const periodsToUpsert = [];
+          for (let q = 1; q <= 4; q++) {
+            periodsToUpsert.push({
+              lineItemId: totalRevLineItem.id,
+              modelId,
+              year,
+              quarter: q,
+              amount: perQuarter,
+              isActual: true,
+            });
+          }
+          await storage.upsertRevenuePeriods(periodsToUpsert);
+        }
+      }
+
+      for (const year of importedYears) {
+        const isData = allData.incomeStatement.data[year];
+        if (isData) {
+          const totalRevenue = isData.totalRevenue || isData.revenue || 0;
+          const cogs = Math.abs(isData.cogs || 0);
+          const grossProfit = isData.grossProfit || (totalRevenue - cogs);
+          const sgaExpense = Math.abs(isData.sgaExpense || 0);
+          const rdExpense = Math.abs(isData.rdExpense || 0);
+          const depreciation = Math.abs(isData.depreciation || 0);
+          const totalExpenses = cogs + sgaExpense + rdExpense + depreciation;
+          const operatingIncome = isData.operatingIncome || (grossProfit - sgaExpense - rdExpense - depreciation);
+          const ebitda = operatingIncome + depreciation;
+          const otherIncome = isData.otherIncome || 0;
+          const interestExpense = Math.abs(isData.interestExpense || 0);
+          const preTaxIncome = isData.preTaxIncome || (operatingIncome + otherIncome - interestExpense);
+          const taxExpense = Math.abs(isData.taxExpense || 0);
+          const netIncome = isData.netIncome || (preTaxIncome - taxExpense);
+
+          await storage.upsertIncomeStatementLine({
+            modelId,
+            year,
+            isActual: true,
+            revenue: totalRevenue,
+            cogs,
+            grossProfit,
+            salesMarketing: sgaExpense,
+            researchDevelopment: rdExpense,
+            generalAdmin: 0,
+            depreciation,
+            totalExpenses,
+            operatingIncome,
+            ebitda,
+            otherIncome,
+            preTaxIncome,
+            incomeTax: taxExpense,
+            netIncome,
+            grossMargin: totalRevenue > 0 ? grossProfit / totalRevenue : 0,
+            operatingMargin: totalRevenue > 0 ? operatingIncome / totalRevenue : 0,
+            netMargin: totalRevenue > 0 ? netIncome / totalRevenue : 0,
+            effectiveTaxRate: preTaxIncome > 0 ? taxExpense / preTaxIncome : 0,
+            interestExpense,
+          } as any);
+        }
+      }
+
+      for (const year of importedYears) {
+        const bsData = allData.balanceSheet.data[year];
+        if (bsData) {
+          await storage.upsertBalanceSheetLine({
+            modelId,
+            year,
+            isActual: true,
+            cash: bsData.cashAndEquivalents || 0,
+            shortTermInvestments: bsData.shortTermInvestments || 0,
+            accountsReceivable: bsData.accountsReceivable || 0,
+            inventory: bsData.inventory || 0,
+            totalCurrentAssets: bsData.totalCurrentAssets || 0,
+            equipment: bsData.propertyPlantEquipment || 0,
+            depreciationAccum: 0,
+            capex: 0,
+            totalLongTermAssets: (bsData.totalAssets || 0) - (bsData.totalCurrentAssets || 0),
+            totalAssets: bsData.totalAssets || 0,
+            accountsPayable: bsData.accountsPayable || 0,
+            shortTermDebt: bsData.shortTermDebt || 0,
+            totalCurrentLiabilities: bsData.totalCurrentLiabilities || 0,
+            longTermDebt: bsData.longTermDebt || 0,
+            totalLongTermLiabilities: (bsData.totalLiabilities || 0) - (bsData.totalCurrentLiabilities || 0),
+            totalLiabilities: bsData.totalLiabilities || 0,
+            retainedEarnings: bsData.retainedEarnings || 0,
+            commonShares: (bsData.commonStock || 0) + (bsData.additionalPaidInCapital || 0),
+            totalEquity: bsData.totalEquity || 0,
+            totalLiabilitiesAndEquity: bsData.totalLiabilitiesAndEquity || bsData.totalAssets || 0,
+          });
+        }
+      }
+
+      for (const year of importedYears) {
+        const cfData = allData.cashFlow.data[year];
+        if (cfData) {
+          await storage.upsertCashFlowLine({
+            modelId,
+            year,
+            isActual: true,
+            netIncome: cfData.netIncome || 0,
+            depreciationAdd: Math.abs(cfData.depreciationAdd || 0),
+            arChange: cfData.arChange || 0,
+            inventoryChange: cfData.inventoryChange || 0,
+            apChange: cfData.apChange || 0,
+            operatingCashFlow: cfData.operatingCashFlow || 0,
+            capex: Math.abs(cfData.capex || 0),
+            investingCashFlow: cfData.investingCashFlow || 0,
+            shortTermDebtChange: 0,
+            longTermDebtChange: cfData.longTermDebtChange || 0,
+            commonSharesChange: cfData.commonSharesChange || 0,
+            financingCashFlow: cfData.financingCashFlow || 0,
+            netCashChange: cfData.netCashChange || 0,
+            freeCashFlow: (cfData.operatingCashFlow || 0) - Math.abs(cfData.capex || 0),
+          });
+        }
+      }
+
+      await recalculateModel(modelId);
+
+      res.json({
+        message: "SEC data imported successfully",
+        importedYears,
+        yearRangeExpanded: newStartYear !== model.startYear || newEndYear !== model.endYear,
+        newStartYear,
+        newEndYear,
+        statements: {
+          incomeStatement: allData.incomeStatement.matchedFields.length,
+          balanceSheet: allData.balanceSheet.matchedFields.length,
+          cashFlow: allData.cashFlow.matchedFields.length,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "SEC import failed" });
     }
   });
 }

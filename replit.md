@@ -1,58 +1,15 @@
 # Foresight - Wall Street-Grade Financial Modeling & Valuation Platform
 
 ## Overview
-Comprehensive financial modeling and valuation application covering 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. Market indices pull live data from Yahoo Finance; macro indicators pull live data from FRED API.
+Foresight is a comprehensive financial modeling and valuation platform designed to provide Wall Street-grade analysis. It encompasses 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, a portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. The platform's key capabilities include live data integration for market indices (Yahoo Finance) and macro indicators (FRED API), along with advanced SEC EDGAR filing import functionalities for financial statements. The business vision is to empower financial analysts and investors with sophisticated tools for accurate forecasting, valuation, and portfolio management, enabling better investment decisions and deeper market insights.
 
-## Recent Changes
-- 2026-02-17: SEC EDGAR iXBRL filing import - POST /api/parse-edgar endpoint fetches SEC filing HTML, parses inline XBRL (ix:nonFraction tags), extracts US-GAAP taxonomy fields, maps to app schema, returns structured year-keyed data. Supports Income Statement, Balance Sheet, and Cash Flow statement types with ~30 GAAP field mappings each. server/edgar-parser.ts module with cheerio-based parser.
-- 2026-02-17: ImportEdgarModal component (client/src/components/import-edgar-modal.tsx) - URL input, statement type selector, fetch & parse button, preview table with matched fields, year overlap detection, import button. Integrated into Income Statement, Balance Sheet, and Cash Flow pages via "SEC Filing" button.
-- 2026-02-17: Yahoo Finance company fundamentals enrichment - fetchCompanyFundamentals now pulls gross/operating/net margins, debt-to-equity, sector, and industry from quoteSummary API (financialData + assetProfile modules)
-- 2026-02-10: Portfolio lots (tax lots) - portfolio_lots table tracks individual purchase entries per position (shares, price, date, notes). Positions auto-aggregate weighted-average cost and total shares. Expandable rows in portfolio table show per-lot P&L. API: GET/POST /api/portfolio/:positionId/lots, PATCH/DELETE /api/portfolio/lots/:lotId, GET /api/portfolio/lots
-- 2026-02-10: Signal Definitions card on Portfolio Analytics tab - explains Golden Cross, Death Cross, Near Stop Loss, MA50/MA200, Beta, 52-Week Range
-- 2026-02-10: Revenue forecast refactor - 10-year mixed-period support (first 6 years quarterly Q1-Q4, remaining years displayed as annual totals with quarterly split under the hood), unit scaling with decimal input (e.g., 11.5M = $11,500,000), YoY/QoQ % change and % of total metrics below dollar amounts, YoY % input mode toggle for forecast entry, inline sparkline trend charts per revenue stream, add/delete revenue streams in edit mode
-- 2026-02-10: displayUnit field on financial_models (ones/thousands/millions/billions/trillions) - controls how values are entered and displayed in tables
-- 2026-02-10: Edit Company dialog in sidebar - edit name, ticker, description, currency, shares outstanding, year range, and display unit after creation via PATCH /api/models/:id
-- 2026-02-10: formatWithUnit, parseWithUnit, displayForInput helpers for unit scaling across the application
-- 2026-02-10: Editable Balance Sheet & Cash Flow pages - inline editing for actual years, actual/projected year toggle badges, "Paste Data" bulk import modal (TSV/CSV from SEC EDGAR/Excel), server-side BS total recomputation on PATCH
-- 2026-02-10: PATCH API endpoints: /api/models/:id/balance-sheet/:year, /api/models/:id/cash-flow/:year, /api/models/:id/income-statement/:year - update individual year data with auto-computed totals
-- 2026-02-10: PasteDataModal component (client/src/components/paste-data-modal.tsx) - reusable modal for pasting TSV/CSV financial data with field matching and preview
-- 2026-02-10: Recalculation engine preserves actual year data (isActual flag) - partitions years into actual vs projected, only recomputes projected years
-- 2026-02-10: Company ticker field on financial_models - each company can have a ticker symbol; Company Chart auto-loads the selected company's ticker (falls back to AAPL); users can save a new ticker from the chart page; create company dialog includes ticker field
-- 2026-02-10: Company Chart page (/chart) - embedded TradingView interactive chart with ticker search, quick-access buttons, theme-aware widget, pre-loaded MA50/MA200
-- 2026-02-10: Analysis Guide updated - table of contents with jump navigation (desktop sidebar + mobile badges), Company Chart section added to page breakdown, walkthrough expanded to 11 steps with chart step
-- 2026-02-10: Live portfolio price refresh - POST /api/refresh-portfolio-prices fetches live Yahoo Finance quotes for all portfolio positions (price, P/E, beta, MA50/200, 52W range, volume, market cap, EPS, dividend yield), recalculates P&L and golden cross signals
-- 2026-02-10: Editable market data - users can add/remove market indices (any Yahoo Finance symbol) and FRED macro indicators (any series ID) via Add/Remove buttons on Market Data page
-- 2026-02-10: New API endpoints: POST /api/market-indices/add-custom, DELETE /api/market-indices/:id, POST /api/macro-indicators/add-custom, DELETE /api/macro-indicators/:id
-- 2026-02-10: fetchPortfolioQuotes, fetchSingleIndexQuote, fetchSingleFredSeries functions added to server/live-data.ts
-- 2026-02-10: Live market data integration - Yahoo Finance for 12 global indices (real-time prices, YTD/MTD returns, daily change %), FRED API for 15 macro indicators (rates, inflation, GDP, labor, sentiment, volatility) with prior values for change tracking
-- 2026-02-10: POST /api/refresh-market-data endpoint - bulk fetches and updates all indices + macro indicators, returns counts and errors
-- 2026-02-10: Market Data page "Refresh Live Data" button with loading state and toast feedback
-- 2026-02-10: New DB columns: dailyChangePercent on market_indices, priorValue on macro_indicators
-- 2026-02-10: server/live-data.ts - Yahoo Finance (yahoo-finance2) and FRED API integration module
-- 2026-02-10: Data validation warnings across all pages - Model Readiness checklist on Dashboard, inline warnings on DCF/Valuation/Revenue/Income Statement pages when data is missing or at defaults, Required Inputs reference section in Analysis Guide
-- 2026-02-10: Added 10-step analyst walkthrough to Analysis Guide using hypothetical "CloudSync Corp (CSYN)" - covers company creation, revenue modeling, P&L, balance sheet, cash flow review, full DCF/WACC build, valuation comparison, portfolio addition, macro cross-check, iterative refinement
-- 2026-02-10: Added Analysis Guide page (/guide) with page-by-page breakdown, recommended workflow, cascade explanation
-- 2026-02-10: InfoTooltip component (client/src/components/info-tooltip.tsx) - reusable hover tooltip for financial terms
-- 2026-02-10: Added detailed tooltips to all 9 pages - KPI cards, chart titles, projection settings, risk metrics, macro categories
-- 2026-02-10: Default projection settings reverted to match original behavior: decay=0, multipliers=1.2/1.0/0.8
-- 2026-02-10: Advanced projection features - growth decay rate, target margin convergence, bull/base/bear scenario multipliers
-- 2026-02-10: Projection Settings UI panel on Revenue Forecast page (collapsible card with editable parameters)
-- 2026-02-10: Growth decay formula: baseGrowthRate * (1 - decayRate)^yearsFromLastData applied in forecastForward()
-- 2026-02-10: Target margin convergence in recalculate engine - cost % adjusts across years to approach target net margin
-- 2026-02-10: Scenario multipliers wire into DCF bull/base/bear targets and scenario revenue table on Valuation Comparison page
-- 2026-02-10: 5 new columns on financial_models: growthDecayRate, targetNetMargin, scenarioBullMultiplier, scenarioBaseMultiplier, scenarioBearMultiplier
-- 2026-02-10: PATCH /api/models/:id now validates numeric projection fields
-- 2026-02-10: Forecast Forward feature - auto-projects revenue into empty future years based on historical growth rates, cascades through all financial statements
-- 2026-02-10: New API endpoint: POST /api/models/:id/forecast-forward
-- 2026-02-10: Multi-company support - ModelContext provider tracks selected company, sidebar company selector dropdown, create/delete companies, all pages use context instead of hardcoded first model
-- 2026-02-10: New companies start blank (no seeded data) - analyst builds their own analysis
-- 2026-02-09: Added cascading recalculation engine (server/recalculate.ts) - Revenue → IS → BS → CF → DCF → Valuation
-- 2026-02-09: Added editable pages: Revenue (quarterly amounts), Income Statement (cost %), Balance Sheet (working capital %), DCF (WACC params)
-- 2026-02-09: Cash Flow and Valuation Comparison are auto-derived read-only pages with cascade indicators
-- 2026-02-09: New API endpoints: PATCH /api/revenue-periods/:id, PATCH /api/models/:id/assumptions, PATCH /api/models/:id/dcf-params, POST /api/models/:id/recalculate
-- 2026-02-09: Complete rebuild - 12 database tables, full API layer, 9 frontend pages, comprehensive seed data, DCF/WACC/valuation calculation engine
+## User Preferences
+- Dark mode preferred
+- Clean, professional UI with proper spacing
+- Comprehensive chart visualizations
+- Wall Street-grade data density
 
-## Architecture
+## System Architecture
 
 ### Stack
 - **Backend**: Express.js with TypeScript
@@ -61,71 +18,43 @@ Comprehensive financial modeling and valuation application covering 10 core modu
 - **Charts**: Recharts
 - **Routing**: wouter (frontend)
 
-### Database Schema (12 tables)
-- `financial_models` - Core model with name, years, currency, shares outstanding
-- `revenue_line_items` - Revenue streams (Subscription, Services, Marketplace, Usage)
-- `revenue_periods` - Quarterly revenue data per line item
-- `income_statement_lines` - Annual P&L with all cost lines and margins
-- `balance_sheet_lines` - Assets, liabilities, equity with % of revenue
-- `cash_flow_lines` - Operating/investing/financing flows and FCF
-- `dcf_valuations` - WACC inputs, NPV, terminal value, target price
-- `valuation_comparisons` - P/R, P/E PEG, DCF bull/base/bear targets
-- `portfolio_positions` - 15 stock positions with 40+ fields each
-- `macro_indicators` - 16 economic indicators (rates, inflation, growth, labor)
-- `market_indices` - 12 global indices (US, Europe, Asia) with returns
-- `portfolio_red_flags` - Risk checklist items
-- `scenarios` - Bull/bear case scenario variants
-- `assumptions` - Model assumptions (growth, margins, costs)
+### Core Architectural Decisions
+- **Cascading Recalculation Engine**: A central `recalculate.ts` engine ensures that changes in revenue automatically cascade through the Income Statement, Balance Sheet, Cash Flow, DCF, and Valuation modules, maintaining data consistency.
+- **Multi-Company Support**: The platform supports the creation and management of multiple financial models (companies), allowing users to switch contexts seamlessly.
+- **Data Import**: Advanced capabilities for importing SEC EDGAR 10-K filings (Income Statement, Balance Sheet, Cash Flow) directly into financial models, including ticker-based search and iXBRL parsing.
+- **Real-time Data Integration**: Live market data for global indices and macro indicators are fetched and updated, providing up-to-date insights for portfolio and market analysis.
+- **Financial Modeling Features**:
+    - **Revenue Forecast**: Supports 10-year mixed-period forecasting (quarterly and annual), unit scaling, YoY/QoQ analysis, inline sparklines, and advanced projection settings (growth decay, target margin convergence, scenario multipliers).
+    - **Editable Financial Statements**: Income Statement, Balance Sheet, and Cash Flow pages allow inline editing for actual years, with server-side recomputation for totals and balances.
+    - **Valuation**: DCF with WACC calculations, 5x5 sensitivity tables, and multi-method valuation comparisons (P/R, P/E, PEG) with bull/base/bear scenarios.
+- **Portfolio Management**: Tracks individual purchase entries (lots), aggregates weighted-average cost, calculates P&L, and includes technical indicators (MA50, MA200, Golden Cross) and risk analysis (stop-loss, concentration, red flags).
+- **UI/UX**: Features a dark mode default, clean professional design, comprehensive chart visualizations, and detailed info tooltips for financial terms.
+- **Design Decisions**:
+    - Calculation logic primarily runs client-side for responsiveness.
+    - Seed data provides a comprehensive demo experience.
+    - Schema uses real (float) columns for precision in financial data.
 
-### Key Files
-- `shared/schema.ts` - Drizzle schema + Zod validators + TypeScript types
-- `client/src/lib/calculations.ts` - DCF/WACC, valuation multiples, portfolio metrics, sensitivity analysis
-- `server/routes.ts` - All API endpoints
-- `server/storage.ts` - DatabaseStorage class (IStorage interface)
-- `server/recalculate.ts` - Cascading recalculation engine (Revenue → IS → BS → CF → DCF → Valuation)
-- `server/seed.ts` - Comprehensive demo data seeder (5 years financial data, 15 stocks, 16 macro, 12 indices)
-- `client/src/App.tsx` - Main app with sidebar layout, 10 routes, ModelProvider wrapping
-- `client/src/lib/model-context.tsx` - ModelContext provider for multi-company support (selected model ID, localStorage persistence)
-- `client/src/components/app-sidebar.tsx` - Navigation sidebar with company selector dropdown, create/delete company dialogs
+### Feature Specifications
+- **SEC EDGAR Integration**: Ticker-based search for CIK, retrieval of 10-K filings, parsing of all three financial statements (IS, BS, CF) from HTML, and unified import with year range expansion. Supports iXBRL parsing.
+- **Yahoo Finance Fundamentals**: Fetches company fundamentals like margins, debt-to-equity, sector, and industry.
+- **Dynamic Data Display**: `displayUnit` field on financial models controls value entry and display (ones/thousands/millions/billions/trillions).
+- **Forecasting & Projections**: Implements `forecastForward` to auto-project revenue, and advanced projection settings with `growthDecayRate`, `targetNetMargin`, and `scenarioBull/Base/BearMultiplier`.
+- **Company Management**: Allows creation, editing (name, ticker, description, currency, shares, year range, display unit), and deletion of financial models.
+- **Interactive Charting**: Embedded TradingView interactive chart with ticker search and pre-loaded technical indicators.
+- **Market Data Customization**: Users can add/remove custom market indices and FRED macro indicators.
+- **Data Validation**: Model Readiness checklist on Dashboard and inline warnings on pages for missing data.
 
-### Frontend Pages (10 total)
-- `dashboard.tsx` - Financial overview, portfolio KPIs, sector allocation, macro data, top movers
-- `revenue-forecast.tsx` - Revenue streams table, quarterly breakdown, growth rates, charts
-- `income-statement.tsx` - Full P&L table with margins, YoY growth, margin analysis chart
-- `balance-sheet.tsx` - Assets/liabilities/equity with balance validation, stacked bar chart
-- `cash-flow.tsx` - Operating/investing/financing flows, FCF trend chart
-- `dcf-valuation.tsx` - WACC calculation panel, DCF results, 5x5 sensitivity table
-- `valuation-comparison.tsx` - P/R, P/E, DCF methods with bull/base/bear scenarios
-- `company-chart.tsx` - Embedded TradingView interactive chart with ticker search, quick symbols, theme-aware
-- `portfolio.tsx` - 15 positions table, analytics, risk/red flags, macro/indices tabs
-- `market-data.tsx` - Global indices tables, macro indicators by category, YTD performance chart
+## External Dependencies
+- **Yahoo Finance**: Used for live market data (global indices, stock prices, technical indicators, company fundamentals).
+- **FRED API**: Used for live macro economic indicators (rates, inflation, GDP, labor, sentiment, volatility).
+- **SEC EDGAR API**: Used for fetching and parsing 10-K financial filings. Ticker-based CIK lookup, filing list retrieval, unified multi-statement parsing (IS+BS+CF). No API key required.
+- **TradingView**: Integrated for interactive charting widgets.
 
-### API Routes
-- `GET/POST/DELETE /api/models` - Financial models CRUD
-- `GET/POST /api/models/:id/revenue-line-items` - Revenue streams
-- `GET/POST /api/models/:id/revenue-periods` - Quarterly revenue data
-- `GET/POST /api/models/:id/income-statement` - Income statement lines
-- `GET/POST /api/models/:id/balance-sheet` - Balance sheet lines
-- `GET/POST /api/models/:id/cash-flow` - Cash flow lines
-- `GET/POST /api/models/:id/dcf` - DCF valuation data
-- `GET/POST /api/models/:id/valuation-comparison` - Multi-method valuation
-- `GET/POST/DELETE /api/portfolio` - Portfolio positions
-- `GET/POST /api/portfolio-red-flags` - Risk flags
-- `GET/POST /api/macro-indicators` - Macro economic data
-- `GET/POST /api/market-indices` - Global market indices
-
-### Design Decisions
-- Dark mode default with theme toggle
-- Calculation logic runs client-side for responsiveness
-- Seed data provides immediate Wall Street-grade demo experience
-- All data is simulated (no external API dependency)
-- Portfolio tracks 40+ fields per position (price, volume, moving averages, beta, P/E, etc.)
-- Technical indicators: MA50, MA200, golden cross detection
-- Risk analysis: stop-loss tracking, concentration risk, red flags checklist
-- Schema uses real (float) columns for financial data
-
-## User Preferences
-- Dark mode preferred
-- Clean, professional UI with proper spacing
-- Comprehensive chart visualizations
-- Wall Street-grade data density
+### IPO/INVEST Mode Architecture
+- `modelMode` field on financial_models: `'ipo'` (default) or `'invest'`
+- **IPO Mode**: Bottom-up forecasting with custom revenue streams, quarterly detail, manual entry
+- **INVEST Mode**: SEC-aligned structure with "Total Revenue" line item, Import SEC Filing button, unified 10-K import
+- Mode toggle on Revenue Forecast page header persists to model via PATCH /api/models/:id
+- Import flow: ticker search → CIK → filing list → parse all 3 statements → preview → import with year range expansion
+- Import creates quarterly revenue periods (annual÷4), IS/BS/CF actuals, triggers cascade recalculation
+- Key files: server/sec-search.ts, client/src/components/import-sec-modal.tsx, client/src/pages/revenue-forecast.tsx

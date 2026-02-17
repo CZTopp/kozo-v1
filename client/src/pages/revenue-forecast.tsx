@@ -14,8 +14,9 @@ import { useToast } from "@/hooks/use-toast";
 import type { RevenueLineItem, RevenuePeriod } from "@shared/schema";
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Label } from "@/components/ui/label";
-import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil, Sparkles, Settings2, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Save, RefreshCw, ArrowRight, Plus, Trash2, Pencil, Sparkles, Settings2, ChevronDown, ChevronUp, AlertTriangle, Rocket, TrendingUp as InvestIcon, FileText } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
+import { ImportSecModal } from "@/components/import-sec-modal";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
@@ -83,6 +84,7 @@ export default function RevenueForecast() {
   const [newLineItemPeriods, setNewLineItemPeriods] = useState<Record<string, Record<string, number>>>({});
   const [pendingAnnualEdits, setPendingAnnualEdits] = useState<Record<string, number>>({});
   const [showProjectionSettings, setShowProjectionSettings] = useState(false);
+  const [showSecImport, setShowSecImport] = useState(false);
   const [projectionSettings, setProjectionSettings] = useState<{
     growthDecayRate: number;
     targetNetMargin: number | null;
@@ -250,6 +252,32 @@ export default function RevenueForecast() {
       });
     }
   }, [model?.id]);
+
+  const modelMode = (model as any)?.modelMode || "ipo";
+
+  const toggleModeMutation = useMutation({
+    mutationFn: async (newMode: string) => {
+      await apiRequest("PATCH", `/api/models/${model!.id}`, { modelMode: newMode });
+      if (newMode === "invest") {
+        const currentItems = await (await apiRequest("GET", `/api/models/${model!.id}/revenue-line-items`)).json();
+        if (!currentItems || currentItems.length === 0) {
+          await apiRequest("POST", `/api/models/${model!.id}/revenue-line-items-with-periods`, {
+            name: "Total Revenue",
+            sortOrder: 0,
+          });
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "revenue-line-items"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "revenue-periods"] });
+      toast({ title: "Mode updated", description: `Switched to ${modelMode === "ipo" ? "INVEST" : "IPO"} mode.` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
 
   const saveProjectionSettingsMutation = useMutation({
     mutationFn: async (settings: typeof projectionSettings) => {
@@ -619,6 +647,33 @@ export default function RevenueForecast() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center border rounded-md overflow-visible" data-testid="toggle-model-mode">
+            <Button
+              variant={modelMode === "ipo" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => modelMode !== "ipo" && toggleModeMutation.mutate("ipo")}
+              disabled={toggleModeMutation.isPending}
+              className="rounded-r-none toggle-elevate"
+              data-testid="button-mode-ipo"
+            >
+              <Rocket className="h-4 w-4 mr-1" /> IPO
+            </Button>
+            <Button
+              variant={modelMode === "invest" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => modelMode !== "invest" && toggleModeMutation.mutate("invest")}
+              disabled={toggleModeMutation.isPending}
+              className="rounded-l-none toggle-elevate"
+              data-testid="button-mode-invest"
+            >
+              <TrendingUp className="h-4 w-4 mr-1" /> INVEST
+            </Button>
+          </div>
+          {modelMode === "invest" && (
+            <Button variant="outline" size="sm" onClick={() => setShowSecImport(true)} data-testid="button-import-sec">
+              <FileText className="h-4 w-4 mr-1" /> Import SEC Filing
+            </Button>
+          )}
           <Badge variant="outline" data-testid="badge-model-name">{model.name}</Badge>
           {editMode ? (
             <>
@@ -686,7 +741,11 @@ export default function RevenueForecast() {
           <CardContent className="pt-4 pb-3">
             <div className="flex items-center gap-2 text-sm text-yellow-600 dark:text-yellow-500">
               <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-              <span>No revenue data entered yet. Click "Edit Revenue" to add quarterly revenue for each stream, or use "Forecast Forward" after entering at least one quarter of data.</span>
+              <span>
+                {modelMode === "invest"
+                  ? 'No revenue data yet. Click "Import SEC Filing" to pull actual revenue from a 10-K filing, or use "Edit Revenue" to enter manually.'
+                  : 'No revenue data entered yet. Click "Edit Revenue" to add quarterly revenue for each stream, or use "Forecast Forward" after entering at least one quarter of data.'}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -1374,6 +1433,14 @@ export default function RevenueForecast() {
         </TabsContent>
 
       </Tabs>
+
+      <ImportSecModal
+        open={showSecImport}
+        onOpenChange={setShowSecImport}
+        modelId={model.id}
+        modelTicker={model.ticker}
+        modelName={model.name}
+      />
     </div>
   );
 }
