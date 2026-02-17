@@ -423,12 +423,18 @@ export async function registerRoutes(server: Server, app: Express) {
       if (positions.length === 0) {
         return res.json({ updated: 0, errors: [] });
       }
-      const tickers = positions.map(p => p.ticker);
+      const tickerMap: Record<string, string> = {};
+      for (const p of positions) {
+        const yahooTicker = p.isCrypto ? `${p.ticker.toUpperCase()}-USD` : p.ticker;
+        tickerMap[yahooTicker.toUpperCase()] = p.ticker.toUpperCase();
+      }
+      const tickers = Object.keys(tickerMap);
       const { results, errors } = await fetchPortfolioQuotes(tickers);
 
       let updated = 0;
       for (const quote of results) {
-        const position = positions.find(p => p.ticker.toUpperCase() === quote.ticker.toUpperCase());
+        const originalTicker = tickerMap[quote.ticker.toUpperCase()];
+        const position = positions.find(p => p.ticker.toUpperCase() === originalTicker);
         if (position) {
           const ma50 = quote.ma50;
           const ma200 = quote.ma200;
@@ -440,7 +446,7 @@ export async function registerRoutes(server: Server, app: Express) {
           const gainLossDollar = positionValue - costBasis;
           const gainLossPercent = costBasis > 0 ? gainLossDollar / costBasis : 0;
 
-          await storage.updatePortfolioPosition(position.id, {
+          const updateData: Record<string, any> = {
             currentPrice: quote.currentPrice,
             dailyChangePercent: quote.dailyChangePercent,
             dailyChange: quote.dailyChange,
@@ -451,23 +457,35 @@ export async function registerRoutes(server: Server, app: Express) {
             volume: quote.volume,
             avgVolume: quote.avgVolume,
             marketCap: quote.marketCap,
-            peRatio: quote.peRatio,
-            eps: quote.eps,
-            beta: quote.beta,
             ma50,
             ma200,
             week52Low: quote.week52Low,
             week52High: quote.week52High,
-            dividendYield: quote.dividendYield,
-            shortRatio: quote.shortRatio,
-            bookValue: quote.bookValue,
             goldenCross,
             changeFromMa50,
             changeFromMa200,
             positionValue,
             gainLossDollar,
             gainLossPercent,
-          });
+          };
+
+          if (position.isCrypto) {
+            updateData.peRatio = 0;
+            updateData.eps = 0;
+            updateData.dividendYield = 0;
+            updateData.shortRatio = 0;
+            updateData.bookValue = 0;
+            updateData.beta = quote.beta;
+          } else {
+            updateData.peRatio = quote.peRatio;
+            updateData.eps = quote.eps;
+            updateData.dividendYield = quote.dividendYield;
+            updateData.shortRatio = quote.shortRatio;
+            updateData.bookValue = quote.bookValue;
+            updateData.beta = quote.beta;
+          }
+
+          await storage.updatePortfolioPosition(position.id, updateData);
           updated++;
         }
       }

@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency, formatPercent, calcPortfolioMetrics } from "@/lib/calculations";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -43,6 +44,7 @@ const emptyForm = {
   week52High: 0,
   stopLoss: 0,
   positionType: "long",
+  isCrypto: false as boolean,
   catalyst: "",
   comments: "",
 };
@@ -97,6 +99,7 @@ function positionToForm(p: PortfolioPosition): PositionForm {
     week52High: p.week52High || 0,
     stopLoss: p.stopLoss || 0,
     positionType: p.positionType || "long",
+    isCrypto: p.isCrypto || false,
     catalyst: p.catalyst || "",
     comments: p.comments || "",
   };
@@ -323,6 +326,7 @@ export default function Portfolio() {
       week52High: Number(form.week52High) || 0,
       stopLoss: Number(form.stopLoss) || null,
       positionType: form.positionType,
+      isCrypto: form.isCrypto,
       catalyst: form.catalyst.trim() || null,
       comments: form.comments.trim() || null,
       ...derived,
@@ -503,6 +507,9 @@ export default function Portfolio() {
                                   {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                                 </Button>
                                 <span>{p.ticker}</span>
+                                {p.isCrypto && (
+                                  <Badge variant="secondary" className="text-[10px] ml-1" data-testid={`badge-crypto-${p.ticker}`}>Crypto</Badge>
+                                )}
                                 {hasMultipleLots && (
                                   <Badge variant="outline" className="text-xs ml-1">{lots.length} lots</Badge>
                                 )}
@@ -963,6 +970,15 @@ export default function Portfolio() {
                   <SelectItem value="short">Short</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="flex items-center gap-2 pt-6">
+              <Checkbox
+                id="isCrypto"
+                checked={form.isCrypto}
+                onCheckedChange={(checked) => setForm(prev => ({ ...prev, isCrypto: checked === true }))}
+                data-testid="checkbox-crypto"
+              />
+              <Label htmlFor="isCrypto" className="cursor-pointer">Crypto ticker</Label>
             </div>
             <div className="space-y-2">
               <Label htmlFor="beta">Beta</Label>

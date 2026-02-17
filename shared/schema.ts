@@ -215,6 +215,7 @@ export const portfolioPositions = pgTable("portfolio_positions", {
   gainLossPercent: real("gain_loss_percent").default(0),
   gainLossDollar: real("gain_loss_dollar").default(0),
   positionValue: real("position_value").default(0),
+  isCrypto: boolean("is_crypto").default(false),
   catalyst: text("catalyst"),
   sectorDriver: text("sector_driver"),
   comments: text("comments"),
