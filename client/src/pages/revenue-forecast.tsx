@@ -400,16 +400,38 @@ export default function RevenueForecast() {
     setEditedPeriods(prev => ({ ...prev, [periodId]: num }));
   };
 
-  const handleAnnualEdit = (lineItemId: string, year: number, value: string) => {
-    const total = parseWithUnit(value, displayUnit);
-    const perQuarter = total / 4;
+  const splitAnnualToQuarters = (lineItemId: string, year: number, newTotal: number): Record<string, number> => {
     const updates: Record<string, number> = {};
+    const quarterPeriods: { period: RevenuePeriod; originalAmount: number }[] = [];
     for (let q = 1; q <= 4; q++) {
       const p = getPeriod(lineItemId, year, q);
       if (p) {
-        updates[p.id] = perQuarter;
+        quarterPeriods.push({ period: p, originalAmount: p.amount || 0 });
       }
     }
+    if (quarterPeriods.length === 0) return updates;
+
+    const originalTotal = quarterPeriods.reduce((sum, qp) => sum + qp.originalAmount, 0);
+    const allEqual = quarterPeriods.every(qp => Math.abs(qp.originalAmount - quarterPeriods[0].originalAmount) < 0.01);
+    const allZero = originalTotal === 0;
+
+    if (allZero || allEqual) {
+      const perQuarter = newTotal / quarterPeriods.length;
+      for (const qp of quarterPeriods) {
+        updates[qp.period.id] = perQuarter;
+      }
+    } else {
+      for (const qp of quarterPeriods) {
+        const proportion = qp.originalAmount / originalTotal;
+        updates[qp.period.id] = newTotal * proportion;
+      }
+    }
+    return updates;
+  };
+
+  const handleAnnualEdit = (lineItemId: string, year: number, value: string) => {
+    const total = parseWithUnit(value, displayUnit);
+    const updates = splitAnnualToQuarters(lineItemId, year, total);
     setEditedPeriods(prev => ({ ...prev, ...updates }));
   };
 
@@ -419,14 +441,7 @@ export default function RevenueForecast() {
     const priorTotal = getAnnualTotal(lineItemId, year - 1);
     if (priorTotal === 0) return;
     const newTotal = priorTotal * (1 + pct / 100);
-    const perQuarter = newTotal / 4;
-    const updates: Record<string, number> = {};
-    for (let q = 1; q <= 4; q++) {
-      const p = getPeriod(lineItemId, year, q);
-      if (p) {
-        updates[p.id] = perQuarter;
-      }
-    }
+    const updates = splitAnnualToQuarters(lineItemId, year, newTotal);
     setEditedPeriods(prev => ({ ...prev, ...updates }));
   };
 
