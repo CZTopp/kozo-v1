@@ -372,7 +372,7 @@ export default function BalanceSheet() {
               <Table data-testid="table-balance-sheet">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-[180px]">Line Item</TableHead>
+                    <TableHead className="min-w-[180px] sticky left-0 bg-card z-10">Line Item</TableHead>
                     {annualData.map(d => (
                       <TableHead key={d.year} className="text-right min-w-[120px]">
                         <div className="flex flex-col items-end gap-1">
@@ -399,14 +399,14 @@ export default function BalanceSheet() {
                     if (row.isSection) {
                       return (
                         <TableRow key={`section-${row.label}-${idx}`} className="bg-muted/50">
-                          <TableCell colSpan={annualData.length + 1} className="font-bold text-sm">{row.label}</TableCell>
+                          <TableCell colSpan={annualData.length + 1} className="font-bold text-sm sticky left-0 bg-muted/50 z-10">{row.label}</TableCell>
                         </TableRow>
                       );
                     }
                     const canEdit = isFieldEditable(row.key);
                     return (
                       <TableRow key={`${row.key}-${idx}`} className={row.isSubtotal ? "border-t-2" : ""} data-testid={`row-${row.key}`}>
-                        <TableCell className={row.isBold ? "font-bold" : "pl-8"}>{row.label}</TableCell>
+                        <TableCell className={`sticky left-0 bg-card z-10 ${row.isBold ? "font-bold" : "pl-8"}`}>{row.label}</TableCell>
                         {annualData.map(d => {
                           const isActual = d.isActual;
                           const canEditCell = editMode && canEdit && isActual;
@@ -441,7 +441,7 @@ export default function BalanceSheet() {
                     );
                   })}
                   <TableRow className="border-t-2 bg-muted/30">
-                    <TableCell className="font-bold">Total L+E</TableCell>
+                    <TableCell className="font-bold sticky left-0 bg-muted/30 z-10">Total L+E</TableCell>
                     {annualData.map(d => (
                       <TableCell key={d.year} className="text-right font-bold">
                         {formatCurrency(d.totalLiabilitiesAndEquity || 0)}
@@ -449,7 +449,7 @@ export default function BalanceSheet() {
                     ))}
                   </TableRow>
                   <TableRow>
-                    <TableCell className="font-bold">Balance Check (A - L&E)</TableCell>
+                    <TableCell className="font-bold sticky left-0 bg-card z-10">Balance Check (A - L&E)</TableCell>
                     {annualData.map(d => {
                       const diff = (d.totalAssets || 0) - (d.totalLiabilitiesAndEquity || 0);
                       const ok = Math.abs(diff) < 100;

@@ -285,7 +285,7 @@ export default function CashFlow() {
               <Table data-testid="table-cash-flow">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-[180px]">Line Item</TableHead>
+                    <TableHead className="min-w-[180px] sticky left-0 bg-card z-10">Line Item</TableHead>
                     {annualData.map(d => (
                       <TableHead key={d.year} className="text-right min-w-[120px]">
                         <div className="flex flex-col items-end gap-1">
@@ -312,7 +312,7 @@ export default function CashFlow() {
                     if ("isSection" in row && row.isSection) {
                       return (
                         <TableRow key={`section-${row.label}-${idx}`} className="bg-muted/50">
-                          <TableCell colSpan={annualData.length + 1} className="font-bold text-sm">{row.label}</TableCell>
+                          <TableCell colSpan={annualData.length + 1} className="font-bold text-sm sticky left-0 bg-muted/50 z-10">{row.label}</TableCell>
                         </TableRow>
                       );
                     }
@@ -321,7 +321,7 @@ export default function CashFlow() {
 
                     return (
                       <TableRow key={`${row.key}-${idx}`} className={`${row.isSubtotal ? "border-t-2" : ""} ${isHighlight ? "bg-muted/30" : ""}`} data-testid={`row-${row.key}`}>
-                        <TableCell className={row.isBold ? "font-bold" : "pl-8"}>{row.label}</TableCell>
+                        <TableCell className={`sticky left-0 z-10 ${isHighlight ? "bg-muted/30" : "bg-card"} ${row.isBold ? "font-bold" : "pl-8"}`}>{row.label}</TableCell>
                         {annualData.map(d => {
                           const isActual = d.isActual;
                           const canEditCell = editMode && canEdit && isActual;

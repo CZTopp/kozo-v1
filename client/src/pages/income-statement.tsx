@@ -266,11 +266,11 @@ export default function IncomeStatement() {
 
         <TabsContent value="table">
           <Card>
-            <CardContent className="pt-6">
+            <CardContent className="pt-6 overflow-x-auto">
               <Table data-testid="table-income-statement">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Line Item</TableHead>
+                    <TableHead className="sticky left-0 bg-card z-10 min-w-[180px]">Line Item</TableHead>
                     {annualData.map(d => <TableHead key={d.year} className="text-right">{d.year}</TableHead>)}
                     <TableHead className="text-right">% of Rev</TableHead>
                   </TableRow>
@@ -278,7 +278,7 @@ export default function IncomeStatement() {
                 <TableBody>
                   {rows.map(row => (
                     <TableRow key={row.label} className={row.isSubtotal ? "border-t-2" : ""} data-testid={`row-${row.key}`}>
-                      <TableCell className={row.isBold ? "font-bold" : "pl-8"}>{row.label}</TableCell>
+                      <TableCell className={`sticky left-0 bg-card z-10 ${row.isBold ? "font-bold" : "pl-8"}`}>{row.label}</TableCell>
                       {annualData.map(d => (
                         <TableCell key={d.year} className={`text-right ${row.isBold ? "font-bold" : ""}`}>
                           {row.key === "eps" || row.key === "nonGaapEps"
