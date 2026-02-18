@@ -306,7 +306,7 @@ export async function recalculateModel(modelId: string) {
   }
 
   if (newBSRows.length > 0) {
-    await db.insert(balanceSheetLines).values(newBSRows);
+    await db.insert(balanceSheetLines).values(newBSRows as any);
   }
 
   const projectedCFYears = years.filter(yr => !actualCFYears.has(yr));
@@ -388,7 +388,7 @@ export async function recalculateModel(modelId: string) {
   }
 
   if (newCFRows.length > 0) {
-    await db.insert(cashFlowLines).values(newCFRows);
+    await db.insert(cashFlowLines).values(newCFRows as any);
   }
 
   const fcfProjections = cfData.map(c => c.freeCashFlow as number);
@@ -716,7 +716,7 @@ export async function forecastForward(modelId: string) {
       .where(eq(valuationComparisons.modelId, modelId));
   }
 
-  const filledYears = [...new Set(newPeriods.map(p => p.year))].sort();
+  const filledYears = Array.from(new Set(newPeriods.map(p => p.year))).sort();
   return {
     forecastedYears: filledYears,
     periodsCreated: newPeriods.length,

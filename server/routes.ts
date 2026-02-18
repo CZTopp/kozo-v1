@@ -5,6 +5,7 @@ import { recalculateModel, forecastForward } from "./recalculate";
 import { fetchLiveIndices, fetchFredIndicators, fetchPortfolioQuotes, fetchSingleIndexQuote, fetchSingleFredSeries, fetchCompanyFundamentals } from "./live-data";
 import { fetchAndParseEdgar } from "./edgar-parser";
 import { searchCompanyByTicker, getCompanyFilings, fetchAndParseAllStatements } from "./sec-search";
+import { streamCopilotToResponse } from "./copilot";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 import { revenuePeriods } from "@shared/schema";
@@ -1187,6 +1188,55 @@ export async function registerRoutes(server: Server, app: Express) {
       res.json(results);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/copilot", async (req: Request, res: Response) => {
+    try {
+      const { modelId, message, history } = req.body;
+      if (!modelId || !message) {
+        return res.status(400).json({ message: "modelId and message are required" });
+      }
+      if (!process.env.OPENAI_API_KEY) {
+        return res.status(500).json({ message: "OpenAI API key not configured" });
+      }
+
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+      });
+      res.flushHeaders();
+
+      let clientDisconnected = false;
+      res.on("close", () => {
+        clientDisconnected = true;
+      });
+
+      try {
+        await streamCopilotToResponse(
+          modelId,
+          message,
+          history || [],
+          res,
+          () => clientDisconnected
+        );
+      } catch (streamErr: any) {
+        console.error("Copilot stream error:", streamErr);
+        res.write(`data: ${JSON.stringify({ error: streamErr.message || "Stream error" })}\n\n`);
+      }
+      if (!clientDisconnected) {
+        res.write(`data: [DONE]\n\n`);
+      }
+      res.end();
+    } catch (err: any) {
+      console.error("Copilot error:", err.message || err);
+      if (!res.headersSent) {
+        res.status(500).json({ message: err.message || "Copilot error" });
+      } else {
+        res.end();
+      }
     }
   });
 
