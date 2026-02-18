@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, createContext, useContext } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Send, Trash2, Loader2, PanelRightIcon } from "lucide-react";
+import { Sparkles, Send, Trash2, Loader2 } from "lucide-react";
 import { useModel } from "@/lib/model-context";
 import ReactMarkdown from "react-markdown";
 
@@ -43,7 +43,7 @@ export function CopilotTrigger() {
       onClick={toggle}
       data-testid="button-copilot-toggle"
     >
-      <PanelRightIcon className="h-4 w-4" />
+      <Sparkles className="h-4 w-4" />
     </Button>
   );
 }
