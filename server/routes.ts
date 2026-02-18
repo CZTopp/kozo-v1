@@ -737,6 +737,11 @@ export async function registerRoutes(server: Server, app: Express) {
         }
       }
 
+      const valComp = await storage.getValuationComparison(req.params.modelId);
+      if (valComp && data.currentPrice > 0) {
+        await storage.upsertValuationComparison({ ...valComp, currentSharePrice: data.currentPrice } as any);
+      }
+
       res.json({
         message: "Synced successfully",
         data,
