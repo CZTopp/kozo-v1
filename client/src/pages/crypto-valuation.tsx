@@ -339,38 +339,38 @@ export default function CryptoValuation() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between gap-2 items-center text-sm">
                     <span className="text-muted-foreground">Market Cap</span>
-                    <span className="font-medium">{formatCompact(marketCap)}</span>
+                    <span className="font-medium" data-testid="text-overview-mcap">{formatCompact(marketCap)}</span>
                   </div>
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between gap-2 items-center text-sm">
                     <span className="text-muted-foreground">Fully Diluted Valuation</span>
-                    <span className="font-medium">{formatCompact(fdv)}</span>
+                    <span className="font-medium" data-testid="text-overview-fdv">{formatCompact(fdv)}</span>
                   </div>
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between gap-2 items-center text-sm">
                     <span className="text-muted-foreground">FDV / MCap Ratio</span>
-                    <span className="font-medium">{fdvMcapRatio > 0 ? `${fdvMcapRatio.toFixed(2)}x` : "--"}</span>
+                    <span className="font-medium" data-testid="text-overview-fdv-ratio">{fdvMcapRatio > 0 ? `${fdvMcapRatio.toFixed(2)}x` : "--"}</span>
                   </div>
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between gap-2 items-center text-sm">
                     <span className="text-muted-foreground">24h Trading Volume</span>
-                    <span className="font-medium">{formatCompact(volume24h)}</span>
+                    <span className="font-medium" data-testid="text-overview-volume">{formatCompact(volume24h)}</span>
                   </div>
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between gap-2 items-center text-sm">
                     <span className="text-muted-foreground">Volume / MCap</span>
-                    <span className="font-medium">{(volumeMcapRatio * 100).toFixed(2)}%</span>
+                    <span className="font-medium" data-testid="text-overview-vol-mcap">{(volumeMcapRatio * 100).toFixed(2)}%</span>
                   </div>
                   {priceSalesRatio !== null && (
-                    <div className="flex justify-between items-center text-sm">
+                    <div className="flex justify-between gap-2 items-center text-sm">
                       <span className="text-muted-foreground">Price / Revenue</span>
-                      <span className="font-medium">{priceSalesRatio.toFixed(1)}x</span>
+                      <span className="font-medium" data-testid="text-overview-ps-ratio">{priceSalesRatio.toFixed(1)}x</span>
                     </div>
                   )}
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between gap-2 items-center text-sm">
                     <span className="text-muted-foreground">All-Time High</span>
                     <div className="text-right">
-                      <span className="font-medium">{formatCompact(project.ath)}</span>
+                      <span className="font-medium" data-testid="text-overview-ath">{formatCompact(project.ath)}</span>
                       {athFromCurrent !== null && (
-                        <span className={`text-xs ml-1 ${athFromCurrent >= 0 ? "text-green-500" : "text-red-500"}`}>
+                        <span className={`text-xs ml-1 ${athFromCurrent >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-overview-ath-change">
                           ({athFromCurrent.toFixed(1)}%)
                         </span>
                       )}
@@ -389,32 +389,32 @@ export default function CryptoValuation() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between gap-2 items-center text-sm">
                     <span className="text-muted-foreground">Circulating Supply</span>
-                    <span className="font-medium">{formatSupply(circulatingSupply)}</span>
+                    <span className="font-medium" data-testid="text-supply-circulating">{formatSupply(circulatingSupply)}</span>
                   </div>
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between gap-2 items-center text-sm">
                     <span className="text-muted-foreground">Total Supply</span>
-                    <span className="font-medium">{formatSupply(totalSupply)}</span>
+                    <span className="font-medium" data-testid="text-supply-total">{formatSupply(totalSupply)}</span>
                   </div>
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between gap-2 items-center text-sm">
                     <span className="text-muted-foreground">Max Supply</span>
-                    <span className="font-medium">{maxSupply > 0 ? formatSupply(maxSupply) : "Unlimited"}</span>
+                    <span className="font-medium" data-testid="text-supply-max">{maxSupply > 0 ? formatSupply(maxSupply) : "Unlimited"}</span>
                   </div>
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between gap-2 items-center text-sm">
                     <span className="text-muted-foreground">Circulating %</span>
-                    <span className="font-medium">{circulatingPercent.toFixed(1)}%</span>
+                    <span className="font-medium" data-testid="text-supply-pct">{circulatingPercent.toFixed(1)}%</span>
                   </div>
                   {inflationEstimate !== null && (
-                    <div className="flex justify-between items-center text-sm">
+                    <div className="flex justify-between gap-2 items-center text-sm">
                       <span className="text-muted-foreground">Remaining Inflation</span>
-                      <span className={`font-medium ${inflationEstimate > 50 ? "text-yellow-500" : ""}`}>
+                      <span className={`font-medium ${inflationEstimate > 50 ? "text-yellow-500" : ""}`} data-testid="text-supply-inflation">
                         {inflationEstimate.toFixed(1)}%
                       </span>
                     </div>
                   )}
                   <div className="mt-2">
-                    <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                    <div className="flex justify-between gap-2 text-xs text-muted-foreground mb-1">
                       <span>Supply Progress</span>
                       <span>{circulatingPercent.toFixed(0)}%</span>
                     </div>
@@ -453,13 +453,13 @@ export default function CryptoValuation() {
                     <div className="space-y-2 mt-2">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Staking & Yield Opportunities</p>
                       {stakingIncentives.map((inc, idx) => (
-                        <div key={idx} className="flex items-center justify-between text-sm border rounded-md p-2" data-testid={`staking-incentive-${idx}`}>
+                        <div key={idx} className="flex items-center justify-between gap-2 text-sm border rounded-md p-2" data-testid={`staking-incentive-${idx}`}>
                           <div className="flex items-center gap-2">
                             <Zap className="h-3.5 w-3.5 text-muted-foreground" />
                             <span className="font-medium">{inc.role}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-green-500 font-semibold">~{inc.estimatedApy}% APY</span>
+                            <span className="text-green-500 font-semibold" data-testid={`text-apy-${idx}`}>~{inc.estimatedApy}% APY</span>
                             {inc.isSustainable ? (
                               <Badge variant="outline" className="text-[10px] text-green-500 border-green-500/30">Sustainable</Badge>
                             ) : (
