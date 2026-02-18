@@ -981,6 +981,9 @@ export async function registerRoutes(server: Server, app: Express) {
       const results = await searchCoins(q);
       res.json(results);
     } catch (err: any) {
+      if (err.message === "RATE_LIMITED") {
+        return res.status(429).json({ message: "CoinGecko rate limit reached. Please wait a moment and try again." });
+      }
       res.status(500).json({ message: err.message });
     }
   });
@@ -1000,7 +1003,15 @@ export async function registerRoutes(server: Server, app: Express) {
     try {
       const { coingeckoId } = req.body;
       if (!coingeckoId) return res.status(400).json({ message: "coingeckoId is required" });
-      const coinData = await getCoinMarketData(coingeckoId);
+      let coinData;
+      try {
+        coinData = await getCoinMarketData(coingeckoId);
+      } catch (fetchErr: any) {
+        if (fetchErr.message === "RATE_LIMITED") {
+          return res.status(429).json({ message: "CoinGecko rate limit reached. Please wait a few seconds and try again." });
+        }
+        return res.status(502).json({ message: `Could not reach CoinGecko API. Please try again shortly.` });
+      }
       if (!coinData) return res.status(400).json({ message: `Could not find data for "${coingeckoId}"` });
       const projectData = mapCoinGeckoToProject(coinData);
       const project = await storage.createCryptoProject(projectData);
