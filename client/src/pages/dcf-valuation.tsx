@@ -67,9 +67,10 @@ export default function DcfValuationPage() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models"], exact: true });
       queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "dcf"] });
       queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "yahoo-fundamentals"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "valuation-comparison"] });
       toast({
         title: "Live data synced",
         description: `Updated price ($${data.applied?.currentPrice?.toFixed(2) || "N/A"}), beta (${data.applied?.beta?.toFixed(2) || "N/A"}), and shares outstanding.`,
@@ -88,7 +89,7 @@ export default function DcfValuationPage() {
       await apiRequest("POST", `/api/models/${model!.id}/recalculate`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models"], exact: true });
       queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "dcf"] });
       queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "valuation-comparison"] });
       setEditMode(false);

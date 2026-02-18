@@ -133,7 +133,7 @@ export default function CompanyChart() {
       await apiRequest("PATCH", `/api/models/${selectedModel.id}`, { ticker: newTicker });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models"], exact: true });
       toast({ title: "Ticker saved", description: `Ticker updated to ${ticker} for ${selectedModel?.name}` });
     },
   });

@@ -44,7 +44,7 @@ export default function IncomeStatement() {
       await apiRequest("POST", `/api/models/${model!.id}/recalculate`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models"], exact: true });
       queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "income-statement"] });
       queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "balance-sheet"] });
       queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "cash-flow"] });
@@ -106,7 +106,7 @@ export default function IncomeStatement() {
     Promise.all(bulkPromises)
       .then(() => apiRequest("POST", `/api/models/${model!.id}/recalculate`))
       .then(() => {
-        queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/models"], exact: true });
         queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "income-statement"] });
         queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "balance-sheet"] });
         queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "cash-flow"] });

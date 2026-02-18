@@ -121,7 +121,7 @@ export function ImportSecModal({ open, onOpenChange, modelId, modelTicker, model
       setImportResult(result);
       setStep("done");
 
-      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models"], exact: true });
       queryClient.invalidateQueries({ queryKey: ["/api/models", modelId, "revenue-line-items"] });
       queryClient.invalidateQueries({ queryKey: ["/api/models", modelId, "revenue-periods"] });
       queryClient.invalidateQueries({ queryKey: ["/api/models", modelId, "income-statement"] });

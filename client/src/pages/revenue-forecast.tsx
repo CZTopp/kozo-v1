@@ -194,7 +194,7 @@ export default function RevenueForecast() {
       await apiRequest("POST", `/api/models/${model!.id}/recalculate`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models"], exact: true });
       queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "revenue-periods"] });
       queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "revenue-line-items"] });
       queryClient.invalidateQueries({ queryKey: ["/api/models", model!.id, "income-statement"] });

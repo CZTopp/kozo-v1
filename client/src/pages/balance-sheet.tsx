@@ -56,7 +56,7 @@ export default function BalanceSheet() {
 
   const invalidateAll = useCallback(() => {
     if (!model) return;
-    queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/models"], exact: true });
     queryClient.invalidateQueries({ queryKey: ["/api/models", model.id, "income-statement"] });
     queryClient.invalidateQueries({ queryKey: ["/api/models", model.id, "balance-sheet"] });
     queryClient.invalidateQueries({ queryKey: ["/api/models", model.id, "cash-flow"] });
