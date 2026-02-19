@@ -120,6 +120,7 @@ export interface IStorage {
   deleteCryptoProject(id: string, userId: string): Promise<void>;
 
   getTokenSupplySchedules(projectId: string): Promise<TokenSupplySchedule[]>;
+  getAllSupplySchedulesForUser(userId: string): Promise<(TokenSupplySchedule & { projectName?: string })[]>;
   createTokenSupplySchedule(data: InsertTokenSupplySchedule): Promise<TokenSupplySchedule>;
   updateTokenSupplySchedule(id: string, data: Partial<InsertTokenSupplySchedule>): Promise<TokenSupplySchedule>;
   deleteTokenSupplySchedule(id: string): Promise<void>;
@@ -531,6 +532,27 @@ export class DatabaseStorage implements IStorage {
 
   async getTokenSupplySchedules(projectId: string) {
     return db.select().from(tokenSupplySchedules).where(eq(tokenSupplySchedules.projectId, projectId));
+  }
+
+  async getAllSupplySchedulesForUser(userId: string) {
+    const rows = await db
+      .select({
+        id: tokenSupplySchedules.id,
+        projectId: tokenSupplySchedules.projectId,
+        eventType: tokenSupplySchedules.eventType,
+        label: tokenSupplySchedules.label,
+        date: tokenSupplySchedules.date,
+        amount: tokenSupplySchedules.amount,
+        isRecurring: tokenSupplySchedules.isRecurring,
+        recurringIntervalMonths: tokenSupplySchedules.recurringIntervalMonths,
+        notes: tokenSupplySchedules.notes,
+        sortOrder: tokenSupplySchedules.sortOrder,
+        projectName: cryptoProjects.name,
+      })
+      .from(tokenSupplySchedules)
+      .innerJoin(cryptoProjects, eq(tokenSupplySchedules.projectId, cryptoProjects.id))
+      .where(eq(cryptoProjects.userId, userId));
+    return rows;
   }
 
   async createTokenSupplySchedule(data: InsertTokenSupplySchedule) {

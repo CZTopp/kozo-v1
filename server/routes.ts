@@ -1066,6 +1066,48 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(projects);
   });
 
+  app.get("/api/crypto/dashboard-summary", async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const schedules = await storage.getAllSupplySchedulesForUser(userId);
+
+      const now = new Date();
+      const upcoming = schedules
+        .filter(s => s.date && new Date(s.date) > now)
+        .sort((a, b) => new Date(a.date!).getTime() - new Date(b.date!).getTime());
+
+      const upcomingByProject: Record<string, { projectId: string; projectName: string; date: string; amount: number; label: string; eventType: string }> = {};
+      for (const s of upcoming) {
+        if (!upcomingByProject[s.projectId]) {
+          upcomingByProject[s.projectId] = {
+            projectId: s.projectId,
+            projectName: s.projectName || "",
+            date: s.date!,
+            amount: s.amount,
+            label: s.label,
+            eventType: s.eventType,
+          };
+        }
+      }
+
+      res.json({
+        upcomingUnlocks: Object.values(upcomingByProject).slice(0, 5),
+        totalScheduleEvents: schedules.length,
+        allSchedules: schedules.map(s => ({
+          projectId: s.projectId,
+          projectName: s.projectName,
+          eventType: s.eventType,
+          label: s.label,
+          date: s.date,
+          amount: s.amount,
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/crypto/projects/:id", async (req: Request<Params>, res: Response) => {
     const userId = (req as any).user?.claims?.sub as string;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });

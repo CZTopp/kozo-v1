@@ -1,15 +1,23 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import type { CryptoProject } from "@shared/schema";
-import { Link } from "wouter";
+import { useLocation } from "wouter";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
-import { Search, RefreshCw, Trash2, ArrowUpRight, ArrowDownRight, Plus, Loader2, TrendingUp, Activity, Coins, DollarSign, GitBranch } from "lucide-react";
+import {
+  Search, RefreshCw, Trash2, ArrowUpRight, ArrowDownRight, Loader2,
+  TrendingUp, Activity, Coins, DollarSign, GitBranch, MoreHorizontal,
+  Calendar, Clock, BarChart3, ChevronRight, Unlock,
+} from "lucide-react";
 
 function formatCompact(n: number | null | undefined): string {
   if (n == null || isNaN(n)) return "--";
@@ -36,6 +44,19 @@ function formatSupply(n: number | null | undefined): string {
   return n.toLocaleString();
 }
 
+function formatRelativeDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = d.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays <= 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+  if (diffDays <= 7) return `${diffDays}d`;
+  if (diffDays <= 30) return `${Math.ceil(diffDays / 7)}w`;
+  if (diffDays <= 365) return `${Math.ceil(diffDays / 30)}mo`;
+  return `${(diffDays / 365).toFixed(1)}y`;
+}
+
 function ChangeDisplay({ value, label }: { value: number | null | undefined; label: string }) {
   if (value == null) return <span className="text-xs text-muted-foreground">{label}: --</span>;
   const isPositive = value >= 0;
@@ -55,8 +76,31 @@ interface SearchResult {
   market_cap_rank?: number;
 }
 
+interface UpcomingUnlock {
+  projectId: string;
+  projectName: string;
+  date: string;
+  amount: number;
+  label: string;
+  eventType: string;
+}
+
+interface DashboardSummary {
+  upcomingUnlocks: UpcomingUnlock[];
+  totalScheduleEvents: number;
+  allSchedules: {
+    projectId: string;
+    projectName: string;
+    eventType: string;
+    label: string;
+    date: string | null;
+    amount: number;
+  }[];
+}
+
 export default function CryptoDashboard() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -64,6 +108,43 @@ export default function CryptoDashboard() {
   const { data: projects, isLoading: projectsLoading } = useQuery<CryptoProject[]>({
     queryKey: ["/api/crypto/projects"],
   });
+
+  const { data: summary } = useQuery<DashboardSummary>({
+    queryKey: ["/api/crypto/dashboard-summary"],
+    enabled: !!projects && projects.length > 0,
+  });
+
+  const nextUnlockByProject = useMemo(() => {
+    if (!summary?.allSchedules) return {};
+    const now = new Date();
+    const map: Record<string, { date: string; amount: number; label: string; eventType: string }> = {};
+    const sorted = [...summary.allSchedules]
+      .filter(s => s.date && new Date(s.date) > now)
+      .sort((a, b) => new Date(a.date!).getTime() - new Date(b.date!).getTime());
+    for (const s of sorted) {
+      if (!map[s.projectId]) {
+        map[s.projectId] = { date: s.date!, amount: s.amount, label: s.label, eventType: s.eventType };
+      }
+    }
+    return map;
+  }, [summary]);
+
+  const marketOverview = useMemo(() => {
+    if (!projects || projects.length === 0) return null;
+    const totalMcap = projects.reduce((sum, p) => sum + (p.marketCap || 0), 0);
+    const totalVol = projects.reduce((sum, p) => sum + (p.volume24h || 0), 0);
+    const avgChange = projects.reduce((sum, p) => sum + (p.priceChange24h || 0), 0) / projects.length;
+    const gainers = projects.filter(p => (p.priceChange24h || 0) > 0).length;
+    const losers = projects.filter(p => (p.priceChange24h || 0) < 0).length;
+    return { totalMcap, totalVol, avgChange, gainers, losers };
+  }, [projects]);
+
+  const recentlyAdded = useMemo(() => {
+    if (!projects || projects.length === 0) return [];
+    return [...projects]
+      .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
+      .slice(0, 4);
+  }, [projects]);
 
   useEffect(() => {
     if (!searchTerm.trim()) {
@@ -79,7 +160,6 @@ export default function CryptoDashboard() {
           setSearchResults(data.coins || data || []);
         }
       } catch {
-        // ignore
       } finally {
         setIsSearching(false);
       }
@@ -108,6 +188,7 @@ export default function CryptoDashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/crypto/dashboard-summary"] });
       setSearchTerm("");
       setSearchResults([]);
       toast({ title: "Project added" });
@@ -123,12 +204,15 @@ export default function CryptoDashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/crypto/dashboard-summary"] });
       toast({ title: "Project removed" });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
+
+  const hasProjects = projects && projects.length > 0;
 
   return (
     <div className="p-4 space-y-4">
@@ -137,69 +221,136 @@ export default function CryptoDashboard() {
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Crypto Analysis</h1>
           <p className="text-sm text-muted-foreground">{projects?.length || 0} projects tracked</p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => refreshMutation.mutate()}
-          disabled={refreshMutation.isPending || !projects?.length}
-          data-testid="button-refresh-prices"
-        >
-          {refreshMutation.isPending ? (
-            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4 mr-1" />
-          )}
-          {refreshMutation.isPending ? "Refreshing..." : "Refresh Prices"}
-        </Button>
-      </div>
-
-      <Card data-testid="card-search-section">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium flex items-center gap-1">
-            <Plus className="h-4 w-4" />
-            Add Project
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by name or symbol..."
+              placeholder="Add project..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8"
+              className="pl-8 w-52"
               data-testid="input-search-crypto"
             />
+            {(isSearching || searchResults.length > 0) && (
+              <div className="absolute z-50 top-full left-0 right-0 mt-1 border rounded-md bg-popover shadow-lg max-h-60 overflow-y-auto" data-testid="list-search-results">
+                {isSearching && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground p-3">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Searching...
+                  </div>
+                )}
+                {searchResults.map((result) => (
+                  <button
+                    key={result.id}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover-elevate"
+                    onClick={() => addProjectMutation.mutate(result.id)}
+                    disabled={addProjectMutation.isPending}
+                    data-testid={`button-add-project-${result.id}`}
+                  >
+                    {result.thumb && (
+                      <img src={result.thumb} alt="" className="h-5 w-5 rounded-full" />
+                    )}
+                    <span className="font-medium">{result.name}</span>
+                    <Badge variant="secondary" className="text-xs uppercase">{result.symbol}</Badge>
+                    {result.market_cap_rank && (
+                      <span className="text-xs text-muted-foreground ml-auto">#{result.market_cap_rank}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          {isSearching && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Searching...
-            </div>
-          )}
-          {searchResults.length > 0 && (
-            <div className="border rounded-md divide-y max-h-60 overflow-y-auto" data-testid="list-search-results">
-              {searchResults.map((result) => (
-                <button
-                  key={result.id}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover-elevate"
-                  onClick={() => addProjectMutation.mutate(result.id)}
-                  disabled={addProjectMutation.isPending}
-                  data-testid={`button-add-project-${result.id}`}
-                >
-                  {result.thumb && (
-                    <img src={result.thumb} alt="" className="h-5 w-5 rounded-full" />
-                  )}
-                  <span className="font-medium">{result.name}</span>
-                  <Badge variant="secondary" className="text-xs uppercase">{result.symbol}</Badge>
-                  {result.market_cap_rank && (
-                    <span className="text-xs text-muted-foreground ml-auto">#{result.market_cap_rank}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          <Button
+            variant="outline"
+            onClick={() => refreshMutation.mutate()}
+            disabled={refreshMutation.isPending || !hasProjects}
+            data-testid="button-refresh-prices"
+          >
+            {refreshMutation.isPending ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-1" />
+            )}
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      {hasProjects && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" data-testid="summary-cards">
+          <Card data-testid="card-market-overview">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-1">
+              <CardTitle className="text-xs font-medium text-muted-foreground">Portfolio Market Cap</CardTitle>
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="text-lg font-bold" data-testid="text-total-mcap">{formatCompact(marketOverview?.totalMcap)}</div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                <span className="text-green-500">{marketOverview?.gainers || 0} up</span>
+                <span className="text-red-500">{marketOverview?.losers || 0} down</span>
+                <span>Vol: {formatCompact(marketOverview?.totalVol)}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card data-testid="card-upcoming-unlocks">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-1">
+              <CardTitle className="text-xs font-medium text-muted-foreground">Upcoming Unlocks</CardTitle>
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="pt-0">
+              {summary?.upcomingUnlocks && summary.upcomingUnlocks.length > 0 ? (
+                <div className="space-y-1">
+                  {summary.upcomingUnlocks.slice(0, 3).map((u, i) => (
+                    <div key={i} className="flex items-center justify-between gap-1 text-xs">
+                      <span className="font-medium truncate">{u.projectName}</span>
+                      <div className="flex items-center gap-1">
+                        <Badge variant="secondary" className="text-[10px]">{formatRelativeDate(u.date)}</Badge>
+                        <span className="text-muted-foreground">{formatSupply(u.amount)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-1">No upcoming unlocks scheduled</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card data-testid="card-recently-updated">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-1">
+              <CardTitle className="text-xs font-medium text-muted-foreground">Recently Updated</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-1">
+                {recentlyAdded.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between gap-1 text-xs">
+                    <div className="flex items-center gap-1 min-w-0">
+                      {p.image && <img src={p.image} alt="" className="h-4 w-4 rounded-full flex-shrink-0" />}
+                      <span className="font-medium truncate">{p.symbol?.toUpperCase()}</span>
+                    </div>
+                    <ChangeDisplay value={p.priceChange24h} label="24h" />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card data-testid="card-supply-overview">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-1">
+              <CardTitle className="text-xs font-medium text-muted-foreground">Supply Insights</CardTitle>
+              <Coins className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="text-lg font-bold">{summary?.totalScheduleEvents || 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Supply events tracked across {projects?.length || 0} projects
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {projectsLoading && (
         <div className="flex items-center justify-center py-12">
@@ -207,11 +358,11 @@ export default function CryptoDashboard() {
         </div>
       )}
 
-      {!projectsLoading && (!projects || projects.length === 0) && (
+      {!projectsLoading && !hasProjects && (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             <Coins className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>No crypto projects tracked yet. Search and add one above.</p>
+            <p>No crypto projects tracked yet. Use the search bar above to add one.</p>
           </CardContent>
         </Card>
       )}
@@ -221,13 +372,20 @@ export default function CryptoDashboard() {
           const sparkData = Array.isArray(project.sparklineData)
             ? (project.sparklineData as number[]).map((v) => ({ v }))
             : null;
-          const athPercent =
-            project.ath && project.currentPrice
-              ? ((project.currentPrice - project.ath) / project.ath) * 100
-              : null;
+
+          const unlockedPct = project.circulatingSupply && project.totalSupply && project.totalSupply > 0
+            ? Math.min((project.circulatingSupply / project.totalSupply) * 100, 100)
+            : null;
+
+          const nextUnlock = nextUnlockByProject[project.id];
 
           return (
-            <Card key={project.id} data-testid={`card-project-${project.id}`}>
+            <Card
+              key={project.id}
+              className="cursor-pointer hover-elevate"
+              data-testid={`card-project-${project.id}`}
+              onClick={() => navigate(`/crypto/valuation/${project.id}`)}
+            >
               <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0 pb-2">
                 <div className="flex items-center gap-2 min-w-0 flex-wrap">
                   {project.image && (
@@ -245,44 +403,95 @@ export default function CryptoDashboard() {
                     {project.symbol}
                   </Badge>
                 </div>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => deleteMutation.mutate(project.id)}
-                  disabled={deleteMutation.isPending}
-                  data-testid={`button-delete-${project.id}`}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={(e) => e.stopPropagation()}
+                      data-testid={`button-menu-${project.id}`}
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenuItem
+                      onClick={() => navigate(`/crypto/tokenomics/${project.id}`)}
+                      data-testid={`link-tokenomics-${project.id}`}
+                    >
+                      <Coins className="h-4 w-4 mr-2" />
+                      Tokenomics
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => navigate(`/crypto/financials/${project.id}`)}
+                      data-testid={`link-financials-${project.id}`}
+                    >
+                      <Activity className="h-4 w-4 mr-2" />
+                      Financials
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => navigate(`/crypto/valuation/${project.id}`)}
+                      data-testid={`link-valuation-${project.id}`}
+                    >
+                      <TrendingUp className="h-4 w-4 mr-2" />
+                      Valuation
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => navigate(`/crypto/revenue/${project.id}`)}
+                      data-testid={`link-revenue-forecast-${project.id}`}
+                    >
+                      <DollarSign className="h-4 w-4 mr-2" />
+                      Revenue Forecast
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => navigate(`/crypto/token-flows/${project.id}`)}
+                      data-testid={`link-token-flows-${project.id}`}
+                    >
+                      <GitBranch className="h-4 w-4 mr-2" />
+                      Token Flows
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => deleteMutation.mutate(project.id)}
+                      disabled={deleteMutation.isPending}
+                      data-testid={`button-delete-${project.id}`}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Remove
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div>
-                  <div className="text-2xl font-bold" data-testid={`text-price-${project.id}`}>
-                    {formatPrice(project.currentPrice)}
+                <div className="flex items-end justify-between gap-2">
+                  <div>
+                    <div className="text-2xl font-bold" data-testid={`text-price-${project.id}`}>
+                      {formatPrice(project.currentPrice)}
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap mt-1">
+                      <ChangeDisplay value={project.priceChange24h} label="24h" />
+                      <ChangeDisplay value={project.priceChange7d} label="7d" />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 flex-wrap mt-1">
-                    <ChangeDisplay value={project.priceChange24h} label="24h" />
-                    <ChangeDisplay value={project.priceChange7d} label="7d" />
-                  </div>
+                  {sparkData && sparkData.length > 0 && (
+                    <div className="w-24 flex-shrink-0" data-testid={`chart-sparkline-${project.id}`}>
+                      <ResponsiveContainer width="100%" height={36}>
+                        <AreaChart data={sparkData}>
+                          <Area
+                            type="monotone"
+                            dataKey="v"
+                            stroke="hsl(var(--chart-1))"
+                            fill="hsl(var(--chart-1))"
+                            fillOpacity={0.1}
+                            strokeWidth={1.5}
+                            dot={false}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
                 </div>
-
-                {sparkData && sparkData.length > 0 && (
-                  <div data-testid={`chart-sparkline-${project.id}`}>
-                    <ResponsiveContainer width="100%" height={40}>
-                      <AreaChart data={sparkData}>
-                        <Area
-                          type="monotone"
-                          dataKey="v"
-                          stroke="hsl(var(--chart-1))"
-                          fill="hsl(var(--chart-1))"
-                          fillOpacity={0.1}
-                          strokeWidth={1.5}
-                          dot={false}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
 
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <div>
@@ -305,75 +514,50 @@ export default function CryptoDashboard() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div>
-                    <span className="text-muted-foreground">Circulating</span>
-                    <div className="font-medium" data-testid={`text-circ-${project.id}`}>
-                      {formatSupply(project.circulatingSupply)}
+                {unlockedPct != null && (
+                  <div className="space-y-1" data-testid={`unlock-progress-${project.id}`}>
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1 text-muted-foreground">
+                        <Unlock className="h-3 w-3" />
+                        <span>Unlocked</span>
+                      </div>
+                      <span className="font-medium">{unlockedPct.toFixed(1)}%</span>
+                    </div>
+                    <Progress value={unlockedPct} className="h-1.5" />
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                      <span>{formatSupply(project.circulatingSupply)} circulating</span>
+                      <span>{formatSupply(project.totalSupply)} total</span>
                     </div>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Total</span>
-                    <div className="font-medium" data-testid={`text-total-supply-${project.id}`}>
-                      {formatSupply(project.totalSupply)}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Max</span>
-                    <div className="font-medium" data-testid={`text-max-supply-${project.id}`}>
-                      {formatSupply(project.maxSupply)}
-                    </div>
-                  </div>
-                </div>
+                )}
 
-                <div className="flex items-center justify-between text-xs">
-                  <div>
-                    <span className="text-muted-foreground">ATH: </span>
-                    <span className="font-medium" data-testid={`text-ath-${project.id}`}>
-                      {formatPrice(project.ath)}
-                    </span>
+                {nextUnlock && (
+                  <div
+                    className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5 text-xs"
+                    data-testid={`next-unlock-${project.id}`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-muted-foreground">Next emission:</span>
+                      <span className="font-medium">{nextUnlock.label}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Badge variant="secondary" className="text-[10px]">
+                        {formatRelativeDate(nextUnlock.date)}
+                      </Badge>
+                      <span className="font-medium">{formatSupply(nextUnlock.amount)}</span>
+                    </div>
                   </div>
-                  {athPercent != null && (
-                    <span
-                      className={`font-medium ${athPercent >= 0 ? "text-green-500" : "text-red-500"}`}
-                      data-testid={`text-ath-pct-${project.id}`}
-                    >
-                      {athPercent.toFixed(1)}% from ATH
-                    </span>
-                  )}
-                </div>
+                )}
 
-                <div className="flex items-center gap-2 flex-wrap pt-1">
-                  <Link href={`/crypto/tokenomics/${project.id}`}>
-                    <Button variant="outline" size="sm" data-testid={`link-tokenomics-${project.id}`}>
-                      <Coins className="h-3.5 w-3.5 mr-1" />
-                      Tokenomics
-                    </Button>
-                  </Link>
-                  <Link href={`/crypto/financials/${project.id}`}>
-                    <Button variant="outline" size="sm" data-testid={`link-financials-${project.id}`}>
-                      <Activity className="h-3.5 w-3.5 mr-1" />
-                      Financials
-                    </Button>
-                  </Link>
-                  <Link href={`/crypto/valuation/${project.id}`}>
-                    <Button variant="outline" size="sm" data-testid={`link-valuation-${project.id}`}>
-                      <TrendingUp className="h-3.5 w-3.5 mr-1" />
-                      Valuation
-                    </Button>
-                  </Link>
-                  <Link href={`/crypto/revenue/${project.id}`}>
-                    <Button variant="outline" size="sm" data-testid={`link-revenue-forecast-${project.id}`}>
-                      <DollarSign className="h-3.5 w-3.5 mr-1" />
-                      Revenue
-                    </Button>
-                  </Link>
-                  <Link href={`/crypto/token-flows/${project.id}`}>
-                    <Button variant="outline" size="sm" data-testid={`link-token-flows-${project.id}`}>
-                      <GitBranch className="h-3.5 w-3.5 mr-1" />
-                      Token Flows
-                    </Button>
-                  </Link>
+                <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <span>ATH: {formatPrice(project.ath)}</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <span>Explore</span>
+                    <ChevronRight className="h-3 w-3" />
+                  </div>
                 </div>
               </CardContent>
             </Card>
