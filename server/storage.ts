@@ -154,6 +154,8 @@ export interface IStorage {
   createFundraisingRound(data: InsertFundraisingRound): Promise<FundraisingRound>;
   updateFundraisingRound(id: string, data: Partial<InsertFundraisingRound>): Promise<FundraisingRound>;
   deleteFundraisingRound(id: string): Promise<void>;
+  deleteAllFundraisingRounds(projectId: string): Promise<void>;
+  deleteAllTokenSupplySchedules(projectId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -705,6 +707,14 @@ export class DatabaseStorage implements IStorage {
 
   async deleteFundraisingRound(id: string) {
     await db.delete(fundraisingRounds).where(eq(fundraisingRounds.id, id));
+  }
+
+  async deleteAllFundraisingRounds(projectId: string) {
+    await db.delete(fundraisingRounds).where(eq(fundraisingRounds.projectId, projectId));
+  }
+
+  async deleteAllTokenSupplySchedules(projectId: string) {
+    await db.delete(tokenSupplySchedules).where(eq(tokenSupplySchedules.projectId, projectId));
   }
 }
 

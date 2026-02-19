@@ -878,3 +878,253 @@ export function mapAIToAllocations(
     sortOrder: i,
   }));
 }
+
+export interface AIFundraisingRound {
+  roundType: string;
+  amount: number | null;
+  valuation: number | null;
+  date: string | null;
+  leadInvestors: string | null;
+  tokenPrice: number | null;
+  notes: string | null;
+}
+
+export interface AIFundraisingResult {
+  rounds: AIFundraisingRound[];
+  confidence: string;
+  notes: string;
+}
+
+export async function researchFundraisingWithAI(
+  tokenName: string,
+  tokenSymbol: string,
+  dataSources?: string[] | null,
+): Promise<AIFundraisingResult | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.log("OpenAI API key not configured, skipping AI fundraising research");
+    return null;
+  }
+
+  const { default: OpenAI } = await import("openai");
+  const openai = new OpenAI({ apiKey });
+
+  let sourcesContext = "";
+  if (dataSources && dataSources.length > 0) {
+    const fetchResults = await Promise.all(dataSources.map(fetchSourceContent));
+    const fetchedParts: string[] = [];
+    const unfetchedUrls: string[] = [];
+    for (const result of fetchResults) {
+      if (result.content) {
+        fetchedParts.push(`--- Source: ${result.url} ---\n${result.content}\n--- End Source ---`);
+      } else {
+        unfetchedUrls.push(result.url);
+      }
+    }
+    if (fetchedParts.length > 0) {
+      sourcesContext = `\nThe user has provided the following reference sources. Extract fundraising round data from this content as your PRIMARY source of truth:\n\n${fetchedParts.join("\n\n")}\n`;
+    }
+    if (unfetchedUrls.length > 0) {
+      sourcesContext += `\nThe following reference URLs were provided but could not be fetched (JavaScript-rendered pages). If you have knowledge of the content at these URLs from your training data, use that information as your primary source:\n${unfetchedUrls.map((u, i) => `${i + 1}. ${u}`).join("\n")}\n`;
+    }
+  }
+
+  const prompt = `You are a cryptocurrency fundraising analyst. Research and provide the known fundraising history for the cryptocurrency "${tokenName}" (symbol: ${tokenSymbol}).
+${sourcesContext}
+Return a JSON object with this exact structure:
+{
+  "rounds": [
+    {
+      "roundType": "e.g. Seed, Private, Series A, Series B, Strategic, Public Sale, ICO, IEO, IDO, Pre-seed",
+      "amount": 5000000 or null (USD raised in this round),
+      "valuation": 50000000 or null (fully diluted valuation at time of round, in USD),
+      "date": "2021-03" or "2021-Q1" or "2021" or null (as precise as known),
+      "leadInvestors": "Investor A, Investor B" or null (comma-separated lead investors),
+      "tokenPrice": 0.05 or null (token price at this round in USD),
+      "notes": "Brief description of terms or notable details" or null
+    }
+  ],
+  "confidence": "high if well-documented major token, medium if publicly known but less documented, low if uncertain",
+  "notes": "Brief note about data quality and any caveats"
+}
+
+Rules:
+- Order rounds chronologically from earliest to latest
+- Include ALL known funding rounds (seed, private, public, strategic, etc.)
+- For Bitcoin, Ethereum, and other tokens that did not have traditional VC fundraising, return an empty rounds array with a note explaining the token's launch mechanism
+- If reference source content is provided above, extract fundraising data directly from it
+- Otherwise use data from CryptoRank, ICO Drops, Crunchbase, PitchBook, news articles, and official announcements from your training data
+- Amounts should be in USD
+- For references, include specific data sources in notes when known
+- If you don't have reliable data, set confidence to "low" and provide your best estimate
+- Return ONLY valid JSON, no markdown or explanation`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.1,
+      max_tokens: 2000,
+      response_format: { type: "json_object" },
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) return null;
+
+    const parsed = JSON.parse(content) as AIFundraisingResult;
+    if (!parsed.rounds || !Array.isArray(parsed.rounds)) {
+      return null;
+    }
+
+    return parsed;
+  } catch (err) {
+    console.error("OpenAI fundraising research error:", err);
+    return null;
+  }
+}
+
+export function mapAIToFundraisingRounds(
+  data: AIFundraisingResult,
+  projectId: string,
+): Record<string, unknown>[] {
+  return data.rounds.map((r, i) => ({
+    projectId,
+    roundType: r.roundType,
+    amount: r.amount || null,
+    valuation: r.valuation || null,
+    date: r.date || null,
+    leadInvestors: r.leadInvestors || null,
+    tokenPrice: r.tokenPrice || null,
+    notes: r.notes ? `${r.notes} [AI-Researched: ${data.confidence} confidence]` : `AI-Researched (${data.confidence} confidence)`,
+    sortOrder: i,
+  }));
+}
+
+export interface AISupplyEvent {
+  eventType: string;
+  label: string;
+  date: string | null;
+  amount: number;
+  isRecurring: boolean;
+  recurringIntervalMonths: number | null;
+  notes: string | null;
+}
+
+export interface AISupplyScheduleResult {
+  events: AISupplyEvent[];
+  confidence: string;
+  notes: string;
+}
+
+export async function researchSupplyScheduleWithAI(
+  tokenName: string,
+  tokenSymbol: string,
+  totalSupply: number | null,
+  dataSources?: string[] | null,
+): Promise<AISupplyScheduleResult | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.log("OpenAI API key not configured, skipping AI supply schedule research");
+    return null;
+  }
+
+  const { default: OpenAI } = await import("openai");
+  const openai = new OpenAI({ apiKey });
+
+  const supplyContext = totalSupply
+    ? `The token has a total/max supply of ${totalSupply.toLocaleString()} tokens.`
+    : "Total supply is unknown.";
+
+  let sourcesContext = "";
+  if (dataSources && dataSources.length > 0) {
+    const fetchResults = await Promise.all(dataSources.map(fetchSourceContent));
+    const fetchedParts: string[] = [];
+    const unfetchedUrls: string[] = [];
+    for (const result of fetchResults) {
+      if (result.content) {
+        fetchedParts.push(`--- Source: ${result.url} ---\n${result.content}\n--- End Source ---`);
+      } else {
+        unfetchedUrls.push(result.url);
+      }
+    }
+    if (fetchedParts.length > 0) {
+      sourcesContext = `\nThe user has provided the following reference sources. Extract supply/vesting schedule data from this content as your PRIMARY source of truth:\n\n${fetchedParts.join("\n\n")}\n`;
+    }
+    if (unfetchedUrls.length > 0) {
+      sourcesContext += `\nThe following reference URLs were provided but could not be fetched (JavaScript-rendered pages). If you have knowledge of the content at these URLs from your training data, use that information as your primary source:\n${unfetchedUrls.map((u, i) => `${i + 1}. ${u}`).join("\n")}\n`;
+    }
+  }
+
+  const prompt = `You are a cryptocurrency tokenomics analyst. Research and provide the known token supply/vesting/unlock schedule for the cryptocurrency "${tokenName}" (symbol: ${tokenSymbol}).
+
+${supplyContext}
+${sourcesContext}
+Return a JSON object with this exact structure:
+{
+  "events": [
+    {
+      "eventType": "one of: tge, cliff_unlock, linear_vest, milestone_unlock, emission, burn, halving, airdrop, other",
+      "label": "Descriptive label (e.g. 'Team Cliff Unlock', 'Ecosystem Linear Vest Start', 'TGE Public Sale', 'Mining Emission Q1 2024')",
+      "date": "2021-03-15" or "2021-Q1" or "2021" or null (as precise as known),
+      "amount": 50000000 (number of tokens involved in this event),
+      "isRecurring": false (true if this repeats, like monthly unlocks),
+      "recurringIntervalMonths": null or 1 or 3 or 12 (interval for recurring events),
+      "notes": "Brief description of this unlock/vesting event" or null
+    }
+  ],
+  "confidence": "high if well-documented major token, medium if publicly known but less documented, low if uncertain",
+  "notes": "Brief note about data quality and any caveats"
+}
+
+Rules:
+- Order events chronologically from earliest to latest
+- Include major supply events: TGE (token generation event), cliff unlocks, vesting starts, large emission schedules, halvings, burns, airdrops
+- For linear vesting, create one entry per vesting phase (e.g. "Team Linear Vest" with the total amount and recurringIntervalMonths set to the unlock frequency)
+- eventType must be one of: tge, cliff_unlock, linear_vest, milestone_unlock, emission, burn, halving, airdrop, other
+- amounts should be in token units (not USD)
+- For Bitcoin and proof-of-work tokens, include block reward schedule and halvings
+- If reference source content is provided above, extract schedule data directly from it
+- Otherwise use data from whitepapers, official documentation, token unlock trackers (TokenUnlocks, Nansen), and public announcements from your training data
+- If you don't have reliable data, set confidence to "low" and provide your best estimate
+- Return ONLY valid JSON, no markdown or explanation`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.1,
+      max_tokens: 3000,
+      response_format: { type: "json_object" },
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) return null;
+
+    const parsed = JSON.parse(content) as AISupplyScheduleResult;
+    if (!parsed.events || !Array.isArray(parsed.events)) {
+      return null;
+    }
+
+    return parsed;
+  } catch (err) {
+    console.error("OpenAI supply schedule research error:", err);
+    return null;
+  }
+}
+
+export function mapAIToSupplySchedule(
+  data: AISupplyScheduleResult,
+  projectId: string,
+): Record<string, unknown>[] {
+  return data.events.map((e, i) => ({
+    projectId,
+    eventType: e.eventType,
+    label: e.label,
+    date: e.date || null,
+    amount: e.amount || 0,
+    isRecurring: e.isRecurring || false,
+    recurringIntervalMonths: e.recurringIntervalMonths || null,
+    notes: e.notes ? `${e.notes} [AI-Researched: ${data.confidence} confidence]` : `AI-Researched (${data.confidence} confidence)`,
+    sortOrder: i,
+  }));
+}

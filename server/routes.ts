@@ -1876,6 +1876,96 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json({ success: true });
   });
 
+  app.post("/api/crypto/projects/:id/fundraising/seed", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const project = await storage.getCryptoProject(req.params.id as string, userId);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    const existing = await storage.getFundraisingRounds(project.id);
+    if (existing.length > 0) return res.status(400).json({ message: "Fundraising rounds already exist. Clear them first to re-seed." });
+
+    const { researchFundraisingWithAI, mapAIToFundraisingRounds } = await import("./crypto-data");
+    const tokenName = project.name || "";
+    const tokenSymbol = project.symbol || "";
+    const hasDataSources = Array.isArray((project as any).dataSources) && (project as any).dataSources.length > 0;
+
+    try {
+      const aiResult = await researchFundraisingWithAI(
+        tokenName,
+        tokenSymbol,
+        hasDataSources ? (project as any).dataSources : null,
+      );
+      if (!aiResult || aiResult.rounds.length === 0) {
+        return res.json({ source: "none", rounds: [], notes: "No fundraising data found for this token." });
+      }
+      const roundsToCreate = mapAIToFundraisingRounds(aiResult, project.id);
+      const results = [];
+      for (const round of roundsToCreate) {
+        const created = await storage.createFundraisingRound(round as any);
+        results.push(created);
+      }
+      res.json({ source: `ai-researched:${aiResult.confidence}`, rounds: results, notes: aiResult.notes });
+    } catch (err) {
+      console.error("Fundraising seed error:", err);
+      res.status(500).json({ message: "Failed to research fundraising data" });
+    }
+  });
+
+  app.delete("/api/crypto/projects/:id/fundraising/clear", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const project = await storage.getCryptoProject(req.params.id as string, userId);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    await storage.deleteAllFundraisingRounds(project.id);
+    res.json({ success: true });
+  });
+
+  app.post("/api/crypto/projects/:id/supply-schedule/seed", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const project = await storage.getCryptoProject(req.params.id as string, userId);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    const existing = await storage.getTokenSupplySchedules(project.id);
+    if (existing.length > 0) return res.status(400).json({ message: "Supply schedule already exists. Clear it first to re-seed." });
+
+    const { researchSupplyScheduleWithAI, mapAIToSupplySchedule } = await import("./crypto-data");
+    const tokenName = project.name || "";
+    const tokenSymbol = project.symbol || "";
+    const totalSupply = project.totalSupply || project.maxSupply || null;
+    const hasDataSources = Array.isArray((project as any).dataSources) && (project as any).dataSources.length > 0;
+
+    try {
+      const aiResult = await researchSupplyScheduleWithAI(
+        tokenName,
+        tokenSymbol,
+        totalSupply,
+        hasDataSources ? (project as any).dataSources : null,
+      );
+      if (!aiResult || aiResult.events.length === 0) {
+        return res.json({ source: "none", schedules: [], notes: "No supply schedule data found for this token." });
+      }
+      const schedulesToCreate = mapAIToSupplySchedule(aiResult, project.id);
+      const results = [];
+      for (const schedule of schedulesToCreate) {
+        const created = await storage.createTokenSupplySchedule(schedule as any);
+        results.push(created);
+      }
+      res.json({ source: `ai-researched:${aiResult.confidence}`, schedules: results, notes: aiResult.notes });
+    } catch (err) {
+      console.error("Supply schedule seed error:", err);
+      res.status(500).json({ message: "Failed to research supply schedule data" });
+    }
+  });
+
+  app.delete("/api/crypto/projects/:id/supply-schedule/clear", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const project = await storage.getCryptoProject(req.params.id as string, userId);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    await storage.deleteAllTokenSupplySchedules(project.id);
+    res.json({ success: true });
+  });
+
   app.post("/api/copilot", async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user?.claims?.sub as string;

@@ -198,6 +198,54 @@ export default function CryptoTokenomics() {
     onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
 
+  const seedFundraisingMutation = useMutation({
+    mutationFn: async () => { const res = await apiRequest("POST", `/api/crypto/projects/${projectId}/fundraising/seed`); return res.json(); },
+    onSuccess: (data: { source: string; notes?: string }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "fundraising"] });
+      if (data.source === "none") toast({ title: "No fundraising data found", description: data.notes || "This token may not have traditional fundraising rounds." });
+      else toast({ title: "AI-researched fundraising data loaded", description: "Data researched from public sources. Review for accuracy." });
+    },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  const clearAndReseedFundraisingMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/crypto/projects/${projectId}/fundraising/clear`);
+      const res = await apiRequest("POST", `/api/crypto/projects/${projectId}/fundraising/seed`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "fundraising"] });
+      if (data.source === "none") toast({ title: "No fundraising data found", description: data.notes || "This token may not have traditional fundraising rounds." });
+      else toast({ title: "Fundraising data re-seeded", description: "AI-researched data refreshed from public sources." });
+    },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  const seedSupplyScheduleMutation = useMutation({
+    mutationFn: async () => { const res = await apiRequest("POST", `/api/crypto/projects/${projectId}/supply-schedule/seed`); return res.json(); },
+    onSuccess: (data: { source: string; notes?: string }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "supply-schedules"] });
+      if (data.source === "none") toast({ title: "No supply schedule data found", description: data.notes || "Could not find vesting/unlock schedule for this token." });
+      else toast({ title: "AI-researched supply schedule loaded", description: "Vesting and unlock data researched from public sources. Review for accuracy." });
+    },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  const clearAndReseedSupplyMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/crypto/projects/${projectId}/supply-schedule/clear`);
+      const res = await apiRequest("POST", `/api/crypto/projects/${projectId}/supply-schedule/seed`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "supply-schedules"] });
+      if (data.source === "none") toast({ title: "No supply schedule data found", description: data.notes || "Could not find vesting/unlock schedule for this token." });
+      else toast({ title: "Supply schedule re-seeded", description: "AI-researched vesting/unlock data refreshed." });
+    },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
   const updateGovernanceMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => { const res = await apiRequest("PATCH", `/api/crypto/projects/${projectId}`, data); return res.json(); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId] }); setGovernanceEditing(false); toast({ title: "Governance info updated" }); },
@@ -681,7 +729,20 @@ export default function CryptoTokenomics() {
         <TabsContent value="supply" className="mt-4 space-y-4">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <h2 className="text-lg font-semibold" data-testid="text-supply-title">Supply Schedule</h2>
-            <Button onClick={() => { setSupplyForm({ ...emptySupplyForm }); setSupplyFormOpen(true); }} data-testid="button-add-supply"><Plus className="h-4 w-4 mr-1" />Add Entry</Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {(!schedules || schedules.length === 0) ? (
+                <Button variant="outline" onClick={() => seedSupplyScheduleMutation.mutate()} disabled={seedSupplyScheduleMutation.isPending} data-testid="button-seed-supply">
+                  {seedSupplyScheduleMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+                  {seedSupplyScheduleMutation.isPending ? "Researching..." : "Seed Schedule"}
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" onClick={() => clearAndReseedSupplyMutation.mutate()} disabled={clearAndReseedSupplyMutation.isPending} data-testid="button-clear-supply">
+                  {clearAndReseedSupplyMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1" />}
+                  {clearAndReseedSupplyMutation.isPending ? "Re-seeding..." : "Clear & Re-seed"}
+                </Button>
+              )}
+              <Button onClick={() => { setSupplyForm({ ...emptySupplyForm }); setSupplyFormOpen(true); }} data-testid="button-add-supply"><Plus className="h-4 w-4 mr-1" />Add Entry</Button>
+            </div>
           </div>
 
           <Card>
@@ -787,9 +848,22 @@ export default function CryptoTokenomics() {
               <h2 className="text-lg font-semibold" data-testid="text-fundraising-title">Fundraising Rounds</h2>
               {totalRaised > 0 && <p className="text-xs text-muted-foreground">Total Raised: {formatCompact(totalRaised)}</p>}
             </div>
-            <Button onClick={() => { setEditingFundraisingId(null); setFundraisingForm({ ...emptyFundraisingForm }); setFundraisingFormOpen(true); }} data-testid="button-add-fundraising">
-              <Plus className="h-4 w-4 mr-1" />Add Round
-            </Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {(!fundraisingRounds || fundraisingRounds.length === 0) ? (
+                <Button variant="outline" onClick={() => seedFundraisingMutation.mutate()} disabled={seedFundraisingMutation.isPending} data-testid="button-seed-fundraising">
+                  {seedFundraisingMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+                  {seedFundraisingMutation.isPending ? "Researching..." : "Seed Rounds"}
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" onClick={() => clearAndReseedFundraisingMutation.mutate()} disabled={clearAndReseedFundraisingMutation.isPending} data-testid="button-clear-fundraising">
+                  {clearAndReseedFundraisingMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1" />}
+                  {clearAndReseedFundraisingMutation.isPending ? "Re-seeding..." : "Clear & Re-seed"}
+                </Button>
+              )}
+              <Button onClick={() => { setEditingFundraisingId(null); setFundraisingForm({ ...emptyFundraisingForm }); setFundraisingFormOpen(true); }} data-testid="button-add-fundraising">
+                <Plus className="h-4 w-4 mr-1" />Add Round
+              </Button>
+            </div>
           </div>
 
           <Card>
