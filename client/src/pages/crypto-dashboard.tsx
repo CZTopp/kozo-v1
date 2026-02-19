@@ -16,7 +16,7 @@ import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import {
   Search, RefreshCw, Trash2, ArrowUpRight, ArrowDownRight, Loader2,
   TrendingUp, Activity, Coins, DollarSign, GitBranch, MoreHorizontal,
-  Calendar, Clock, BarChart3, ChevronRight, Unlock,
+  Calendar, Clock, BarChart3, ChevronUp, ChevronDown, Unlock,
 } from "lucide-react";
 
 function formatCompact(n: number | null | undefined): string {
@@ -57,13 +57,13 @@ function formatRelativeDate(dateStr: string): string {
   return `${(diffDays / 365).toFixed(1)}y`;
 }
 
-function ChangeDisplay({ value, label }: { value: number | null | undefined; label: string }) {
-  if (value == null) return <span className="text-xs text-muted-foreground">{label}: --</span>;
+function ChangeCell({ value }: { value: number | null | undefined }) {
+  if (value == null) return <span className="text-muted-foreground">--</span>;
   const isPositive = value >= 0;
   return (
-    <span className={`text-xs font-medium inline-flex items-center gap-0.5 ${isPositive ? "text-green-500" : "text-red-500"}`}>
+    <span className={`font-medium inline-flex items-center gap-0.5 ${isPositive ? "text-green-500" : "text-red-500"}`}>
       {isPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-      {label}: {Math.abs(value).toFixed(2)}%
+      {Math.abs(value).toFixed(2)}%
     </span>
   );
 }
@@ -98,6 +98,9 @@ interface DashboardSummary {
   }[];
 }
 
+type SortKey = "name" | "currentPrice" | "priceChange24h" | "priceChange7d" | "marketCap" | "circulatingSupply";
+type SortDir = "asc" | "desc";
+
 export default function CryptoDashboard() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -107,6 +110,8 @@ export default function CryptoDashboard() {
   const [searchDone, setSearchDone] = useState(false);
   const [refreshCooldown, setRefreshCooldown] = useState(0);
   const [addingId, setAddingId] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("marketCap");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const { data: projects, isLoading: projectsLoading } = useQuery<CryptoProject[]>({
     queryKey: ["/api/crypto/projects"],
@@ -148,6 +153,41 @@ export default function CryptoDashboard() {
       .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
       .slice(0, 4);
   }, [projects]);
+
+  const sortedProjects = useMemo(() => {
+    if (!projects) return [];
+    return [...projects].sort((a, b) => {
+      let aVal: number | string = 0;
+      let bVal: number | string = 0;
+      switch (sortKey) {
+        case "name":
+          aVal = (a.name || "").toLowerCase();
+          bVal = (b.name || "").toLowerCase();
+          return sortDir === "asc" ? (aVal as string).localeCompare(bVal as string) : (bVal as string).localeCompare(aVal as string);
+        case "currentPrice":
+          aVal = a.currentPrice || 0;
+          bVal = b.currentPrice || 0;
+          break;
+        case "priceChange24h":
+          aVal = a.priceChange24h || 0;
+          bVal = b.priceChange24h || 0;
+          break;
+        case "priceChange7d":
+          aVal = a.priceChange7d || 0;
+          bVal = b.priceChange7d || 0;
+          break;
+        case "marketCap":
+          aVal = a.marketCap || 0;
+          bVal = b.marketCap || 0;
+          break;
+        case "circulatingSupply":
+          aVal = a.circulatingSupply || 0;
+          bVal = b.circulatingSupply || 0;
+          break;
+      }
+      return sortDir === "asc" ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
+    });
+  }, [projects, sortKey, sortDir]);
 
   useEffect(() => {
     if (!searchTerm.trim()) {
@@ -259,6 +299,20 @@ export default function CryptoDashboard() {
   });
 
   const hasProjects = projects && projects.length > 0;
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir(key === "name" ? "asc" : "desc");
+    }
+  }
+
+  function SortIcon({ columnKey }: { columnKey: SortKey }) {
+    if (sortKey !== columnKey) return <ChevronDown className="h-3 w-3 opacity-30" />;
+    return sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />;
+  }
 
   return (
     <div className="p-4 space-y-4">
@@ -383,7 +437,7 @@ export default function CryptoDashboard() {
                       {p.image && <img src={p.image} alt="Token icon" className="h-4 w-4 rounded-full flex-shrink-0" />}
                       <span className="font-medium truncate">{p.symbol?.toUpperCase()}</span>
                     </div>
-                    <ChangeDisplay value={p.priceChange24h} label="24h" />
+                    <ChangeCell value={p.priceChange24h} />
                   </div>
                 ))}
               </div>
@@ -420,204 +474,193 @@ export default function CryptoDashboard() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {projects?.map((project) => {
-          const sparkData = Array.isArray(project.sparklineData)
-            ? (project.sparklineData as number[]).map((v) => ({ v }))
-            : null;
+      {hasProjects && (
+        <Card>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid="table-watchlist">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left font-medium text-muted-foreground px-4 py-3">
+                    <button className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => handleSort("name")} data-testid="sort-name">
+                      Token <SortIcon columnKey="name" />
+                    </button>
+                  </th>
+                  <th className="text-right font-medium text-muted-foreground px-4 py-3">
+                    <button className="inline-flex items-center gap-1 hover:text-foreground ml-auto" onClick={() => handleSort("currentPrice")} data-testid="sort-price">
+                      Price <SortIcon columnKey="currentPrice" />
+                    </button>
+                  </th>
+                  <th className="text-right font-medium text-muted-foreground px-4 py-3">
+                    <button className="inline-flex items-center gap-1 hover:text-foreground ml-auto" onClick={() => handleSort("priceChange24h")} data-testid="sort-24h">
+                      24h % <SortIcon columnKey="priceChange24h" />
+                    </button>
+                  </th>
+                  <th className="text-right font-medium text-muted-foreground px-4 py-3 hidden sm:table-cell">
+                    <button className="inline-flex items-center gap-1 hover:text-foreground ml-auto" onClick={() => handleSort("priceChange7d")} data-testid="sort-7d">
+                      7d % <SortIcon columnKey="priceChange7d" />
+                    </button>
+                  </th>
+                  <th className="text-right font-medium text-muted-foreground px-4 py-3 hidden md:table-cell">
+                    <button className="inline-flex items-center gap-1 hover:text-foreground ml-auto" onClick={() => handleSort("marketCap")} data-testid="sort-mcap">
+                      Market Cap <SortIcon columnKey="marketCap" />
+                    </button>
+                  </th>
+                  <th className="text-right font-medium text-muted-foreground px-4 py-3 hidden lg:table-cell">
+                    <button className="inline-flex items-center gap-1 hover:text-foreground ml-auto" onClick={() => handleSort("circulatingSupply")} data-testid="sort-supply">
+                      Supply <SortIcon columnKey="circulatingSupply" />
+                    </button>
+                  </th>
+                  <th className="text-right font-medium text-muted-foreground px-4 py-3 hidden xl:table-cell">
+                    7d Chart
+                  </th>
+                  <th className="px-2 py-3 w-10"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedProjects.map((project) => {
+                  const sparkData = Array.isArray(project.sparklineData)
+                    ? (project.sparklineData as number[]).map((v) => ({ v }))
+                    : null;
 
-          const unlockedPct = project.circulatingSupply && project.totalSupply && project.totalSupply > 0
-            ? Math.min((project.circulatingSupply / project.totalSupply) * 100, 100)
-            : null;
+                  const unlockedPct = project.circulatingSupply && project.totalSupply && project.totalSupply > 0
+                    ? Math.min((project.circulatingSupply / project.totalSupply) * 100, 100)
+                    : null;
 
-          const nextUnlock = nextUnlockByProject[project.id];
-
-          return (
-            <Card
-              key={project.id}
-              className="cursor-pointer hover-elevate"
-              data-testid={`card-project-${project.id}`}
-              onClick={() => navigate(`/crypto/valuation/${project.id}`)}
-            >
-              <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0 pb-2">
-                <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                  {project.image && (
-                    <img
-                      src={project.image}
-                      alt={project.name}
-                      className="h-6 w-6 rounded-full flex-shrink-0"
-                      data-testid={`img-project-${project.id}`}
-                    />
-                  )}
-                  <CardTitle className="text-base font-semibold truncate" data-testid={`text-name-${project.id}`}>
-                    {project.name}
-                  </CardTitle>
-                  <Badge variant="secondary" className="uppercase text-xs" data-testid={`badge-symbol-${project.id}`}>
-                    {project.symbol}
-                  </Badge>
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label="Project actions"
-                      onClick={(e) => e.stopPropagation()}
-                      data-testid={`button-menu-${project.id}`}
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenuItem
-                      onClick={() => navigate(`/crypto/tokenomics/${project.id}`)}
-                      data-testid={`link-tokenomics-${project.id}`}
-                    >
-                      <Coins className="h-4 w-4 mr-2" />
-                      Tokenomics
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => navigate(`/crypto/financials/${project.id}`)}
-                      data-testid={`link-financials-${project.id}`}
-                    >
-                      <Activity className="h-4 w-4 mr-2" />
-                      Financials
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
+                  return (
+                    <tr
+                      key={project.id}
+                      className="border-b last:border-b-0 cursor-pointer hover-elevate"
                       onClick={() => navigate(`/crypto/valuation/${project.id}`)}
-                      data-testid={`link-valuation-${project.id}`}
+                      data-testid={`row-project-${project.id}`}
                     >
-                      <TrendingUp className="h-4 w-4 mr-2" />
-                      Valuation
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => navigate(`/crypto/revenue/${project.id}`)}
-                      data-testid={`link-revenue-forecast-${project.id}`}
-                    >
-                      <DollarSign className="h-4 w-4 mr-2" />
-                      Revenue Forecast
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => navigate(`/crypto/token-flows/${project.id}`)}
-                      data-testid={`link-token-flows-${project.id}`}
-                    >
-                      <GitBranch className="h-4 w-4 mr-2" />
-                      Token Flows
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className="text-destructive"
-                      onClick={() => deleteMutation.mutate(project.id)}
-                      disabled={deleteMutation.isPending}
-                      data-testid={`button-delete-${project.id}`}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Remove
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-end justify-between gap-2">
-                  <div>
-                    <div className="text-2xl font-bold" data-testid={`text-price-${project.id}`}>
-                      {formatPrice(project.currentPrice)}
-                    </div>
-                    <div className="flex items-center gap-3 flex-wrap mt-1">
-                      <ChangeDisplay value={project.priceChange24h} label="24h" />
-                      <ChangeDisplay value={project.priceChange7d} label="7d" />
-                    </div>
-                  </div>
-                  {sparkData && sparkData.length > 0 && (
-                    <div className="w-24 flex-shrink-0" data-testid={`chart-sparkline-${project.id}`}>
-                      <ResponsiveContainer width="100%" height={36}>
-                        <AreaChart data={sparkData}>
-                          <Area
-                            type="monotone"
-                            dataKey="v"
-                            stroke="hsl(var(--chart-1))"
-                            fill="hsl(var(--chart-1))"
-                            fillOpacity={0.1}
-                            strokeWidth={1.5}
-                            dot={false}
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div>
-                    <span className="text-muted-foreground">Market Cap</span>
-                    <div className="font-medium" data-testid={`text-mcap-${project.id}`}>
-                      {formatCompact(project.marketCap)}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">FDV</span>
-                    <div className="font-medium" data-testid={`text-fdv-${project.id}`}>
-                      {formatCompact(project.fullyDilutedValuation)}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">24h Vol</span>
-                    <div className="font-medium" data-testid={`text-vol-${project.id}`}>
-                      {formatCompact(project.volume24h)}
-                    </div>
-                  </div>
-                </div>
-
-                {unlockedPct != null && (
-                  <div className="space-y-1" data-testid={`unlock-progress-${project.id}`}>
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1 text-muted-foreground">
-                        <Unlock className="h-3 w-3" />
-                        <span>Unlocked</span>
-                      </div>
-                      <span className="font-medium">{unlockedPct.toFixed(1)}%</span>
-                    </div>
-                    <Progress value={unlockedPct} className="h-1.5" />
-                    <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                      <span>{formatSupply(project.circulatingSupply)} circulating</span>
-                      <span>{formatSupply(project.totalSupply)} total</span>
-                    </div>
-                  </div>
-                )}
-
-                {nextUnlock && (
-                  <div
-                    className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5 text-xs"
-                    data-testid={`next-unlock-${project.id}`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-muted-foreground">Next emission:</span>
-                      <span className="font-medium">{nextUnlock.label}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Badge variant="secondary" className="text-[10px]">
-                        {formatRelativeDate(nextUnlock.date)}
-                      </Badge>
-                      <span className="font-medium">{formatSupply(nextUnlock.amount)}</span>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between pt-1">
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <span>ATH: {formatPrice(project.ath)}</span>
-                  </div>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <span>Explore</span>
-                    <ChevronRight className="h-3 w-3" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          {project.image && (
+                            <img
+                              src={project.image}
+                              alt={project.name}
+                              className="h-7 w-7 rounded-full flex-shrink-0"
+                              data-testid={`img-project-${project.id}`}
+                            />
+                          )}
+                          <div className="min-w-0">
+                            <div className="font-medium truncate" data-testid={`text-name-${project.id}`}>{project.name}</div>
+                            <div className="text-xs text-muted-foreground uppercase" data-testid={`badge-symbol-${project.id}`}>{project.symbol}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="text-right px-4 py-3">
+                        <span className="font-semibold" data-testid={`text-price-${project.id}`}>{formatPrice(project.currentPrice)}</span>
+                      </td>
+                      <td className="text-right px-4 py-3">
+                        <ChangeCell value={project.priceChange24h} />
+                      </td>
+                      <td className="text-right px-4 py-3 hidden sm:table-cell">
+                        <ChangeCell value={project.priceChange7d} />
+                      </td>
+                      <td className="text-right px-4 py-3 hidden md:table-cell" data-testid={`text-mcap-${project.id}`}>
+                        <div className="font-medium">{formatCompact(project.marketCap)}</div>
+                        <div className="text-[10px] text-muted-foreground">Vol: {formatCompact(project.volume24h)}</div>
+                      </td>
+                      <td className="text-right px-4 py-3 hidden lg:table-cell">
+                        <div className="font-medium">{formatSupply(project.circulatingSupply)}</div>
+                        {unlockedPct != null && (
+                          <div className="flex items-center gap-1.5 justify-end mt-0.5">
+                            <Progress value={unlockedPct} className="h-1 w-12" />
+                            <span className="text-[10px] text-muted-foreground">{unlockedPct.toFixed(0)}%</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="text-right px-4 py-3 hidden xl:table-cell" data-testid={`chart-sparkline-${project.id}`}>
+                        {sparkData && sparkData.length > 0 ? (
+                          <div className="w-24 ml-auto">
+                            <ResponsiveContainer width="100%" height={32}>
+                              <AreaChart data={sparkData}>
+                                <Area
+                                  type="monotone"
+                                  dataKey="v"
+                                  stroke={(project.priceChange7d || 0) >= 0 ? "hsl(142, 71%, 45%)" : "hsl(0, 84%, 60%)"}
+                                  fill={(project.priceChange7d || 0) >= 0 ? "hsl(142, 71%, 45%)" : "hsl(0, 84%, 60%)"}
+                                  fillOpacity={0.1}
+                                  strokeWidth={1.5}
+                                  dot={false}
+                                />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">--</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label="Project actions"
+                              data-testid={`button-menu-${project.id}`}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => navigate(`/crypto/tokenomics/${project.id}`)}
+                              data-testid={`link-tokenomics-${project.id}`}
+                            >
+                              <Coins className="h-4 w-4 mr-2" />
+                              Tokenomics
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => navigate(`/crypto/financials/${project.id}`)}
+                              data-testid={`link-financials-${project.id}`}
+                            >
+                              <Activity className="h-4 w-4 mr-2" />
+                              Financials
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => navigate(`/crypto/valuation/${project.id}`)}
+                              data-testid={`link-valuation-${project.id}`}
+                            >
+                              <TrendingUp className="h-4 w-4 mr-2" />
+                              Valuation
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => navigate(`/crypto/revenue/${project.id}`)}
+                              data-testid={`link-revenue-forecast-${project.id}`}
+                            >
+                              <DollarSign className="h-4 w-4 mr-2" />
+                              Revenue Forecast
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => navigate(`/crypto/token-flows/${project.id}`)}
+                              data-testid={`link-token-flows-${project.id}`}
+                            >
+                              <GitBranch className="h-4 w-4 mr-2" />
+                              Token Flows
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => deleteMutation.mutate(project.id)}
+                              disabled={deleteMutation.isPending}
+                              data-testid={`button-delete-${project.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Remove
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
