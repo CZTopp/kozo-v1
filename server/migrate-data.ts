@@ -8,22 +8,16 @@ export async function migrateOrphanedData() {
     try {
       [adminUser] = await db.select().from(users).where(eq(users.isAdmin, true)).limit(1);
     } catch {
-      console.log("[migrate] is_admin column may not exist yet, skipping admin check");
+      console.log("[migrate] is_admin column may not exist yet, skipping");
       return;
     }
 
     if (!adminUser) {
-      const [firstUser] = await db.select().from(users).limit(1);
-      if (firstUser) {
-        await db.update(users).set({ isAdmin: true }).where(eq(users.id, firstUser.id));
-        console.log(`[migrate] Promoted first user ${firstUser.email || firstUser.id} to admin`);
-        await assignOrphanedToUser(firstUser.id);
-      } else {
-        console.log("[migrate] No users found, skipping migration");
-      }
-    } else {
-      await assignOrphanedToUser(adminUser.id);
+      console.log("[migrate] No admin user found, skipping orphaned data assignment");
+      return;
     }
+
+    await assignOrphanedToUser(adminUser.id);
   } catch (err) {
     console.error("[migrate] Error during data migration:", err);
   }
