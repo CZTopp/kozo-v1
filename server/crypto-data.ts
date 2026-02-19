@@ -98,6 +98,59 @@ export function mapCoinGeckoToProject(coin: CoinGeckoMarketData) {
   };
 }
 
+const CHAIN_ID_TO_COINGECKO_PLATFORM: Record<number, string> = {
+  1: "ethereum",
+  137: "polygon-pos",
+  10: "optimistic-ethereum",
+  42161: "arbitrum-one",
+  8453: "base",
+  43114: "avalanche",
+  56: "binance-smart-chain",
+};
+
+interface CoinContractInfo {
+  address: string;
+  chainId: number;
+  chainName: string;
+}
+
+export async function getCoinContractAddress(coingeckoId: string): Promise<CoinContractInfo | null> {
+  try {
+    const res = await fetchWithRetry(`${COINGECKO_BASE}/coins/${encodeURIComponent(coingeckoId)}?localization=false&tickers=false&market_data=false&community_data=false&developer_data=false`);
+    const data = await res.json();
+    const platforms: Record<string, string> = data.platforms || {};
+
+    const priorityOrder = [1, 137, 42161, 8453, 10, 43114, 56];
+    for (const chainId of priorityOrder) {
+      const platform = CHAIN_ID_TO_COINGECKO_PLATFORM[chainId];
+      if (platform && platforms[platform] && platforms[platform].length > 0) {
+        return {
+          address: platforms[platform],
+          chainId,
+          chainName: platform,
+        };
+      }
+    }
+
+    for (const [platform, address] of Object.entries(platforms)) {
+      if (address && address.length > 0) {
+        const chainId = Object.entries(CHAIN_ID_TO_COINGECKO_PLATFORM)
+          .find(([, name]) => name === platform)?.[0];
+        return {
+          address,
+          chainId: chainId ? parseInt(chainId) : 1,
+          chainName: platform,
+        };
+      }
+    }
+
+    return null;
+  } catch (err) {
+    console.error("CoinGecko contract address lookup error:", err);
+    return null;
+  }
+}
+
 interface DefiLlamaProtocol {
   id: string;
   name: string;

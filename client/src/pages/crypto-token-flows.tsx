@@ -83,6 +83,18 @@ export default function CryptoTokenFlows() {
     enabled: !!projectId,
   });
 
+  const { data: contractInfo } = useQuery<{ found: boolean; address?: string; chainId?: number; chainName?: string }>({
+    queryKey: ["/api/crypto/projects", projectId, "contract-address"],
+    enabled: !!projectId,
+  });
+
+  useEffect(() => {
+    if (contractInfo?.found && contractInfo.address && !tokenAddress) {
+      setTokenAddress(contractInfo.address);
+      if (contractInfo.chainId) setChainId(String(contractInfo.chainId));
+    }
+  }, [contractInfo]);
+
   const { data: flows, isLoading: flowsLoading } = useQuery<TokenFlowEntry[]>({
     queryKey: ["/api/crypto/projects", projectId, "token-flows"],
     enabled: !!projectId,
@@ -319,7 +331,12 @@ export default function CryptoTokenFlows() {
             <CardContent className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Token Contract Address</label>
+                  <label className="text-xs text-muted-foreground">
+                    Token Contract Address
+                    {contractInfo?.found && (
+                      <span className="text-xs text-green-500 ml-1">(auto-detected)</span>
+                    )}
+                  </label>
                   <Input
                     placeholder="0x..."
                     value={tokenAddress}

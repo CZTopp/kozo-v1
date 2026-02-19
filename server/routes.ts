@@ -25,7 +25,7 @@ import {
 import {
   searchCoins, getCoinMarketData, getMultipleCoinMarketData, mapCoinGeckoToProject,
   searchDefiLlamaProtocols, getProtocolTVLHistory, getProtocolFees, getProtocolRevenue,
-  INCENTIVE_TEMPLATES,
+  INCENTIVE_TEMPLATES, getCoinContractAddress,
 } from "./crypto-data";
 import { getOnChainTokenData } from "./thirdweb-data";
 
@@ -1266,6 +1266,21 @@ export async function registerRoutes(server: Server, app: Express) {
       if (!q) return res.json([]);
       const results = await searchDefiLlamaProtocols(q);
       res.json(results);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/crypto/projects/:id/contract-address", async (req: Request<Params>, res: Response) => {
+    try {
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const project = await storage.getCryptoProject(req.params.id, userId);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const info = await getCoinContractAddress(project.coingeckoId);
+      if (!info) return res.json({ found: false });
+      res.json({ found: true, ...info });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
