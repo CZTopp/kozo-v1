@@ -12,8 +12,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useToast } from "@/hooks/use-toast";
-import type { CryptoProject, TokenSupplySchedule, TokenIncentive } from "@shared/schema";
-import { ArrowLeft, Plus, Trash2, Shield, AlertTriangle, Download, Loader2, Users, Lock, Coins } from "lucide-react";
+import type { CryptoProject, TokenSupplySchedule, TokenIncentive, TokenAllocation, FundraisingRound } from "@shared/schema";
+import { ArrowLeft, Plus, Trash2, Shield, AlertTriangle, Download, Loader2, Users, Lock, Coins, Edit2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))", "#f97316", "#06b6d4", "#8b5cf6"];
@@ -63,6 +64,29 @@ const emptyIncentiveForm = {
   sustainabilityNotes: "",
 };
 
+const emptyAllocationForm = {
+  category: "",
+  percentage: 0,
+  amount: 0,
+  vestingMonths: 0,
+  cliffMonths: 0,
+  tgePercent: 0,
+  notes: "",
+};
+
+const emptyFundraisingForm = {
+  roundType: "",
+  amount: 0,
+  valuation: 0,
+  date: "",
+  leadInvestors: "",
+  tokenPrice: 0,
+  notes: "",
+};
+
+const ALLOCATION_CATEGORIES = ["Team", "Investors", "Community", "Treasury", "Ecosystem", "Advisors", "Public Sale", "Liquidity", "Staking Rewards"];
+const ROUND_TYPES = ["Pre-Seed", "Seed", "Private", "Strategic", "Public/IDO", "Series A", "Series B"];
+
 export default function CryptoTokenomics() {
   const [, params] = useRoute("/crypto/tokenomics/:id");
   const projectId = params?.id || "";
@@ -74,6 +98,14 @@ export default function CryptoTokenomics() {
   const [incentiveFormOpen, setIncentiveFormOpen] = useState(false);
   const [editingIncentiveId, setEditingIncentiveId] = useState<string | null>(null);
   const [incentiveForm, setIncentiveForm] = useState({ ...emptyIncentiveForm });
+
+  const [allocationFormOpen, setAllocationFormOpen] = useState(false);
+  const [editingAllocationId, setEditingAllocationId] = useState<string | null>(null);
+  const [allocationForm, setAllocationForm] = useState({ ...emptyAllocationForm });
+
+  const [fundraisingFormOpen, setFundraisingFormOpen] = useState(false);
+  const [editingFundraisingId, setEditingFundraisingId] = useState<string | null>(null);
+  const [fundraisingForm, setFundraisingForm] = useState({ ...emptyFundraisingForm });
 
   const { data: project, isLoading: projectLoading } = useQuery<CryptoProject>({
     queryKey: ["/api/crypto/projects", projectId],
@@ -87,6 +119,16 @@ export default function CryptoTokenomics() {
 
   const { data: incentives, isLoading: incentivesLoading } = useQuery<TokenIncentive[]>({
     queryKey: ["/api/crypto/projects", projectId, "incentives"],
+    enabled: !!projectId,
+  });
+
+  const { data: allocations, isLoading: allocationsLoading } = useQuery<TokenAllocation[]>({
+    queryKey: ["/api/crypto/projects", projectId, "allocations"],
+    enabled: !!projectId,
+  });
+
+  const { data: fundraisingRounds, isLoading: fundraisingLoading } = useQuery<FundraisingRound[]>({
+    queryKey: ["/api/crypto/projects", projectId, "fundraising"],
     enabled: !!projectId,
   });
 

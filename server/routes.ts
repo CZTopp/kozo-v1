@@ -1555,13 +1555,72 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json({ success: true });
   });
 
+  app.get("/api/crypto/projects/:id/allocations", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const project = await storage.getCryptoProject(req.params.id as string, userId);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    const allocations = await storage.getTokenAllocations(project.id);
+    res.json(allocations);
+  });
+
+  app.post("/api/crypto/projects/:id/allocations", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const project = await storage.getCryptoProject(req.params.id as string, userId);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    const allocation = await storage.createTokenAllocation({ ...req.body, projectId: project.id });
+    res.json(allocation);
+  });
+
+  app.patch("/api/crypto/allocations/:id", async (req: Request, res: Response) => {
+    const allocation = await storage.updateTokenAllocation(req.params.id as string, req.body);
+    res.json(allocation);
+  });
+
+  app.delete("/api/crypto/allocations/:id", async (req: Request, res: Response) => {
+    await storage.deleteTokenAllocation(req.params.id as string);
+    res.json({ success: true });
+  });
+
+  app.get("/api/crypto/projects/:id/fundraising", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const project = await storage.getCryptoProject(req.params.id as string, userId);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    const rounds = await storage.getFundraisingRounds(project.id);
+    res.json(rounds);
+  });
+
+  app.post("/api/crypto/projects/:id/fundraising", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const project = await storage.getCryptoProject(req.params.id as string, userId);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    const round = await storage.createFundraisingRound({ ...req.body, projectId: project.id });
+    res.json(round);
+  });
+
+  app.patch("/api/crypto/fundraising/:id", async (req: Request, res: Response) => {
+    const round = await storage.updateFundraisingRound(req.params.id as string, req.body);
+    res.json(round);
+  });
+
+  app.delete("/api/crypto/fundraising/:id", async (req: Request, res: Response) => {
+    await storage.deleteFundraisingRound(req.params.id as string);
+    res.json({ success: true });
+  });
+
   app.post("/api/copilot", async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user?.claims?.sub as string;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
-      const { modelId, message, history } = req.body;
-      if (!modelId || !message) {
-        return res.status(400).json({ message: "modelId and message are required" });
+      const { modelId, cryptoProjectId, message, history, context: contextType } = req.body;
+      if (!message) {
+        return res.status(400).json({ message: "message is required" });
+      }
+      if (!modelId && !cryptoProjectId && contextType !== "crypto-dashboard" && contextType !== "general") {
+        return res.status(400).json({ message: "modelId, cryptoProjectId, or context type is required" });
       }
       if (!process.env.OPENAI_API_KEY) {
         return res.status(500).json({ message: "OpenAI API key not configured" });
@@ -1582,7 +1641,7 @@ export async function registerRoutes(server: Server, app: Express) {
 
       try {
         await streamCopilotToResponse(
-          modelId,
+          { modelId, cryptoProjectId, contextType },
           userId,
           message,
           history || [],

@@ -280,15 +280,15 @@ export default function CryptoDashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" data-testid="summary-cards">
           <Card data-testid="card-market-overview">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-1">
-              <CardTitle className="text-xs font-medium text-muted-foreground">Portfolio Market Cap</CardTitle>
+              <CardTitle className="text-xs font-medium text-muted-foreground">Watchlist Overview</CardTitle>
               <BarChart3 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="text-lg font-bold" data-testid="text-total-mcap">{formatCompact(marketOverview?.totalMcap)}</div>
+              <div className="text-lg font-bold" data-testid="text-total-mcap">{projects?.length || 0} Projects</div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                 <span className="text-green-500">{marketOverview?.gainers || 0} up</span>
                 <span className="text-red-500">{marketOverview?.losers || 0} down</span>
-                <span>Vol: {formatCompact(marketOverview?.totalVol)}</span>
+                <span>Avg: {marketOverview?.avgChange != null ? `${marketOverview.avgChange >= 0 ? "+" : ""}${marketOverview.avgChange.toFixed(1)}%` : "--"}</span>
               </div>
             </CardContent>
           </Card>

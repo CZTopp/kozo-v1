@@ -408,6 +408,32 @@ export const tokenFlowEntries = pgTable("token_flow_entries", {
   cumulativeSupply: real("cumulative_supply").default(0),
 });
 
+export const tokenAllocations = pgTable("token_allocations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => cryptoProjects.id, { onDelete: "cascade" }),
+  category: text("category").notNull(),
+  percentage: real("percentage").notNull().default(0),
+  amount: real("amount"),
+  vestingMonths: integer("vesting_months"),
+  cliffMonths: integer("cliff_months"),
+  tgePercent: real("tge_percent"),
+  notes: text("notes"),
+  sortOrder: integer("sort_order").default(0),
+});
+
+export const fundraisingRounds = pgTable("fundraising_rounds", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => cryptoProjects.id, { onDelete: "cascade" }),
+  roundType: text("round_type").notNull(),
+  amount: real("amount"),
+  valuation: real("valuation"),
+  date: text("date"),
+  leadInvestors: text("lead_investors"),
+  tokenPrice: real("token_price"),
+  notes: text("notes"),
+  sortOrder: integer("sort_order").default(0),
+});
+
 export const insertFinancialModelSchema = createInsertSchema(financialModels, {
   sharesOutstanding: z.number().min(0).max(100000000000).optional(),
 }).omit({ id: true, createdAt: true });
@@ -440,6 +466,8 @@ export const insertTokenIncentiveSchema = createInsertSchema(tokenIncentives).om
 export const insertProtocolMetricSchema = createInsertSchema(protocolMetrics).omit({ id: true });
 export const insertProtocolRevenueForecastSchema = createInsertSchema(protocolRevenueForecasts).omit({ id: true });
 export const insertTokenFlowEntrySchema = createInsertSchema(tokenFlowEntries).omit({ id: true });
+export const insertTokenAllocationSchema = createInsertSchema(tokenAllocations).omit({ id: true });
+export const insertFundraisingRoundSchema = createInsertSchema(fundraisingRounds).omit({ id: true });
 
 export type FinancialModel = typeof financialModels.$inferSelect;
 export type InsertFinancialModel = z.infer<typeof insertFinancialModelSchema>;
@@ -487,3 +515,7 @@ export type ProtocolRevenueForecast = typeof protocolRevenueForecasts.$inferSele
 export type InsertProtocolRevenueForecast = z.infer<typeof insertProtocolRevenueForecastSchema>;
 export type TokenFlowEntry = typeof tokenFlowEntries.$inferSelect;
 export type InsertTokenFlowEntry = z.infer<typeof insertTokenFlowEntrySchema>;
+export type TokenAllocation = typeof tokenAllocations.$inferSelect;
+export type InsertTokenAllocation = z.infer<typeof insertTokenAllocationSchema>;
+export type FundraisingRound = typeof fundraisingRounds.$inferSelect;
+export type InsertFundraisingRound = z.infer<typeof insertFundraisingRoundSchema>;

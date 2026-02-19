@@ -7,7 +7,7 @@ import {
   macroIndicators, marketIndices, portfolioRedFlags,
   scenarios, assumptions, actuals, reports,
   cryptoProjects, tokenSupplySchedules, tokenIncentives, protocolMetrics,
-  protocolRevenueForecasts, tokenFlowEntries,
+  protocolRevenueForecasts, tokenFlowEntries, tokenAllocations, fundraisingRounds,
   type FinancialModel, type InsertFinancialModel,
   type RevenueLineItem, type InsertRevenueLineItem,
   type RevenuePeriod, type InsertRevenuePeriod,
@@ -31,6 +31,8 @@ import {
   type ProtocolMetric, type InsertProtocolMetric,
   type ProtocolRevenueForecast, type InsertProtocolRevenueForecast,
   type TokenFlowEntry, type InsertTokenFlowEntry,
+  type TokenAllocation, type InsertTokenAllocation,
+  type FundraisingRound, type InsertFundraisingRound,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -141,6 +143,16 @@ export interface IStorage {
   getTokenFlowEntries(projectId: string): Promise<TokenFlowEntry[]>;
   upsertTokenFlowEntries(data: InsertTokenFlowEntry[]): Promise<TokenFlowEntry[]>;
   deleteTokenFlowEntries(projectId: string): Promise<void>;
+
+  getTokenAllocations(projectId: string): Promise<TokenAllocation[]>;
+  createTokenAllocation(data: InsertTokenAllocation): Promise<TokenAllocation>;
+  updateTokenAllocation(id: string, data: Partial<InsertTokenAllocation>): Promise<TokenAllocation>;
+  deleteTokenAllocation(id: string): Promise<void>;
+
+  getFundraisingRounds(projectId: string): Promise<FundraisingRound[]>;
+  createFundraisingRound(data: InsertFundraisingRound): Promise<FundraisingRound>;
+  updateFundraisingRound(id: string, data: Partial<InsertFundraisingRound>): Promise<FundraisingRound>;
+  deleteFundraisingRound(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -652,6 +664,42 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTokenFlowEntries(projectId: string) {
     await db.delete(tokenFlowEntries).where(eq(tokenFlowEntries.projectId, projectId));
+  }
+
+  async getTokenAllocations(projectId: string) {
+    return db.select().from(tokenAllocations).where(eq(tokenAllocations.projectId, projectId));
+  }
+
+  async createTokenAllocation(data: InsertTokenAllocation) {
+    const [row] = await db.insert(tokenAllocations).values(data).returning();
+    return row;
+  }
+
+  async updateTokenAllocation(id: string, data: Partial<InsertTokenAllocation>) {
+    const [row] = await db.update(tokenAllocations).set(data).where(eq(tokenAllocations.id, id)).returning();
+    return row;
+  }
+
+  async deleteTokenAllocation(id: string) {
+    await db.delete(tokenAllocations).where(eq(tokenAllocations.id, id));
+  }
+
+  async getFundraisingRounds(projectId: string) {
+    return db.select().from(fundraisingRounds).where(eq(fundraisingRounds.projectId, projectId));
+  }
+
+  async createFundraisingRound(data: InsertFundraisingRound) {
+    const [row] = await db.insert(fundraisingRounds).values(data).returning();
+    return row;
+  }
+
+  async updateFundraisingRound(id: string, data: Partial<InsertFundraisingRound>) {
+    const [row] = await db.update(fundraisingRounds).set(data).where(eq(fundraisingRounds.id, id)).returning();
+    return row;
+  }
+
+  async deleteFundraisingRound(id: string) {
+    await db.delete(fundraisingRounds).where(eq(fundraisingRounds.id, id));
   }
 }
 
