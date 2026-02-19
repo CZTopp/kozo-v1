@@ -104,6 +104,7 @@ export default function CryptoDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchDone, setSearchDone] = useState(false);
 
   const { data: projects, isLoading: projectsLoading } = useQuery<CryptoProject[]>({
     queryKey: ["/api/crypto/projects"],
@@ -149,10 +150,12 @@ export default function CryptoDashboard() {
   useEffect(() => {
     if (!searchTerm.trim()) {
       setSearchResults([]);
+      setSearchDone(false);
       return;
     }
     const timer = setTimeout(async () => {
       setIsSearching(true);
+      setSearchDone(false);
       try {
         const res = await fetch(`/api/crypto/search?q=${encodeURIComponent(searchTerm.trim())}`);
         if (res.ok) {
@@ -162,6 +165,7 @@ export default function CryptoDashboard() {
       } catch {
       } finally {
         setIsSearching(false);
+        setSearchDone(true);
       }
     }, 500);
     return () => clearTimeout(timer);
@@ -225,18 +229,23 @@ export default function CryptoDashboard() {
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Add project..."
+              placeholder="Name, symbol, or contract..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8 w-52"
+              className="pl-8 w-60"
               data-testid="input-search-crypto"
             />
-            {(isSearching || searchResults.length > 0) && (
+            {(isSearching || searchResults.length > 0 || (searchDone && searchResults.length === 0 && searchTerm.trim())) && (
               <div className="absolute z-50 top-full left-0 right-0 mt-1 border rounded-md bg-popover shadow-lg max-h-60 overflow-y-auto" data-testid="list-search-results">
                 {isSearching && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground p-3">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Searching...
+                  </div>
+                )}
+                {!isSearching && searchDone && searchResults.length === 0 && searchTerm.trim() && (
+                  <div className="text-sm text-muted-foreground p-3">
+                    No results found
                   </div>
                 )}
                 {searchResults.map((result) => (

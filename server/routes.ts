@@ -23,7 +23,7 @@ import {
   insertTokenIncentiveSchema,
 } from "@shared/schema";
 import {
-  searchCoins, getCoinMarketData, getMultipleCoinMarketData, mapCoinGeckoToProject,
+  searchCoins, searchCoinByContract, looksLikeContractAddress, getCoinMarketData, getMultipleCoinMarketData, mapCoinGeckoToProject,
   searchDefiLlamaProtocols, getProtocolTVLHistory, getProtocolFees, getProtocolRevenue,
   INCENTIVE_TEMPLATES, getCoinContractAddress,
 } from "./crypto-data";
@@ -1047,8 +1047,18 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.get("/api/crypto/search", async (req: Request, res: Response) => {
     try {
-      const q = req.query.q as string;
+      const q = (req.query.q as string || "").trim();
       if (!q) return res.json([]);
+
+      if (looksLikeContractAddress(q)) {
+        const coin = await searchCoinByContract(q);
+        if (coin) {
+          return res.json([coin]);
+        }
+        const fallback = await searchCoins(q);
+        return res.json(fallback);
+      }
+
       const results = await searchCoins(q);
       res.json(results);
     } catch (err: any) {

@@ -59,6 +59,60 @@ export async function searchCoins(query: string): Promise<CoinGeckoSearchResult[
   }));
 }
 
+const COINGECKO_PLATFORMS = [
+  "ethereum",
+  "binance-smart-chain",
+  "polygon-pos",
+  "arbitrum-one",
+  "avalanche",
+  "base",
+  "optimistic-ethereum",
+  "solana",
+  "fantom",
+];
+
+function isEvmAddress(q: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/i.test(q);
+}
+
+function isSolanaAddress(q: string): boolean {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(q);
+}
+
+function looksLikeContractAddress(q: string): boolean {
+  return isEvmAddress(q) || isSolanaAddress(q);
+}
+
+export async function searchCoinByContract(address: string): Promise<CoinGeckoSearchResult | null> {
+  const platforms = isEvmAddress(address)
+    ? COINGECKO_PLATFORMS.filter(p => p !== "solana")
+    : ["solana"];
+
+  const lookupAddress = isEvmAddress(address) ? address.toLowerCase() : address;
+
+  for (const platform of platforms) {
+    try {
+      const res = await fetchWithRetry(`${COINGECKO_BASE}/coins/${platform}/contract/${lookupAddress}`);
+      const data = await res.json();
+      if (data.id) {
+        return {
+          id: data.id,
+          name: data.name,
+          symbol: (data.symbol || "").toUpperCase(),
+          market_cap_rank: data.market_cap_rank || null,
+          thumb: data.image?.thumb || "",
+          large: data.image?.large || "",
+        };
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+export { looksLikeContractAddress };
+
 export async function getCoinMarketData(coingeckoId: string): Promise<CoinGeckoMarketData | null> {
   const res = await fetchWithRetry(
     `${COINGECKO_BASE}/coins/markets?vs_currency=usd&ids=${encodeURIComponent(coingeckoId)}&sparkline=true&price_change_percentage=7d`
