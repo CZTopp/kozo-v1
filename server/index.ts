@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./seed";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import { migrateOrphanedData } from "./migrate-data";
 
 const app = express();
 const httpServer = createServer(app);
@@ -63,6 +64,7 @@ app.use((req, res, next) => {
 
 (async () => {
   await seedDatabase();
+  await migrateOrphanedData();
   await setupAuth(app);
   registerAuthRoutes(app);
   await registerRoutes(httpServer, app);
