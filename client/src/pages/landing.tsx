@@ -4,12 +4,6 @@ import { Card } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme-toggle";
 import heroImage from "@/assets/images/hero-fintech.png";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
   BarChart3,
   TrendingUp,
   LineChart,
@@ -27,7 +21,6 @@ import {
   Layers,
   RefreshCw,
   FileText,
-  ChevronDown,
 } from "lucide-react";
 
 function useScrollReveal(threshold = 0.15) {
@@ -163,39 +156,12 @@ const whyKozo = [
   },
 ];
 
-const faqs = [
-  {
-    q: "What is Kozo?",
-    a: "Kozo is a comprehensive financial modeling and crypto analysis platform. It provides linked financial statements, DCF valuations, revenue forecasting, portfolio tracking, tokenomics modeling, and an AI copilot that understands your data.",
-  },
-  {
-    q: "Who is Kozo built for?",
-    a: "Analysts, investors, and anyone who wants institutional-quality financial tools. Whether you're building a DCF for a public company or analyzing token economics for a DeFi protocol, Kozo has the modules you need.",
-  },
-  {
-    q: "How does the cascading recalculation work?",
-    a: "When you change a revenue forecast, the platform automatically recalculates the Income Statement, Balance Sheet, Cash Flow, DCF, and Valuation modules. Every number stays consistent without manual re-linking.",
-  },
-  {
-    q: "What crypto analysis features are available?",
-    a: "Token allocation modeling, supply schedule tracking, fundraising round analysis, protocol revenue forecasting from DefiLlama, token flow models, scenario-based valuation, and whitepaper analysis through the AI copilot.",
-  },
-  {
-    q: "Is my data secure?",
-    a: "Yes. Each user's data is fully isolated with per-user authentication. Your financial models, portfolio positions, and crypto analyses are only accessible to you.",
-  },
-  {
-    q: "What data sources does Kozo use?",
-    a: "Live market data from Yahoo Finance, macroeconomic indicators from FRED, SEC filings from EDGAR, crypto prices from CoinGecko, and DeFi protocol metrics from DefiLlama. All free APIs, no additional subscriptions needed.",
-  },
-];
 
 export default function Landing() {
   const heroReveal = useScrollReveal(0.1);
   const statsReveal = useScrollReveal();
   const featuresReveal = useScrollReveal();
   const whyReveal = useScrollReveal();
-  const faqReveal = useScrollReveal();
   const ctaReveal = useScrollReveal();
 
   return (
@@ -214,9 +180,6 @@ export default function Landing() {
             </Button>
             <Button variant="ghost" size="sm" asChild data-testid="link-why">
               <a href="#why">Why Kozo</a>
-            </Button>
-            <Button variant="ghost" size="sm" asChild data-testid="link-faq">
-              <a href="#faq">FAQ</a>
             </Button>
           </div>
           <div className="flex items-center gap-2">
@@ -411,36 +374,6 @@ export default function Landing() {
               </div>
             ))}
           </div>
-        </div>
-      </section>
-
-      <section
-        id="faq"
-        ref={faqReveal.ref}
-        className={`py-24 border-t border-border/50 transition-all duration-700 ease-out ${faqReveal.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"}`}
-      >
-        <div className="max-w-3xl mx-auto px-6">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 tracking-tight" data-testid="text-faq-heading">
-              Frequently Asked Questions
-            </h2>
-            <p className="text-muted-foreground" data-testid="text-faq-description">
-              Everything you need to know about Kozo.
-            </p>
-          </div>
-
-          <Accordion type="single" collapsible className="space-y-2" data-testid="accordion-faq">
-            {faqs.map((faq, i) => (
-              <AccordionItem key={i} value={`faq-${i}`} className="border rounded-md px-4" data-testid={`faq-item-${i}`}>
-                <AccordionTrigger className="text-left font-medium text-sm py-4" data-testid={`faq-trigger-${i}`}>
-                  {faq.q}
-                </AccordionTrigger>
-                <AccordionContent className="text-sm text-muted-foreground leading-relaxed pb-4" data-testid={`faq-content-${i}`}>
-                  {faq.a}
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
         </div>
       </section>
 
