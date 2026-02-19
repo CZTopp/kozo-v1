@@ -1761,25 +1761,45 @@ export async function registerRoutes(server: Server, app: Express) {
     const { lookupCuratedAllocations, mapCuratedToAllocations, researchAllocationsWithAI, mapAIToAllocations } = await import("./crypto-data");
     let allocationsToCreate: Record<string, unknown>[] = [];
     let source = "fallback";
+    const hasDataSources = Array.isArray((project as any).dataSources) && (project as any).dataSources.length > 0;
 
-    // Priority 1: Curated verified data
-    const slugsToTry = [project.symbol, project.coingeckoId, project.name].filter(Boolean) as string[];
-    for (const s of slugsToTry) {
-      const curatedData = lookupCuratedAllocations(s);
-      if (curatedData) {
-        allocationsToCreate = mapCuratedToAllocations(curatedData, project.id);
-        source = "curated";
-        break;
-      }
-    }
-
-    // Priority 2: AI-powered research
-    if (allocationsToCreate.length === 0) {
+    // If user provided data sources, skip curated and go straight to AI research
+    // so the actual page content is used as primary source of truth
+    if (hasDataSources) {
       try {
         const tokenName = project.name || "";
         const tokenSymbol = project.symbol || "";
         const totalSupply = project.totalSupply || project.maxSupply || null;
         const aiResult = await researchAllocationsWithAI(tokenName, tokenSymbol, totalSupply, (project as any).dataSources);
+        if (aiResult && aiResult.allocations.length > 0) {
+          allocationsToCreate = mapAIToAllocations(aiResult, project.id, totalSupply);
+          source = `ai-researched:${aiResult.confidence}`;
+        }
+      } catch (err) {
+        console.error("AI allocation research with data sources failed:", err);
+      }
+    }
+
+    // Priority 1: Curated verified data (skipped initially when dataSources present, used as fallback if AI failed)
+    if (allocationsToCreate.length === 0) {
+      const slugsToTry = [project.symbol, project.coingeckoId, project.name].filter(Boolean) as string[];
+      for (const s of slugsToTry) {
+        const curatedData = lookupCuratedAllocations(s);
+        if (curatedData) {
+          allocationsToCreate = mapCuratedToAllocations(curatedData, project.id);
+          source = "curated";
+          break;
+        }
+      }
+    }
+
+    // Priority 2: AI-powered research (no data sources, curated not found)
+    if (allocationsToCreate.length === 0) {
+      try {
+        const tokenName = project.name || "";
+        const tokenSymbol = project.symbol || "";
+        const totalSupply = project.totalSupply || project.maxSupply || null;
+        const aiResult = await researchAllocationsWithAI(tokenName, tokenSymbol, totalSupply);
         if (aiResult && aiResult.allocations.length > 0) {
           allocationsToCreate = mapAIToAllocations(aiResult, project.id, totalSupply);
           source = `ai-researched:${aiResult.confidence}`;

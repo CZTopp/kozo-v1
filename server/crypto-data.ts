@@ -689,6 +689,64 @@ interface AIAllocationResult {
   notes: string;
 }
 
+function isAllowedUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (!["http:", "https:"].includes(parsed.protocol)) return false;
+    const host = parsed.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "[::1]") return false;
+    if (host.endsWith(".local") || host.endsWith(".internal")) return false;
+    if (/^10\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host) || /^192\.168\./.test(host)) return false;
+    if (host === "metadata.google.internal" || host === "169.254.169.254") return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchSourceContent(url: string): Promise<{ url: string; content: string | null }> {
+  if (!isAllowedUrl(url)) {
+    console.log(`Data source ${url}: blocked (private/internal URL)`);
+    return { url, content: null };
+  }
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return { url, content: null };
+    const html = await res.text();
+    const text = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, "")
+      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, "")
+      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&#\d+;/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (text.length < 200 || /enable javascript/i.test(text) || /just a moment/i.test(text) || /cf_chl/i.test(text)) {
+      console.log(`Data source ${url}: page requires JavaScript or is blocked, content not available via fetch`);
+      return { url, content: null };
+    }
+    return { url, content: text.slice(0, 8000) };
+  } catch (err) {
+    console.log(`Failed to fetch data source ${url}:`, (err as Error).message);
+    return { url, content: null };
+  }
+}
+
 export async function researchAllocationsWithAI(
   tokenName: string,
   tokenSymbol: string,
@@ -708,9 +766,25 @@ export async function researchAllocationsWithAI(
     ? `The token has a total/max supply of ${totalSupply.toLocaleString()} tokens.`
     : "Total supply is unknown.";
 
-  const sourcesContext = dataSources && dataSources.length > 0
-    ? `\nThe user has provided the following reference sources for this project. Use these as primary references when researching allocation data:\n${dataSources.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n`
-    : "";
+  let sourcesContext = "";
+  if (dataSources && dataSources.length > 0) {
+    const fetchResults = await Promise.all(dataSources.map(fetchSourceContent));
+    const fetchedParts: string[] = [];
+    const unfetchedUrls: string[] = [];
+    for (const result of fetchResults) {
+      if (result.content) {
+        fetchedParts.push(`--- Source: ${result.url} ---\n${result.content}\n--- End Source ---`);
+      } else {
+        unfetchedUrls.push(result.url);
+      }
+    }
+    if (fetchedParts.length > 0) {
+      sourcesContext = `\nThe user has provided the following reference sources for this project. Extract allocation data from this content as your PRIMARY source of truth:\n\n${fetchedParts.join("\n\n")}\n`;
+    }
+    if (unfetchedUrls.length > 0) {
+      sourcesContext += `\nThe following reference URLs were provided but could not be fetched (JavaScript-rendered pages). If you have knowledge of the content at these URLs from your training data, use that information as your primary source for allocation data:\n${unfetchedUrls.map((u, i) => `${i + 1}. ${u}`).join("\n")}\n`;
+    }
+  }
 
   const prompt = `You are a cryptocurrency tokenomics analyst. Research and provide the known token allocation breakdown for the cryptocurrency "${tokenName}" (symbol: ${tokenSymbol}).
 
@@ -738,7 +812,8 @@ Return a JSON object with this exact structure:
 
 Rules:
 - Percentages MUST sum to exactly 100%
-- Use real data from the project's whitepaper, documentation, ICO/token sale details, and public announcements
+- If reference source content is provided above, extract allocation data directly from it -- this is the most reliable data
+- Otherwise, use data from the project's whitepaper, documentation, ICO/token sale details, and public announcements
 - Include vesting schedules if known (vestingMonths = total vesting duration, cliffMonths = initial lockup before any tokens release)
 - tgePercent = percentage of that allocation released at Token Generation Event (launch)
 - standardGroup must be one of: team, investors, public, treasury, community
