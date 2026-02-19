@@ -519,14 +519,45 @@ const CURATED_ALLOCATIONS: Record<string, TokenAllocationData> = {
       { category: "AAVE Ecosystem Reserve", standardGroup: "treasury", percentage: 18.75, amount: 3000000, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Vesting Contract", description: "3 million AAVE allocated to the Aave Ecosystem Reserve for protocol development", references: "https://etherscan.io, https://github.com/aave/aave-token" },
     ],
   },
-  "pixels": {
-    totalSupply: 5000000000,
+  "avalanche": {
+    totalSupply: 720000000,
     allocations: [
-      { category: "Play and Earn", standardGroup: "community", percentage: 34, amount: 1700000000, vestingMonths: 60, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "Unlocks monthly over 60 months for in-game rewards", references: "https://www.binance.com/en/research/projects/pixels" },
-      { category: "Ecosystem Fund", standardGroup: "treasury", percentage: 20, amount: 1000000000, vestingMonths: 60, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "Ecosystem development and grants, unlocks monthly over 60 months", references: "https://www.binance.com/en/research/projects/pixels" },
-      { category: "Team", standardGroup: "team", percentage: 22, amount: 1100000000, vestingMonths: 48, cliffMonths: 12, tgePercent: 0, vestingType: "linear", assumption: "Public Project Data", description: "Team allocation with 12-month cliff followed by 48-month linear vesting", references: "https://www.binance.com/en/research/projects/pixels" },
-      { category: "Investors", standardGroup: "investors", percentage: 17, amount: 850000000, vestingMonths: 36, cliffMonths: 6, tgePercent: 0, vestingType: "linear", assumption: "Public Project Data", description: "Private investors with 6-month cliff then 36-month linear vest", references: "https://www.binance.com/en/research/projects/pixels" },
-      { category: "Binance Launchpool", standardGroup: "public", percentage: 7, amount: 350000000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "100% released at TGE via Binance Launchpool", references: "https://www.binance.com/en/research/projects/pixels" },
+      { category: "Staking Rewards", standardGroup: "community", percentage: 50, amount: 360000000, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Protocol Emission", description: "360M AVAX distributed to validators and delegators over 10+ years", references: "https://build.avax.network/docs/quick-start/avax-token" },
+      { category: "Team", standardGroup: "team", percentage: 10, amount: 72000000, vestingMonths: 48, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "Team allocation with 4-year vesting, now fully unlocked", references: "https://icodrops.com/avalanche/" },
+      { category: "Foundation", standardGroup: "treasury", percentage: 9.26, amount: 66672000, vestingMonths: 120, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "10-year linear vesting through 2030, quarterly unlocks (~1.67M AVAX per quarter)", references: "https://build.avax.network/docs/quick-start/avax-token" },
+      { category: "Public Sale (A1+A2+B)", standardGroup: "public", percentage: 9.97, amount: 71784000, vestingMonths: 18, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "Combined public sales: Option A1 (1%), A2 (8.3% at $0.50, 18-mo vest), B (0.67% at $0.85, no lockup)", references: "https://icodrops.com/avalanche/" },
+      { category: "Community & Development", standardGroup: "community", percentage: 7, amount: 50400000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "Fully unlocked community endowment for development programs", references: "https://build.avax.network/docs/quick-start/avax-token" },
+      { category: "Strategic Partners", standardGroup: "investors", percentage: 5, amount: 36000000, vestingMonths: 48, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "Strategic partner allocation with multi-year vesting", references: "https://icodrops.com/avalanche/" },
+      { category: "Private Sale", standardGroup: "investors", percentage: 3.5, amount: 25200000, vestingMonths: 18, cliffMonths: null, tgePercent: 10, vestingType: "linear", assumption: "Public Project Data", description: "Private sale with 10% at launch, rest quarterly over 18 months", references: "https://icodrops.com/avalanche/" },
+      { category: "Seed Sale", standardGroup: "investors", percentage: 2.5, amount: 18000000, vestingMonths: 18, cliffMonths: null, tgePercent: 10, vestingType: "linear", assumption: "Public Project Data", description: "Seed round with 10% at launch, rest quarterly over 18 months", references: "https://icodrops.com/avalanche/" },
+      { category: "Airdrop", standardGroup: "community", percentage: 2.5, amount: 18000000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "Early community airdrop distribution", references: "https://icodrops.com/avalanche/" },
+      { category: "Testnet Incentive Program", standardGroup: "community", percentage: 0.27, amount: 1944000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "Rewards for early testnet participants", references: "https://icodrops.com/avalanche/" },
+    ],
+  },
+  "tron": {
+    totalSupply: 100000000000,
+    allocations: [
+      { category: "Public Sale (ICO)", standardGroup: "public", percentage: 40, amount: 40000000000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "40B TRX sold in September 2017 ICO, all unlocked at TGE", references: "https://icodrops.com/tron/, https://developers.tron.network/docs/tron-economic-model" },
+      { category: "Private & Early Investors", standardGroup: "investors", percentage: 15.7, amount: 15700000000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "Private placement and early investor allocation, all unlocked at TGE", references: "https://icodrops.com/tron/" },
+      { category: "TRON Foundation / DAO", standardGroup: "treasury", percentage: 24.3, amount: 24300000000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "Foundation reserve for governance and long-term protocol development, all unlocked", references: "https://developers.tron.network/docs/tron-economic-model" },
+      { category: "Ecosystem Development", standardGroup: "community", percentage: 10, amount: 10000000000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "Developer incentives, dApp grants, and ecosystem growth programs", references: "https://developers.tron.network/docs/tron-economic-model" },
+      { category: "Company (Justin Sun)", standardGroup: "team", percentage: 10, amount: 10000000000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "Founder and company allocation, all unlocked", references: "https://icodrops.com/tron/" },
+    ],
+  },
+  "mantle": {
+    totalSupply: 6220000000,
+    allocations: [
+      { category: "BitDAO Token Holders (BIT Migration)", standardGroup: "community", percentage: 52, amount: 3234400000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Inferred On-chain", description: "Former BitDAO BIT holders who migrated 1:1 to MNT in July 2023. Includes original BIT public sale, Bybit Launchpad, and secondary market holders. All vesting completed by 2023.", references: "https://docs.mantle.xyz/governance/parameters/tokenomics" },
+      { category: "Mantle Treasury", standardGroup: "treasury", percentage: 47.4, amount: 2948280000, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Public Project Data", description: "DAO-governed treasury for ecosystem fund ($200M+), DeFi incentives, partnerships, and grants. Requires governance approval via Budget Proposals.", references: "https://docs.mantle.xyz/governance/parameters/tokenomics" },
+      { category: "Core Budget", standardGroup: "team", percentage: 0.6, amount: 37320000, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Public Project Data", description: "Operational expenses for core contributors, drawn from treasury with governance approval", references: "https://docs.mantle.xyz/governance/parameters/tokenomics" },
+    ],
+  },
+  "provenance": {
+    totalSupply: 100000000000,
+    allocations: [
+      { category: "Figure Technologies", standardGroup: "team", percentage: 42.6, amount: 42600000000, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Public Project Data", description: "Figure Technologies founding allocation. Originally 71%, reduced after returning 40% of holdings (~28.4B HASH) to Foundation in Q1 2025 to support decentralization.", references: "https://www.provenance.io/whitepaper-tokenomics" },
+      { category: "Foundation / Administrator", standardGroup: "treasury", percentage: 52.4, amount: 52400000000, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Public Project Data", description: "Provenance Blockchain Foundation. Originally 24%, expanded after receiving 40% of Figure's tokens in 2025. Funds ecosystem grants, community incentives, HASH Rank rewards (15% quarterly), and milestone airdrops (2%).", references: "https://www.provenance.io/whitepaper-tokenomics" },
+      { category: "Validators & Node Operators", standardGroup: "community", percentage: 5, amount: 5000000000, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Public Project Data", description: "Staking rewards for validators. 60% of network fees go to validators. Dynamic inflation 1-52.5% based on staking participation (target 60% staked). Winning HASH auction bids are burned.", references: "https://docs.provenance.io/learn/the-hash-token" },
     ],
   },
   "bitcoin": {
@@ -612,7 +643,9 @@ const CURATED_ALLOCATIONS: Record<string, TokenAllocationData> = {
 const ALLOCATION_ALIASES: Record<string, string> = {
   "btc": "bitcoin", "eth": "ethereum", "sol": "solana", "uni": "uniswap",
   "link": "chainlink", "arb": "arbitrum", "op": "optimism", "matic": "polygon",
-  "pol": "polygon", "pixel": "pixels", "pixel-online": "pixels",
+  "pol": "polygon", "avax": "avalanche", "trx": "tron", "tron-network": "tron",
+  "mnt": "mantle", "hash": "provenance", "hash-2": "provenance",
+  "provenance-blockchain": "provenance",
 };
 
 export function lookupCuratedAllocations(symbolOrSlug: string): TokenAllocationData | null {
