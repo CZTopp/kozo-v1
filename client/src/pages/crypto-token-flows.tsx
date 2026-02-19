@@ -25,6 +25,7 @@ import {
   ArrowLeft, RefreshCw, Loader2, Coins, ArrowUpRight, ArrowDownRight,
   Save, Link2, Database,
 } from "lucide-react";
+import { CryptoProjectNav } from "@/components/crypto-project-nav";
 
 function formatSupply(n: number | null | undefined): string {
   if (n == null || isNaN(n)) return "--";
@@ -271,25 +272,7 @@ export default function CryptoTokenFlows() {
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-3 flex-wrap">
-          <Link href="/crypto">
-            <Button variant="outline" size="icon" data-testid="button-back">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div className="flex items-center gap-2">
-            {project.image && (
-              <img src={project.image} alt={project.name} className="h-8 w-8 rounded-full" data-testid="img-project" />
-            )}
-            <div>
-              <h1 className="text-2xl font-bold" data-testid="text-project-name">{project.name}</h1>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="secondary" data-testid="badge-symbol">{project.symbol?.toUpperCase()}</Badge>
-                <span className="text-xs text-muted-foreground">Token Flow Model</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <CryptoProjectNav projectId={projectId!} projectName={project.name} projectImage={project.image} projectSymbol={project.symbol} />
         <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="outline"

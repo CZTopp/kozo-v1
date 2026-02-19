@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import type { CryptoProject, ProtocolMetric, TokenIncentive, ProtocolRevenueForecast, TokenFlowEntry } from "@shared/schema";
 import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, Shield, DollarSign, Activity, Target, Scale, Users, Lock, Zap, Info } from "lucide-react";
+import { CryptoProjectNav } from "@/components/crypto-project-nav";
 
 function formatCompact(value: number | null | undefined): string {
   if (value == null || isNaN(value)) return "--";
@@ -285,23 +286,7 @@ export default function CryptoValuation() {
 
   return (
     <div className="p-4 space-y-4">
-      <div className="flex items-center gap-3 flex-wrap">
-        <Link href="/crypto">
-          <Button variant="ghost" data-testid="button-back">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-        </Link>
-        <div className="flex items-center gap-3">
-          {project.image && (
-            <img src={project.image} alt={project.name} className="h-8 w-8 rounded-full" data-testid="img-project" />
-          )}
-          <div>
-            <h1 className="text-2xl font-bold" data-testid="text-project-name">{project.name}</h1>
-            <p className="text-sm text-muted-foreground" data-testid="text-project-symbol">{project.symbol?.toUpperCase()}</p>
-          </div>
-        </div>
-      </div>
+      <CryptoProjectNav projectId={projectId!} projectName={project.name} projectImage={project.image} projectSymbol={project.symbol} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Card data-testid="card-current-price">

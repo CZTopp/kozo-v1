@@ -15,6 +15,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAx
 import { useToast } from "@/hooks/use-toast";
 import type { CryptoProject, TokenSupplySchedule, TokenIncentive, TokenAllocation, FundraisingRound } from "@shared/schema";
 import { ArrowLeft, Plus, Trash2, Shield, AlertTriangle, Download, Loader2, Users, Lock, Coins, Edit2, Landmark, Vote, Wallet, Info, FileText, Upload, X } from "lucide-react";
+import { CryptoProjectNav } from "@/components/crypto-project-nav";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -311,16 +312,7 @@ export default function CryptoTokenomics() {
 
   return (
     <div className="p-4 space-y-4" data-testid="page-crypto-tokenomics">
-      <div className="flex items-center gap-3 flex-wrap">
-        <Link href="/crypto"><Button variant="ghost" size="icon" data-testid="button-back"><ArrowLeft className="h-4 w-4" /></Button></Link>
-        <div className="flex items-center gap-2 flex-wrap">
-          {project.image && <img src={project.image} alt={project.name} className="h-8 w-8 rounded-full" data-testid="img-project" />}
-          <div>
-            <h1 className="text-2xl font-bold" data-testid="text-project-name">{project.name}</h1>
-            <span className="text-sm text-muted-foreground uppercase" data-testid="text-project-symbol">{project.symbol}</span>
-          </div>
-        </div>
-      </div>
+      <CryptoProjectNav projectId={projectId} projectName={project.name} projectImage={project.image} projectSymbol={project.symbol} />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card data-testid="card-price">
