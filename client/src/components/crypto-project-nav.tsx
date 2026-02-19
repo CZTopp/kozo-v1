@@ -25,7 +25,7 @@ export function CryptoProjectNav({ projectId, projectName, projectImage, project
   return (
     <div className="flex items-center gap-2 flex-wrap" data-testid="crypto-project-nav">
       <Link href="/crypto">
-        <Button variant="ghost" size="icon" data-testid="button-back-dashboard">
+        <Button variant="ghost" size="icon" aria-label="Back to dashboard" data-testid="button-back-dashboard">
           <ArrowLeft className="h-4 w-4" />
         </Button>
       </Link>

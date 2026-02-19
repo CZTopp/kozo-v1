@@ -480,7 +480,7 @@ export default function BalanceSheet() {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="year" className="text-xs" />
                     <YAxis className="text-xs" />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => `$${v.toFixed(1)}M`} />
+                    <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} formatter={(v: number) => `$${v.toFixed(1)}M`} />
                     <Legend />
                     <Bar dataKey="Current Assets" stackId="assets" fill="hsl(var(--chart-1))" />
                     <Bar dataKey="Long-Term Assets" stackId="assets" fill="hsl(var(--chart-2))" />

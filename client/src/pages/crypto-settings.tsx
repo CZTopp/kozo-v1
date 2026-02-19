@@ -272,6 +272,7 @@ export default function CryptoSettings() {
                 size="icon"
                 variant="outline"
                 disabled={!newSource.trim()}
+                aria-label="Add data source"
                 onClick={() => {
                   if (newSource.trim()) {
                     setDataSources(prev => [...prev, newSource.trim()]);
@@ -293,6 +294,7 @@ export default function CryptoSettings() {
                     <Button
                       size="icon"
                       variant="ghost"
+                      aria-label="Remove data source"
                       onClick={() => setDataSources(prev => prev.filter((_, idx) => idx !== i))}
                       data-testid={`button-remove-source-${i}`}
                     >
@@ -417,7 +419,7 @@ export default function CryptoSettings() {
                         className="w-full text-left px-3 py-2 text-sm hover-elevate flex items-center gap-2"
                         data-testid={`defillama-result-${r.slug}`}
                       >
-                        {r.logo && <img src={r.logo} alt="" className="h-4 w-4 rounded-full" />}
+                        {r.logo && <img src={r.logo} alt="Protocol logo" className="h-4 w-4 rounded-full" />}
                         <span className="font-medium">{r.name}</span>
                         <span className="text-xs text-muted-foreground ml-auto">{r.slug}</span>
                       </button>

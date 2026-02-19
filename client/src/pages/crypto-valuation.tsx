@@ -753,7 +753,10 @@ export default function CryptoValuation() {
                         backgroundColor: "hsl(var(--card))",
                         border: "1px solid hsl(var(--border))",
                         borderRadius: "6px",
+                        color: "hsl(var(--card-foreground))",
                       }}
+                      itemStyle={{ color: "hsl(var(--card-foreground))" }}
+                      labelStyle={{ color: "hsl(var(--card-foreground))" }}
                     />
                     <Bar dataKey="price" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
                   </BarChart>

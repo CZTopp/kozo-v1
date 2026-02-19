@@ -370,7 +370,7 @@ export default function IncomeStatement() {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="year" className="text-xs" />
                     <YAxis className="text-xs" tickFormatter={(v) => `${v}%`} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => `${v.toFixed(1)}%`} />
+                    <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} formatter={(v: number) => `${v.toFixed(1)}%`} />
                     <Legend />
                     <Line type="monotone" dataKey="Gross Margin" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
                     <Line type="monotone" dataKey="EBITDA Margin" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
@@ -393,7 +393,7 @@ export default function IncomeStatement() {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="year" className="text-xs" />
                     <YAxis className="text-xs" tickFormatter={(v) => `${v}%`} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => `${v.toFixed(1)}%`} />
+                    <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} formatter={(v: number) => `${v.toFixed(1)}%`} />
                     <Legend />
                     <Bar dataKey="Revenue Growth" fill="hsl(var(--chart-1))" radius={[2, 2, 0, 0]} />
                     <Bar dataKey="Net Income Growth" fill="hsl(var(--chart-3))" radius={[2, 2, 0, 0]} />

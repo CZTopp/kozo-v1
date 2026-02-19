@@ -326,7 +326,7 @@ export default function CryptoTokenFlows() {
               On-Chain Data
             </CardTitle>
             <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="icon" data-testid="button-toggle-onchain">
+              <Button variant="ghost" size="icon" aria-label="Toggle on-chain data" data-testid="button-toggle-onchain">
                 <Link2 className="h-4 w-4" />
               </Button>
             </CollapsibleTrigger>
@@ -648,7 +648,7 @@ export default function CryptoTokenFlows() {
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis dataKey="period" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                       <YAxis tickFormatter={formatYAxis} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => formatSupply(value)} />
+                      <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} formatter={(value: number) => formatSupply(value)} />
                       <Legend />
                       <Bar dataKey="Minting" stackId="a" fill="#22c55e" radius={[2, 2, 0, 0]} />
                       <Bar dataKey="Unlocks" stackId="a" fill="#3b82f6" />
@@ -672,7 +672,7 @@ export default function CryptoTokenFlows() {
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis dataKey="period" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                       <YAxis tickFormatter={formatYAxis} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => formatSupply(value)} />
+                      <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} formatter={(value: number) => formatSupply(value)} />
                       <Area
                         type="monotone"
                         dataKey="supply"

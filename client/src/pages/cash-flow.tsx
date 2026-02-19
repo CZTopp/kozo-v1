@@ -376,7 +376,7 @@ export default function CashFlow() {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="year" className="text-xs" />
                     <YAxis className="text-xs" />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => `$${v.toFixed(1)}M`} />
+                    <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} formatter={(v: number) => `$${v.toFixed(1)}M`} />
                     <Legend />
                     <Line type="monotone" dataKey="Free Cash Flow" stroke="hsl(var(--chart-1))" strokeWidth={3} />
                   </LineChart>
@@ -396,7 +396,7 @@ export default function CashFlow() {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="year" className="text-xs" />
                     <YAxis className="text-xs" />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => `$${v.toFixed(1)}M`} />
+                    <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} formatter={(v: number) => `$${v.toFixed(1)}M`} />
                     <Legend />
                     <Bar dataKey="Operating CF" fill="hsl(var(--chart-1))" radius={[2, 2, 0, 0]} />
                     <Bar dataKey="Investing CF" fill="hsl(var(--chart-2))" radius={[2, 2, 0, 0]} />

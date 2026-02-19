@@ -292,6 +292,7 @@ export function AppSidebar() {
                             variant="ghost"
                             size="icon"
                             className="h-5 w-5"
+                            aria-label="Delete model"
                             onClick={(e) => {
                               e.stopPropagation();
                               setDeleteTarget(m.id);
@@ -538,6 +539,7 @@ export function AppSidebar() {
                     onClick={handleSyncYahoo}
                     disabled={!editCompany.ticker || syncingYahoo}
                     title="Sync shares outstanding from Yahoo Finance"
+                    aria-label="Sync from Yahoo Finance"
                     data-testid="button-sync-yahoo-sidebar"
                   >
                     {syncingYahoo ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}

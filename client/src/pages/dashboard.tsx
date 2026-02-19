@@ -181,7 +181,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis dataKey="year" className="text-xs" />
                   <YAxis className="text-xs" />
-                  <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} />
+                  <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} />
                   <Bar dataKey="Revenue" fill="hsl(var(--chart-1))" radius={[2, 2, 0, 0]} />
                   <Bar dataKey="EBITDA" fill="hsl(var(--chart-2))" radius={[2, 2, 0, 0]} />
                   <Bar dataKey="Net Income" fill="hsl(var(--chart-3))" radius={[2, 2, 0, 0]} />
@@ -213,7 +213,7 @@ export default function Dashboard() {
                         <Cell key={i} fill={COLORS[i % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v: number) => formatPercent(v)} />
+                    <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} formatter={(v: number) => formatPercent(v)} />
                   </PieChart>
                 </ResponsiveContainer>
               )}

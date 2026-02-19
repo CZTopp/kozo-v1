@@ -256,7 +256,7 @@ export default function CryptoFinancials() {
                     data-testid={`button-select-protocol-${r.slug}`}
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      {r.logo && <img src={r.logo} alt="" className="h-5 w-5 rounded-full flex-shrink-0" />}
+                      {r.logo && <img src={r.logo} alt="Protocol logo" className="h-5 w-5 rounded-full flex-shrink-0" />}
                       <span className="text-sm font-medium truncate">{r.name}</span>
                       <span className="text-xs text-muted-foreground">{r.slug}</span>
                     </div>
@@ -365,6 +365,8 @@ export default function CryptoFinancials() {
                           borderRadius: "6px",
                           color: "hsl(var(--card-foreground))",
                         }}
+                        itemStyle={{ color: "hsl(var(--card-foreground))" }}
+                        labelStyle={{ color: "hsl(var(--card-foreground))" }}
                       />
                       <Area
                         type="monotone"
@@ -402,6 +404,8 @@ export default function CryptoFinancials() {
                           borderRadius: "6px",
                           color: "hsl(var(--card-foreground))",
                         }}
+                        itemStyle={{ color: "hsl(var(--card-foreground))" }}
+                        labelStyle={{ color: "hsl(var(--card-foreground))" }}
                       />
                       <Bar dataKey="dailyFees" fill="#f97316" name="Daily Fees" radius={[2, 2, 0, 0]} />
                     </BarChart>
@@ -432,6 +436,8 @@ export default function CryptoFinancials() {
                           borderRadius: "6px",
                           color: "hsl(var(--card-foreground))",
                         }}
+                        itemStyle={{ color: "hsl(var(--card-foreground))" }}
+                        labelStyle={{ color: "hsl(var(--card-foreground))" }}
                       />
                       <Area
                         type="monotone"
@@ -477,6 +483,8 @@ export default function CryptoFinancials() {
                           borderRadius: "6px",
                           color: "hsl(var(--card-foreground))",
                         }}
+                        itemStyle={{ color: "hsl(var(--card-foreground))" }}
+                        labelStyle={{ color: "hsl(var(--card-foreground))" }}
                       />
                       <Area
                         type="monotone"

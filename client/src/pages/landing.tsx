@@ -196,7 +196,7 @@ export default function Landing() {
 
       <section className="relative pt-24 pb-0 overflow-hidden">
         <div className="absolute inset-0 z-0">
-          <img src={heroImage} alt="" className="w-full h-full object-cover" />
+          <img src={heroImage} alt="Financial modeling platform" className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/60 to-background" />
           <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 via-transparent to-violet-600/10" />
         </div>

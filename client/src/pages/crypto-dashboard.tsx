@@ -301,7 +301,7 @@ export default function CryptoDashboard() {
                     {addingId === result.id ? (
                       <Loader2 className="h-4 w-4 animate-spin shrink-0" />
                     ) : result.thumb ? (
-                      <img src={result.thumb} alt="" className="h-5 w-5 rounded-full" />
+                      <img src={result.thumb} alt="Token icon" className="h-5 w-5 rounded-full" />
                     ) : null}
                     <span className="font-medium">{result.name}</span>
                     <Badge variant="secondary" className="text-xs uppercase">{result.symbol}</Badge>
@@ -380,7 +380,7 @@ export default function CryptoDashboard() {
                 {recentlyAdded.map((p) => (
                   <div key={p.id} className="flex items-center justify-between gap-1 text-xs">
                     <div className="flex items-center gap-1 min-w-0">
-                      {p.image && <img src={p.image} alt="" className="h-4 w-4 rounded-full flex-shrink-0" />}
+                      {p.image && <img src={p.image} alt="Token icon" className="h-4 w-4 rounded-full flex-shrink-0" />}
                       <span className="font-medium truncate">{p.symbol?.toUpperCase()}</span>
                     </div>
                     <ChangeDisplay value={p.priceChange24h} label="24h" />
@@ -461,6 +461,7 @@ export default function CryptoDashboard() {
                     <Button
                       size="icon"
                       variant="ghost"
+                      aria-label="Project actions"
                       onClick={(e) => e.stopPropagation()}
                       data-testid={`button-menu-${project.id}`}
                     >

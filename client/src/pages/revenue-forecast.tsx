@@ -1091,6 +1091,7 @@ export default function RevenueForecast() {
                               <Button
                                 size="icon"
                                 variant="ghost"
+                                aria-label="Delete line item"
                                 onClick={() => handleDelete(li.id)}
                                 data-testid={`button-delete-${li.id}`}
                                 className="text-destructive"
@@ -1122,6 +1123,7 @@ export default function RevenueForecast() {
                           <Button
                             size="icon"
                             variant="ghost"
+                            aria-label="Undo delete"
                             onClick={() => handleUndoDelete(li.id)}
                             data-testid={`button-undo-delete-${li.id}`}
                           >
@@ -1181,6 +1183,7 @@ export default function RevenueForecast() {
                           <Button
                             size="icon"
                             variant="ghost"
+                            aria-label="Remove new line item"
                             onClick={() => handleRemoveNewLineItem(ni.tempId)}
                             data-testid={`button-remove-new-${ni.tempId}`}
                             className="text-destructive"
@@ -1372,7 +1375,7 @@ export default function RevenueForecast() {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="year" className="text-xs" />
                     <YAxis className="text-xs" tickFormatter={(v) => formatWithUnit(v, displayUnit)} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => formatWithUnit(v, displayUnit)} />
+                    <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} formatter={(v: number) => formatWithUnit(v, displayUnit)} />
                     <Legend />
                     {allNames.map((name, i) => (
                       <Bar key={name} dataKey={name} fill={COLORS[i % COLORS.length]} radius={[2, 2, 0, 0]} />
@@ -1396,7 +1399,7 @@ export default function RevenueForecast() {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="year" className="text-xs" />
                     <YAxis className="text-xs" tickFormatter={(v) => formatWithUnit(v, displayUnit)} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => formatWithUnit(v, displayUnit)} />
+                    <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} formatter={(v: number) => formatWithUnit(v, displayUnit)} />
                     <Legend />
                     {allNames.map((name, i) => (
                       <Area key={name} type="monotone" dataKey={name} fill={COLORS[i % COLORS.length]} stroke={COLORS[i % COLORS.length]} fillOpacity={0.3} />
@@ -1420,7 +1423,7 @@ export default function RevenueForecast() {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="period" className="text-xs" angle={-45} textAnchor="end" height={60} />
                     <YAxis className="text-xs" tickFormatter={(v) => formatWithUnit(v, displayUnit)} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => formatWithUnit(v, displayUnit)} />
+                    <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} formatter={(v: number) => formatWithUnit(v, displayUnit)} />
                     <Legend />
                     {allNames.map((name, i) => (
                       <Area key={name} type="monotone" dataKey={name} fill={COLORS[i % COLORS.length]} stroke={COLORS[i % COLORS.length]} fillOpacity={0.3} />

@@ -501,6 +501,7 @@ export default function Portfolio() {
                                   size="icon"
                                   variant="ghost"
                                   className="h-5 w-5 p-0"
+                                  aria-label="Toggle lots"
                                   onClick={() => toggleExpanded(p.id)}
                                   data-testid={`button-expand-${p.ticker}`}
                                 >
@@ -549,10 +550,10 @@ export default function Portfolio() {
                             <TableCell className="text-right font-mono">${p.stopLoss?.toFixed(2) || "--"}</TableCell>
                             <TableCell className="text-center">
                               <div className="flex items-center justify-center gap-1">
-                                <Button size="icon" variant="ghost" onClick={() => openEdit(p)} data-testid={`button-edit-${p.ticker}`}>
+                                <Button size="icon" variant="ghost" aria-label="Edit position" onClick={() => openEdit(p)} data-testid={`button-edit-${p.ticker}`}>
                                   <Pencil className="h-3.5 w-3.5" />
                                 </Button>
-                                <Button size="icon" variant="ghost" onClick={() => setDeleteId(p.id)} data-testid={`button-delete-${p.ticker}`}>
+                                <Button size="icon" variant="ghost" aria-label="Delete position" onClick={() => setDeleteId(p.id)} data-testid={`button-delete-${p.ticker}`}>
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
                               </div>
@@ -610,10 +611,10 @@ export default function Portfolio() {
                                               <TableCell className="text-xs max-w-[120px] truncate">{lot.notes || "--"}</TableCell>
                                               <TableCell className="text-center">
                                                 <div className="flex items-center justify-center gap-1">
-                                                  <Button size="icon" variant="ghost" onClick={() => openEditLot(lot)} data-testid={`button-edit-lot-${idx}`}>
+                                                  <Button size="icon" variant="ghost" aria-label="Edit lot" onClick={() => openEditLot(lot)} data-testid={`button-edit-lot-${idx}`}>
                                                     <Pencil className="h-3 w-3" />
                                                   </Button>
-                                                  <Button size="icon" variant="ghost" onClick={() => deleteLotMutation.mutate(lot.id)} data-testid={`button-delete-lot-${idx}`}>
+                                                  <Button size="icon" variant="ghost" aria-label="Delete lot" onClick={() => deleteLotMutation.mutate(lot.id)} data-testid={`button-delete-lot-${idx}`}>
                                                     <Trash2 className="h-3 w-3" />
                                                   </Button>
                                                 </div>
@@ -662,7 +663,7 @@ export default function Portfolio() {
                           label={({ sector, percent }: { sector: string; percent: number }) => `${sector} ${(percent * 100).toFixed(0)}%`}>
                           {metrics.sectorAllocation.map((_: unknown, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                         </Pie>
-                        <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                        <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} formatter={(v: number) => formatCurrency(v)} />
                       </PieChart>
                     </ResponsiveContainer>
                   )}
@@ -681,7 +682,7 @@ export default function Portfolio() {
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                       <XAxis type="number" tickFormatter={(v) => formatCurrency(v)} />
                       <YAxis type="category" dataKey="name" width={50} />
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} formatter={(v: number) => formatCurrency(v)} />
+                      <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} formatter={(v: number) => formatCurrency(v)} />
                       <Bar dataKey="P&L" fill="hsl(var(--chart-1))" radius={[0, 2, 2, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -835,7 +836,7 @@ export default function Portfolio() {
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                       <XAxis dataKey="name" className="text-xs" />
                       <YAxis className="text-xs" />
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} />
+                      <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} />
                       <Bar dataKey="Beta" fill="hsl(var(--chart-4))" radius={[2, 2, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>

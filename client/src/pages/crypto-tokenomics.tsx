@@ -546,8 +546,8 @@ export default function CryptoTokenomics() {
                               </TableCell>
                               <TableCell className="text-center">
                                 <div className="flex items-center justify-center gap-0.5">
-                                  <Button size="icon" variant="ghost" onClick={() => openEditAllocation(a)} data-testid={`button-edit-alloc-${a.id}`}><Edit2 className="h-3.5 w-3.5" /></Button>
-                                  <Button size="icon" variant="ghost" onClick={() => deleteAllocationMutation.mutate(a.id)} disabled={deleteAllocationMutation.isPending} data-testid={`button-delete-alloc-${a.id}`}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                                  <Button size="icon" variant="ghost" aria-label="Edit allocation" onClick={() => openEditAllocation(a)} data-testid={`button-edit-alloc-${a.id}`}><Edit2 className="h-3.5 w-3.5" /></Button>
+                                  <Button size="icon" variant="ghost" aria-label="Delete allocation" onClick={() => deleteAllocationMutation.mutate(a.id)} disabled={deleteAllocationMutation.isPending} data-testid={`button-delete-alloc-${a.id}`}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -614,7 +614,7 @@ export default function CryptoTokenomics() {
                               <Cell key={i} fill={i === allocationPieData.length - 1 && allocationPieData[i].name === "Untracked" ? "hsl(var(--muted))" : COLORS[i % COLORS.length]} stroke="none" />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} />
+                          <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} />
                         </PieChart>
                       </ResponsiveContainer>
                     </div>
@@ -710,7 +710,7 @@ export default function CryptoTokenomics() {
                           <TableCell className="text-right" data-testid={`text-supply-pct-${s.id}`}>{pct.toFixed(1)}%</TableCell>
                           <TableCell data-testid={`text-supply-date-${s.id}`}>{s.date || "--"}</TableCell>
                           <TableCell className="text-right" data-testid={`text-supply-vesting-${s.id}`}>{s.recurringIntervalMonths || "--"}</TableCell>
-                          <TableCell className="text-center"><Button size="icon" variant="ghost" onClick={() => deleteScheduleMutation.mutate(s.id)} disabled={deleteScheduleMutation.isPending} data-testid={`button-delete-supply-${s.id}`}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
+                          <TableCell className="text-center"><Button size="icon" variant="ghost" aria-label="Delete supply entry" onClick={() => deleteScheduleMutation.mutate(s.id)} disabled={deleteScheduleMutation.isPending} data-testid={`button-delete-supply-${s.id}`}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
                         </TableRow>
                       );
                     })}
@@ -731,7 +731,7 @@ export default function CryptoTokenomics() {
                         <Pie data={supplyPieData} cx="50%" cy="50%" outerRadius={80} dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
                           {supplyPieData.map((_, i) => (<Cell key={i} fill={COLORS[i % COLORS.length]} />))}
                         </Pie>
-                        <Tooltip formatter={(value: number) => formatSupply(value)} contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} />
+                        <Tooltip formatter={(value: number) => formatSupply(value)} contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
@@ -748,7 +748,7 @@ export default function CryptoTokenomics() {
                           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                           <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
                           <YAxis tickFormatter={(v: number) => formatSupply(v)} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                          <Tooltip formatter={(value: number) => formatSupply(value)} contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} />
+                          <Tooltip formatter={(value: number) => formatSupply(value)} contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} />
                           <Area type="stepAfter" dataKey="cumulative" stroke="hsl(var(--chart-1))" fill="hsl(var(--chart-1))" fillOpacity={0.2} name="Cumulative Supply" />
                         </AreaChart>
                       </ResponsiveContainer>
@@ -822,8 +822,8 @@ export default function CryptoTokenomics() {
                         <TableCell className="max-w-[200px] truncate" data-testid={`text-round-investors-${r.id}`}>{r.leadInvestors || "--"}</TableCell>
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-0.5">
-                            <Button size="icon" variant="ghost" onClick={() => openEditFundraising(r)} data-testid={`button-edit-round-${r.id}`}><Edit2 className="h-3.5 w-3.5" /></Button>
-                            <Button size="icon" variant="ghost" onClick={() => deleteFundraisingMutation.mutate(r.id)} disabled={deleteFundraisingMutation.isPending} data-testid={`button-delete-round-${r.id}`}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                            <Button size="icon" variant="ghost" aria-label="Edit round" onClick={() => openEditFundraising(r)} data-testid={`button-edit-round-${r.id}`}><Edit2 className="h-3.5 w-3.5" /></Button>
+                            <Button size="icon" variant="ghost" aria-label="Delete round" onClick={() => deleteFundraisingMutation.mutate(r.id)} disabled={deleteFundraisingMutation.isPending} data-testid={`button-delete-round-${r.id}`}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -883,7 +883,7 @@ export default function CryptoTokenomics() {
                   {inc.sustainabilityNotes && <p className="text-xs text-muted-foreground italic" data-testid={`text-incentive-notes-${inc.id}`}>{inc.sustainabilityNotes}</p>}
                   <div className="flex items-center gap-1 pt-1">
                     <Button variant="outline" size="sm" onClick={() => openEditIncentive(inc)} data-testid={`button-edit-incentive-${inc.id}`}>Edit</Button>
-                    <Button variant="ghost" size="icon" onClick={() => deleteIncentiveMutation.mutate(inc.id)} disabled={deleteIncentiveMutation.isPending} data-testid={`button-delete-incentive-${inc.id}`}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                    <Button variant="ghost" size="icon" aria-label="Delete incentive" onClick={() => deleteIncentiveMutation.mutate(inc.id)} disabled={deleteIncentiveMutation.isPending} data-testid={`button-delete-incentive-${inc.id}`}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                   </div>
                 </CardContent>
               </Card>

@@ -42,6 +42,7 @@ export function CopilotTrigger() {
       variant="ghost"
       size="icon"
       onClick={toggle}
+      aria-label="Toggle copilot"
       data-testid="button-copilot-toggle"
     >
       <Sparkles className="h-4 w-4" />
@@ -309,6 +310,7 @@ export function CopilotPanel() {
               variant="ghost"
               size="icon"
               onClick={clearChat}
+              aria-label="Clear chat"
               data-testid="button-copilot-clear"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -389,6 +391,7 @@ export function CopilotPanel() {
               size="icon"
               onClick={() => sendMessage(input)}
               disabled={!input.trim() || !canSend || isStreaming}
+              aria-label="Send message"
               data-testid="button-copilot-send"
             >
               {isStreaming ? (

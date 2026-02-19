@@ -103,6 +103,7 @@ function AuthenticatedApp() {
                       variant="ghost"
                       size="icon"
                       asChild
+                      aria-label="Log out"
                       data-testid="button-logout"
                     >
                       <a href="/api/logout" title="Log out">

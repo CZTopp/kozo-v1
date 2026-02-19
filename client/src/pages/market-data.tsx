@@ -244,7 +244,7 @@ export default function MarketDataPage() {
                           {formatPercent(idx.ytdReturn || 0)}
                         </TableCell>
                         <TableCell className="text-center">
-                          <Button size="icon" variant="ghost" onClick={() => setDeleteIndexId(idx.id)} data-testid={`button-delete-index-${idx.ticker}`}>
+                          <Button size="icon" variant="ghost" aria-label="Delete index" onClick={() => setDeleteIndexId(idx.id)} data-testid={`button-delete-index-${idx.ticker}`}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </TableCell>
@@ -284,7 +284,7 @@ export default function MarketDataPage() {
                           {formatPercent(idx.ytdReturn || 0)}
                         </TableCell>
                         <TableCell className="text-center">
-                          <Button size="icon" variant="ghost" onClick={() => setDeleteIndexId(idx.id)} data-testid={`button-delete-index-${idx.ticker}`}>
+                          <Button size="icon" variant="ghost" aria-label="Delete index" onClick={() => setDeleteIndexId(idx.id)} data-testid={`button-delete-index-${idx.ticker}`}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </TableCell>
@@ -335,7 +335,7 @@ export default function MarketDataPage() {
                               : "--"}
                           </TableCell>
                           <TableCell className="text-center">
-                            <Button size="icon" variant="ghost" onClick={() => setDeleteMacroId(m.id)} data-testid={`button-delete-macro-${m.name}`}>
+                            <Button size="icon" variant="ghost" aria-label="Delete indicator" onClick={() => setDeleteMacroId(m.id)} data-testid={`button-delete-macro-${m.name}`}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </TableCell>
@@ -362,7 +362,9 @@ export default function MarketDataPage() {
                     <XAxis type="number" tickFormatter={v => `${v.toFixed(0)}%`} />
                     <YAxis type="category" dataKey="name" width={80} className="text-xs" />
                     <Tooltip
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}
+                      contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }}
+                      itemStyle={{ color: "hsl(var(--card-foreground))" }}
+                      labelStyle={{ color: "hsl(var(--card-foreground))" }}
                       formatter={(v: number) => `${v.toFixed(1)}%`}
                     />
                     <Bar dataKey="YTD" fill="hsl(var(--chart-1))" radius={[0, 2, 2, 0]} />
