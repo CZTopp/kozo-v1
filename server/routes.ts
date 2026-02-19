@@ -1780,8 +1780,8 @@ export async function registerRoutes(server: Server, app: Express) {
       }
     }
 
-    // Priority 1: Curated verified data (skipped initially when dataSources present, used as fallback if AI failed)
-    if (allocationsToCreate.length === 0) {
+    // Priority 1: Curated verified data (skipped when dataSources present — user's sources take priority)
+    if (allocationsToCreate.length === 0 && !hasDataSources) {
       const slugsToTry = [project.symbol, project.coingeckoId, project.name].filter(Boolean) as string[];
       for (const s of slugsToTry) {
         const curatedData = lookupCuratedAllocations(s);
@@ -1793,8 +1793,8 @@ export async function registerRoutes(server: Server, app: Express) {
       }
     }
 
-    // Priority 2: AI-powered research (no data sources, curated not found)
-    if (allocationsToCreate.length === 0) {
+    // Priority 2: AI-powered research (skipped when dataSources present — already tried above with sources)
+    if (allocationsToCreate.length === 0 && !hasDataSources) {
       try {
         const tokenName = project.name || "";
         const tokenSymbol = project.symbol || "";

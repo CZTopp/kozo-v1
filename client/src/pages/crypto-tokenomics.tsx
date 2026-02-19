@@ -151,9 +151,18 @@ export default function CryptoTokenomics() {
     onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
 
-  const clearAllocationsMutation = useMutation({
-    mutationFn: async () => { await apiRequest("DELETE", `/api/crypto/projects/${projectId}/allocations/clear`); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "allocations"] }); toast({ title: "Allocations cleared" }); },
+  const clearAndReseedMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/crypto/projects/${projectId}/allocations/clear`);
+      const res = await apiRequest("POST", `/api/crypto/projects/${projectId}/allocations/seed`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "allocations"] });
+      if (data.source?.startsWith("curated")) toast({ title: "Verified allocation data re-seeded" });
+      else if (data.source?.startsWith("ai-researched")) toast({ title: "AI-researched allocation data re-seeded", description: "Data researched from public sources. Review for accuracy." });
+      else toast({ title: "Template allocations re-seeded", description: "Industry-average estimates. Edit to match actual data." });
+    },
     onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
 
@@ -466,9 +475,9 @@ export default function CryptoTokenomics() {
                   {seedAllocationsMutation.isPending ? "Researching..." : "Seed Allocations"}
                 </Button>
               ) : (
-                <Button variant="outline" size="sm" onClick={() => clearAllocationsMutation.mutate()} disabled={clearAllocationsMutation.isPending} data-testid="button-clear-allocations">
-                  {clearAllocationsMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1" />}
-                  Clear & Re-seed
+                <Button variant="outline" size="sm" onClick={() => clearAndReseedMutation.mutate()} disabled={clearAndReseedMutation.isPending} data-testid="button-clear-allocations">
+                  {clearAndReseedMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1" />}
+                  {clearAndReseedMutation.isPending ? "Re-seeding..." : "Clear & Re-seed"}
                 </Button>
               )}
               <Button onClick={() => { setEditingAllocationId(null); setAllocationForm({ ...emptyAllocationForm }); setAllocationFormOpen(true); }} data-testid="button-add-allocation">
