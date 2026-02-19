@@ -283,8 +283,13 @@ const sections = [
     keyMetrics: ["Token Allocations (%)", "Projected 2035 Supply", "Circulating/Total Ratio", "FDV/MCap Ratio", "Inflation Estimate", "Total Raised", "Governance Type"],
     howToUse: [
       "Allocations Tab: Define how tokens are distributed (Team, Investors, Community, Treasury, etc.). Each allocation has percentage, token amount, vesting period, cliff, and TGE unlock. The donut chart updates in real-time.",
-      "  -- Token amounts are auto-calculated from the projected 2035 supply (max supply or total supply) when you enter a percentage.",
+      "  -- 'Seed Allocations' button: Automatically populates allocation data using a 3-tier priority system. For 13 major tokens (BTC, ETH, SOL, AVAX, UNI, AAVE, ARB, OP, LINK, MATIC, TRX, MNT, HASH), verified curated data is used. For all other tokens, AI research powered by OpenAI analyzes whitepapers, documentation, and public sources to generate allocation breakdowns with confidence levels (high/medium/low). If both fail, an industry-average template is applied as a fallback.",
+      "  -- 'Clear & Re-seed' button: When allocations already exist, use this to wipe all entries and start fresh. After clearing, the 'Seed Allocations' button reappears so you can re-seed with updated data.",
+      "  -- Source Attribution: Each allocation row displays its data source -- 'Curated' for verified data, 'AI-Researched' with confidence level for AI-generated data, or 'Industry Average' for template data. Review AI-researched entries carefully.",
+      "  -- AI Disclaimer Banner: A yellow warning banner appears above the allocation table when any allocations come from AI research, reminding you that the data was generated from publicly available sources and may not be perfectly accurate.",
+      "  -- Token amounts are auto-calculated from the projected 2035 supply (max supply or total supply) when you enter a percentage. For AI-seeded data, CoinGecko supply figures are used to calculate token amounts from the AI-generated percentages.",
       "  -- 'Untracked' allocation is shown when total tracked allocations are below 100%, representing tokens not yet categorized.",
+      "  -- You can manually add, edit, or delete individual allocations at any time to refine the data after seeding.",
       "Supply Schedule Tab: Track token unlock events over time. Each entry has a label, amount, unlock date, and vesting period. A cumulative unlock area chart shows the token release timeline.",
       "Fundraising Tab: Record funding rounds with type (Seed, Private, Public/IDO, etc.), amount raised, valuation, date, token price, and lead investors. Total raised is auto-summed.",
       "Incentives Tab: Map stakeholder incentives (Liquidity Providers, Stakers, Validators, etc.) with reward type, source, APY estimates, and sustainability flags. Load pre-built templates for major protocols (BTC, ETH, SOL, UNI, AAVE).",
@@ -292,7 +297,7 @@ const sections = [
       "Governance Card: Edit DAO type (DAO, Multi-sig, Foundation, Council), voting mechanism, treasury size, and notes. This provides context for how the protocol is governed.",
       "Review the supply metrics cards at the top: circulating/total ratio, inflation estimate, and FDV/MCap ratio to assess dilution risk.",
     ],
-    tips: "A low circulating/total ratio (under 50%) means significant token supply is still locked -- future unlocks could create selling pressure. FDV/MCap ratios above 2x suggest substantial dilution ahead. Use the allocation breakdown to verify that team and investor allocations have reasonable vesting schedules (12-48 months is standard).",
+    tips: "A low circulating/total ratio (under 50%) means significant token supply is still locked -- future unlocks could create selling pressure. FDV/MCap ratios above 2x suggest substantial dilution ahead. Use the allocation breakdown to verify that team and investor allocations have reasonable vesting schedules (12-48 months is standard). When using AI-seeded allocations, always cross-reference against the project's official documentation -- AI confidence levels indicate how reliable the data is likely to be.",
     cascadeInfo: "Allocation data and projected supply feed into the Crypto Valuation page for implied token price calculations.",
   },
   {
