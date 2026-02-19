@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   ClipboardCheck,
   LayoutDashboard,
@@ -28,6 +29,13 @@ import {
   Clipboard,
   ToggleLeft,
   Table2,
+  Search,
+  Coins,
+  PieChart,
+  Landmark,
+  Activity,
+  TrendingDown,
+  Droplets,
 } from "lucide-react";
 
 const sections = [
@@ -248,6 +256,115 @@ const sections = [
     tips: "Rising interest rates typically compress equity valuations (higher discount rates). If rates are trending up, consider whether your DCF WACC assumptions still make sense. Strong GDP growth generally supports earnings expansion.",
     cascadeInfo: null,
   },
+  {
+    id: "crypto-dashboard",
+    title: "Crypto Dashboard",
+    icon: Coins,
+    path: "/crypto",
+    purpose: "Central hub for tracking and analyzing cryptocurrency projects. Search and add coins via CoinGecko, view market data at a glance with sparklines, and navigate to deeper analysis modules for each project.",
+    keyMetrics: ["Price", "Market Cap", "24h Volume", "24h/7d Price Change", "Sparkline Charts"],
+    howToUse: [
+      "Use the search bar to find any cryptocurrency by name or ticker. Results are pulled from CoinGecko's database.",
+      "Click 'Add' on a search result to add the project to your tracked list. Market data (price, market cap, volume, supply) is fetched automatically.",
+      "Each project card shows key metrics and sparkline price charts. Click on a project to access its detailed analysis pages.",
+      "Use 'Refresh Prices' to update all tracked projects with the latest market data from CoinGecko.",
+      "From each project card, navigate to Tokenomics, Protocol Financials, Crypto Valuation, Revenue Forecast, or Token Flows for deep analysis.",
+      "Remove projects you no longer need by clicking the delete button on their card.",
+    ],
+    tips: "Start by adding the projects you want to analyze. CoinGecko's free API provides reliable market data. After adding, navigate to the Tokenomics page first to build the allocation and supply model before running valuations.",
+    cascadeInfo: null,
+  },
+  {
+    id: "crypto-tokenomics",
+    title: "Tokenomics Modeler",
+    icon: PieChart,
+    path: "/crypto/tokenomics",
+    purpose: "Comprehensive tokenomics analysis similar to Tokenomist.ai. Four tabs cover token allocations, supply schedule, fundraising rounds, and incentive mapping. Includes governance/DAO info and projected 2035 supply calculations.",
+    keyMetrics: ["Token Allocations (%)", "Projected 2035 Supply", "Circulating/Total Ratio", "FDV/MCap Ratio", "Inflation Estimate", "Total Raised", "Governance Type"],
+    howToUse: [
+      "Allocations Tab: Define how tokens are distributed (Team, Investors, Community, Treasury, etc.). Each allocation has percentage, token amount, vesting period, cliff, and TGE unlock. The donut chart updates in real-time.",
+      "  -- Token amounts are auto-calculated from the projected 2035 supply (max supply or total supply) when you enter a percentage.",
+      "  -- 'Untracked' allocation is shown when total tracked allocations are below 100%, following the Tokenomist.ai methodology.",
+      "Supply Schedule Tab: Track token unlock events over time. Each entry has a label, amount, unlock date, and vesting period. A cumulative unlock area chart shows the token release timeline.",
+      "Fundraising Tab: Record funding rounds with type (Seed, Private, Public/IDO, etc.), amount raised, valuation, date, token price, and lead investors. Total raised is auto-summed.",
+      "Incentives Tab: Map stakeholder incentives (Liquidity Providers, Stakers, Validators, etc.) with reward type, source, APY estimates, and sustainability flags. Load pre-built templates for major protocols (BTC, ETH, SOL, UNI, AAVE).",
+      "Governance Card: Edit DAO type (DAO, Multi-sig, Foundation, Council), voting mechanism, treasury size, and notes. This provides context for how the protocol is governed.",
+      "Review the supply metrics cards at the top: circulating/total ratio, inflation estimate, and FDV/MCap ratio to assess dilution risk.",
+    ],
+    tips: "A low circulating/total ratio (under 50%) means significant token supply is still locked -- future unlocks could create selling pressure. FDV/MCap ratios above 2x suggest substantial dilution ahead. Use the allocation breakdown to verify that team and investor allocations have reasonable vesting schedules (12-48 months is standard).",
+    cascadeInfo: "Allocation data and projected supply feed into the Crypto Valuation page for implied token price calculations.",
+  },
+  {
+    id: "crypto-financials",
+    title: "Protocol Financials",
+    icon: Activity,
+    path: "/crypto/financials",
+    purpose: "Fetches and visualizes DeFi protocol financial data from DefiLlama. Shows TVL (Total Value Locked), fees, and revenue over time to assess protocol health and sustainability.",
+    keyMetrics: ["TVL (Total Value Locked)", "Protocol Fees", "Protocol Revenue", "Revenue/TVL Ratio", "Revenue Sustainability"],
+    howToUse: [
+      "Search for the protocol on DefiLlama using the protocol search. This connects the project to its on-chain financial data.",
+      "Review the TVL chart to understand the protocol's growth trajectory and capital retention.",
+      "Analyze fees vs. revenue to understand the protocol's take rate (revenue as a percentage of fees).",
+      "Check the revenue sustainability analysis to see if the protocol earns enough real revenue to justify its incentive spending.",
+      "Use this data to inform your revenue forecast and valuation models for the protocol.",
+    ],
+    tips: "TVL declining while token price rises is a bearish divergence -- it may indicate speculative activity rather than real usage. Protocols with fees consistently exceeding token incentive costs are considered 'real yield' protocols and have stronger fundamental backing.",
+    cascadeInfo: "Protocol revenue data can be seeded into the Revenue Forecast page for forward projections.",
+  },
+  {
+    id: "crypto-valuation",
+    title: "Crypto Valuation",
+    icon: Calculator,
+    path: "/crypto/valuation",
+    purpose: "Multi-method crypto valuation combining Discounted Fee Revenue (for DeFi), Comparable Analysis, and Scenario Analysis with bull/base/bear cases. Provides honest assessments for speculative tokens.",
+    keyMetrics: ["Implied Token Price (DCF)", "Comparable Multiples", "Revenue Classification", "Bull/Base/Bear Scenarios", "Key Risk Factors"],
+    howToUse: [
+      "Discounted Fee Revenue: For revenue-generating DeFi protocols, this applies a DCF methodology to projected protocol revenue. Set discount rate, growth rate, terminal growth, and projection years.",
+      "Comparable Analysis: Classifies tokens as Revenue-Generating, Speculative, or Meme. Revenue-generating tokens get P/R and P/Fee multiples compared to peers. Speculative tokens show honest 'no fundamental basis' notices.",
+      "Scenario Analysis: Bull/base/bear cases with adjustable multipliers. Each scenario shows an implied token price and upside/downside from current price.",
+      "Key Risk Cards: Highlights concentration risk, regulatory risk, smart contract risk, and tokenomics red flags for each project.",
+      "The cascade integration pulls net value accrual from Revenue Forecasts and projected supply from Token Flows to improve implied price accuracy.",
+    ],
+    tips: "Be honest about token classification. Most tokens are speculative -- having conviction that a token will appreciate does not mean it has fundamental value. Revenue-generating protocols like Uniswap, Aave, and Maker have quantifiable cash flows; meme coins do not. Use the 'no fundamental basis' notices as a reality check, not a dismissal.",
+    cascadeInfo: "Pulls from Revenue Forecast (net accrual) and Token Flows (projected supply) for DCF calculations.",
+  },
+  {
+    id: "crypto-revenue-forecast",
+    title: "Protocol Revenue Forecast",
+    icon: TrendingDown,
+    path: "/crypto/revenue",
+    purpose: "Project protocol revenue 3-5 years forward with editable tables, bull/base/bear scenarios, emission cost tracking, and net value accrual calculations. Auto-seeds from DefiLlama actuals.",
+    keyMetrics: ["Projected Fees", "Projected Revenue", "Take Rate", "Emission Cost", "Net Value Accrual", "Growth Rate"],
+    howToUse: [
+      "Click 'Seed from DefiLlama' to auto-populate historical revenue data from the protocol's on-chain financials.",
+      "Edit the projection table to set future year estimates for fees, revenue, growth rates, and take rates.",
+      "Switch between bull/base/bear scenarios using the scenario selector. Each scenario can have different growth assumptions.",
+      "Track emission costs alongside revenue to calculate net value accrual (revenue minus cost of token emissions used for incentives).",
+      "Review the Revenue vs Emissions chart to visualize whether the protocol is net-accretive or net-dilutive.",
+      "Net value accrual feeds into the Crypto Valuation DCF for a more accurate implied token price.",
+    ],
+    tips: "A protocol's net value accrual is arguably the most important metric for token valuation. If emission costs consistently exceed revenue, the protocol is effectively paying users to participate -- this is unsustainable long-term. Look for the crossover point where revenue exceeds emissions.",
+    cascadeInfo: "Net value accrual feeds into Crypto Valuation DCF for implied token price.",
+  },
+  {
+    id: "crypto-token-flows",
+    title: "Token Flow Model",
+    icon: Droplets,
+    path: "/crypto/token-flows",
+    purpose: "Period-by-period token flow tracking including minting, unlocks, burns, buybacks, and staking lockups. Projects cumulative supply over time with waterfall charts.",
+    keyMetrics: ["Minting", "Token Unlocks", "Burns", "Buybacks", "Staking Lockups", "Net Flow", "Cumulative Supply"],
+    howToUse: [
+      "Add periods (monthly, quarterly, or annual) to track token supply changes over time.",
+      "Auto-seed from supply schedule data to pre-populate unlock events.",
+      "For each period, enter: minting (new tokens created), unlocks (vesting releases), burns (tokens destroyed), buybacks (tokens purchased and removed), and staking lockups (tokens locked in staking).",
+      "Net flow is auto-calculated: minting + unlocks - burns - buybacks - staking lockups.",
+      "Review the waterfall chart to visualize inflows vs outflows and the cumulative supply trajectory.",
+      "If Thirdweb Insight is configured (THIRDWEB_CLIENT_ID), fetch real on-chain data for burn events, staking balances, and holder concentration.",
+      "Projected cumulative supply feeds into Crypto Valuation for implied token price with dilution factored in.",
+    ],
+    tips: "Deflationary tokens (net burns exceeding minting) can appreciate in value purely from supply reduction. However, verify that burn mechanisms are sustainable and not just temporary. Staking lockups reduce effective circulating supply but can create selling pressure when unlock periods end.",
+    cascadeInfo: "Projected cumulative supply feeds into Crypto Valuation for dilution-adjusted implied token price.",
+  },
 ];
 
 const workflowSteps = [
@@ -258,6 +375,12 @@ const workflowSteps = [
   { step: 5, title: "Run DCF Analysis", page: "DCF Valuation", description: "Set WACC parameters and review the discounted cash flow target price and sensitivity analysis." },
   { step: 6, title: "Compare Valuations", page: "Valuation Comparison", description: "Review the final output comparing P/R, PEG, and DCF target prices across bull/base/bear scenarios." },
   { step: 7, title: "Check the Chart", page: "Company Chart", description: "Pull up the company's stock chart on TradingView to visually compare your target price against historical trading range and technical signals." },
+  { step: 8, title: "Add Crypto Project", page: "Crypto Dashboard", description: "Search for a crypto project via CoinGecko, add it to your tracked list, and navigate to its analysis pages." },
+  { step: 9, title: "Model Tokenomics", page: "Tokenomics Modeler", description: "Define token allocations, supply schedules, fundraising rounds, governance info, and incentive mappings." },
+  { step: 10, title: "Fetch Protocol Financials", page: "Protocol Financials", description: "Connect to DefiLlama for TVL, fees, and revenue data. Analyze protocol sustainability." },
+  { step: 11, title: "Forecast Protocol Revenue", page: "Revenue Forecast", description: "Project fees and revenue 3-5 years forward with emission tracking and net value accrual." },
+  { step: 12, title: "Model Token Flows", page: "Token Flow Model", description: "Track minting, unlocks, burns, buybacks, and staking lockups to project supply trajectory." },
+  { step: 13, title: "Value the Token", page: "Crypto Valuation", description: "Run Discounted Fee Revenue, Comparable Analysis, and Scenario Analysis to determine implied token price." },
 ];
 
 const requiredInputs = [
@@ -309,6 +432,48 @@ const requiredInputs = [
     critical: [],
     optional: [],
     downstream: "Fully auto-derived. Combines P/R, PEG, and DCF methods. If upstream data is missing, targets show $0.",
+  },
+  {
+    page: "Crypto Dashboard",
+    path: "/crypto",
+    critical: ["Search and add a crypto project via CoinGecko"],
+    optional: ["Refresh prices for latest market data"],
+    downstream: "All crypto analysis pages depend on having a project added here first.",
+  },
+  {
+    page: "Tokenomics Modeler",
+    path: "/crypto/tokenomics",
+    critical: ["Token allocations with percentages"],
+    optional: ["Supply schedule entries", "Fundraising rounds", "Incentive mappings", "Governance/DAO info"],
+    downstream: "Allocation data and projected supply feed into Crypto Valuation for implied token price.",
+  },
+  {
+    page: "Protocol Financials",
+    path: "/crypto/financials",
+    critical: ["Connect to DefiLlama protocol"],
+    optional: [],
+    downstream: "Revenue data can be seeded into Revenue Forecast for forward projections.",
+  },
+  {
+    page: "Revenue Forecast (Crypto)",
+    path: "/crypto/revenue",
+    critical: ["Projected fees and revenue for at least 1 year"],
+    optional: ["Emission cost tracking", "Bull/base/bear scenario variants"],
+    downstream: "Net value accrual feeds into Crypto Valuation DCF.",
+  },
+  {
+    page: "Token Flow Model",
+    path: "/crypto/token-flows",
+    critical: ["Period-by-period token flow entries"],
+    optional: ["Thirdweb Insight for on-chain data (burns, staking)"],
+    downstream: "Projected cumulative supply feeds into Crypto Valuation for dilution-adjusted price.",
+  },
+  {
+    page: "Crypto Valuation",
+    path: "/crypto/valuation",
+    critical: ["Revenue data from upstream or manual entry"],
+    optional: ["Comparable protocol peers", "Scenario multipliers"],
+    downstream: "Final crypto output: implied token price across methods and scenarios.",
   },
 ];
 
@@ -896,6 +1061,135 @@ const featureGuides = [
       },
     ],
   },
+  {
+    id: "crypto-project-management",
+    title: "Crypto Project Management",
+    icon: Coins,
+    features: [
+      {
+        name: "Search and Add a Project",
+        steps: [
+          "Navigate to the Crypto Dashboard.",
+          "Type a token name or ticker in the search bar. Results are pulled from CoinGecko.",
+          "Click 'Add' on the search result to add the project to your tracked list.",
+          "Market data (price, market cap, 24h volume, supply data, sparklines) is fetched automatically.",
+        ],
+        notes: "CoinGecko's free API has rate limits. If search returns no results, wait a moment and try again. All major cryptocurrencies are available.",
+      },
+      {
+        name: "Remove a Project",
+        steps: [
+          "On the Crypto Dashboard, find the project card you want to remove.",
+          "Click the delete button on the card.",
+          "Confirm deletion. This removes the project and all associated analysis data (allocations, supply schedules, valuations, etc.).",
+        ],
+        notes: "Deletion is permanent. All tokenomics, financials, revenue forecasts, and token flow data for the project are removed.",
+      },
+      {
+        name: "Refresh Market Data",
+        steps: [
+          "Click 'Refresh Prices' on the Crypto Dashboard.",
+          "All tracked projects are updated with the latest price, market cap, volume, and supply data from CoinGecko.",
+        ],
+        notes: "Sparkline data (7-day price charts) is also refreshed. Rate limits may apply on rapid successive refreshes.",
+      },
+    ],
+  },
+  {
+    id: "crypto-allocations",
+    title: "Token Allocations (Tokenomics)",
+    icon: PieChart,
+    features: [
+      {
+        name: "Add a Token Allocation",
+        steps: [
+          "Navigate to Tokenomics and select the Allocations tab.",
+          "Click 'Add Allocation' to open the form.",
+          "Enter: category (Team, Investors, Community, Treasury, Ecosystem, etc.), percentage, vesting months, cliff months, and TGE unlock percentage.",
+          "Token amount is auto-calculated from the projected 2035 supply (max supply or total supply).",
+          "Click 'Save' to add the allocation to the breakdown chart.",
+        ],
+        notes: "The projected 2035 supply is calculated as: max supply if available, otherwise total supply. This follows the Tokenomist.ai methodology. Allocations below 100% total show an 'Untracked' slice in the donut chart.",
+      },
+      {
+        name: "Edit or Delete Allocations",
+        steps: [
+          "Click the edit icon on any allocation row to modify its values.",
+          "Click the delete icon to remove an allocation entirely.",
+          "The donut chart and summary metrics update immediately after changes.",
+        ],
+        notes: "Deleting an allocation increases the 'Untracked' percentage. The total must not exceed 100%.",
+      },
+    ],
+  },
+  {
+    id: "crypto-supply-schedule",
+    title: "Supply Schedule (Tokenomics)",
+    icon: TrendingUp,
+    features: [
+      {
+        name: "Add Supply Schedule Entries",
+        steps: [
+          "Navigate to Tokenomics and select the Supply Schedule tab.",
+          "Click 'Add Entry' to create a new unlock event.",
+          "Enter: label (e.g., 'Team Unlock Q1'), token amount, unlock date, and optional vesting duration.",
+          "The cumulative unlock area chart updates to show the token release timeline.",
+        ],
+        notes: "Supply schedule entries are independent of allocations. Use them to model specific unlock events like cliff releases, linear vesting tranches, or one-time emissions.",
+      },
+    ],
+  },
+  {
+    id: "crypto-fundraising",
+    title: "Fundraising Rounds (Tokenomics)",
+    icon: Landmark,
+    features: [
+      {
+        name: "Record Fundraising Rounds",
+        steps: [
+          "Navigate to Tokenomics and select the Fundraising tab.",
+          "Click 'Add Round' to create a new funding entry.",
+          "Enter: round type (Seed, Private, Public/IDO, Series A, etc.), amount raised, valuation, date, token price, and lead investors.",
+          "Total raised is auto-summed across all rounds.",
+        ],
+        notes: "Token price per round helps calculate investor cost basis and potential selling pressure. Earlier rounds at lower prices have more unrealized gains and therefore more potential sell pressure.",
+      },
+    ],
+  },
+  {
+    id: "crypto-incentives",
+    title: "Incentive Mapping (Tokenomics)",
+    icon: Activity,
+    features: [
+      {
+        name: "Map Stakeholder Incentives",
+        steps: [
+          "Navigate to Tokenomics and select the Incentives tab.",
+          "Click 'Add Incentive' to create a new stakeholder incentive entry.",
+          "Enter: stakeholder type (Liquidity Providers, Stakers, Validators, etc.), reward type, source, estimated APY, and sustainability flag.",
+          "Use the 'Load Template' button to pre-populate incentives from major protocols (BTC, ETH, SOL, UNI, AAVE).",
+        ],
+        notes: "Sustainability flags indicate whether incentives are funded by real revenue (sustainable) or token emissions (unsustainable long-term). Protocols relying heavily on emissions for incentives face dilution risk.",
+      },
+    ],
+  },
+  {
+    id: "crypto-governance",
+    title: "Governance & DAO Info",
+    icon: Landmark,
+    features: [
+      {
+        name: "Edit Governance Information",
+        steps: [
+          "On the Tokenomics page, find the Governance card in the sidebar or header area.",
+          "Click 'Edit' to open the governance dialog.",
+          "Set: governance type (DAO, Multi-sig, Foundation, Council), voting mechanism, treasury size, and notes.",
+          "Click 'Save' to persist the governance information.",
+        ],
+        notes: "Governance type affects how protocol decisions are made and how treasury funds are allocated. DAOs with on-chain voting are generally considered more decentralized than multi-sig or foundation governance.",
+      },
+    ],
+  },
 ];
 
 const tocItems = [
@@ -911,7 +1205,74 @@ const tocItems = [
 
 export default function AnalysisGuide() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const observerRef = useRef<IntersectionObserver | null>(null);
+
+  const q = searchQuery.toLowerCase().trim();
+
+  const filteredSections = useMemo(() => {
+    if (!q) return sections;
+    return sections.filter((s) => {
+      const ts = (s as any).troubleshooting;
+      const troubleshootingText = ts
+        ? [ts.title, ts.what, ...(ts.howToDiagnose || []), ...(ts.commonCauses || []), ...(ts.fixSteps || [])].join(" ").toLowerCase()
+        : "";
+      return (
+        s.title.toLowerCase().includes(q) ||
+        s.purpose.toLowerCase().includes(q) ||
+        s.keyMetrics.some((m: string) => m.toLowerCase().includes(q)) ||
+        s.howToUse.some((h: string) => h.toLowerCase().includes(q)) ||
+        s.tips.toLowerCase().includes(q) ||
+        troubleshootingText.includes(q)
+      );
+    });
+  }, [q]);
+
+  const filteredFeatureGuides = useMemo(() => {
+    if (!q) return featureGuides;
+    return featureGuides.filter((g) =>
+      g.title.toLowerCase().includes(q) ||
+      g.features.some((f) =>
+        f.name.toLowerCase().includes(q) ||
+        f.steps.some((s) => s.toLowerCase().includes(q)) ||
+        f.notes.toLowerCase().includes(q)
+      )
+    );
+  }, [q]);
+
+  const filteredWorkflowSteps = useMemo(() => {
+    if (!q) return workflowSteps;
+    return workflowSteps.filter((ws) =>
+      ws.title.toLowerCase().includes(q) ||
+      ws.page.toLowerCase().includes(q) ||
+      ws.description.toLowerCase().includes(q)
+    );
+  }, [q]);
+
+  const filteredWalkthroughSteps = useMemo(() => {
+    if (!q) return walkthroughSteps;
+    return walkthroughSteps.filter((ws) =>
+      ws.title.toLowerCase().includes(q) ||
+      ws.page.toLowerCase().includes(q) ||
+      ws.scenario.toLowerCase().includes(q) ||
+      ws.actions.some((a) => a.toLowerCase().includes(q)) ||
+      ws.result.toLowerCase().includes(q)
+    );
+  }, [q]);
+
+  const filteredRequiredInputs = useMemo(() => {
+    if (!q) return requiredInputs;
+    return requiredInputs.filter((ri) =>
+      ri.page.toLowerCase().includes(q) ||
+      ri.critical.some((c) => c.toLowerCase().includes(q)) ||
+      ri.optional.some((o) => o.toLowerCase().includes(q)) ||
+      ri.downstream.toLowerCase().includes(q)
+    );
+  }, [q]);
+
+  const matchCount = q
+    ? filteredSections.length + filteredFeatureGuides.length + filteredWorkflowSteps.length + filteredWalkthroughSteps.length + filteredRequiredInputs.length
+    : 0;
 
   useEffect(() => {
     const headings = tocItems
@@ -942,7 +1303,7 @@ export default function AnalysisGuide() {
   return (
     <div className="p-4 max-w-5xl mx-auto">
       <div className="flex gap-6">
-        <div className="hidden lg:block w-56 shrink-0">
+        <div className={`hidden lg:block w-56 shrink-0 ${q ? "!hidden" : ""}`}>
           <div className="sticky top-4 max-h-[calc(100vh-2rem)] flex flex-col">
             <Card data-testid="card-table-of-contents" className="flex flex-col overflow-hidden">
               <CardHeader className="pb-2 shrink-0">
@@ -982,7 +1343,23 @@ export default function AnalysisGuide() {
         <div className="flex-1 min-w-0 space-y-6">
           <div>
             <h1 className="text-2xl font-bold" data-testid="text-page-title">Analysis Guide</h1>
-            <p className="text-sm text-muted-foreground">Learn how to use each page to build and analyze your financial model</p>
+            <p className="text-sm text-muted-foreground">Learn how to use each page to build and analyze your financial model and crypto analysis tools</p>
+          </div>
+
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search topics, features, steps..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+              data-testid="input-search-guide"
+            />
+            {q && (
+              <div className="mt-1.5 text-xs text-muted-foreground" data-testid="text-search-results-count">
+                {matchCount === 0 ? "No matches found" : `${matchCount} section${matchCount !== 1 ? "s" : ""} matching "${searchQuery.trim()}"`}
+              </div>
+            )}
           </div>
 
           <div className="lg:hidden">
@@ -1043,7 +1420,7 @@ export default function AnalysisGuide() {
             </Card>
           </div>
 
-          <div id="toc-workflow">
+          {filteredWorkflowSteps.length > 0 && <div id="toc-workflow">
             <Card data-testid="card-recommended-workflow">
               <CardHeader>
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -1053,7 +1430,7 @@ export default function AnalysisGuide() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {workflowSteps.map((ws) => (
+                  {filteredWorkflowSteps.map((ws) => (
                     <div key={ws.step} className="flex items-start gap-3" data-testid={`workflow-step-${ws.step}`}>
                       <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
                         {ws.step}
@@ -1070,9 +1447,9 @@ export default function AnalysisGuide() {
                 </div>
               </CardContent>
             </Card>
-          </div>
+          </div>}
 
-          <div id="toc-features">
+          {filteredFeatureGuides.length > 0 && <div id="toc-features">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <Wrench className="h-5 w-5" />
               Feature Reference
@@ -1082,7 +1459,7 @@ export default function AnalysisGuide() {
             </p>
 
             <div className="space-y-4">
-              {featureGuides.map((guide) => (
+              {filteredFeatureGuides.map((guide) => (
                 <div key={guide.id} id={`toc-feature-${guide.id}`}>
                   <Card data-testid={`card-feature-${guide.id}`}>
                     <CardHeader>
@@ -1115,9 +1492,9 @@ export default function AnalysisGuide() {
                 </div>
               ))}
             </div>
-          </div>
+          </div>}
 
-          <div id="toc-required-inputs">
+          {filteredRequiredInputs.length > 0 && <div id="toc-required-inputs">
             <Card data-testid="section-required-inputs">
               <CardHeader>
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -1129,7 +1506,7 @@ export default function AnalysisGuide() {
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
-                {requiredInputs.map((item) => {
+                {filteredRequiredInputs.map((item) => {
                   const slug = item.page.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
                   return (
                     <Card key={item.page} data-testid={`card-required-${slug}`}>
@@ -1174,9 +1551,9 @@ export default function AnalysisGuide() {
                 })}
               </CardContent>
             </Card>
-          </div>
+          </div>}
 
-          <div id="toc-walkthrough">
+          {filteredWalkthroughSteps.length > 0 && <div id="toc-walkthrough">
             <Card data-testid="card-walkthrough">
               <CardHeader>
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -1188,7 +1565,7 @@ export default function AnalysisGuide() {
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
-                {walkthroughSteps.map((ws) => (
+                {filteredWalkthroughSteps.map((ws) => (
                   <div key={ws.step} className="space-y-2" data-testid={`walkthrough-step-${ws.step}`}>
                     <div className="flex items-start gap-3">
                       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
@@ -1222,7 +1599,7 @@ export default function AnalysisGuide() {
                         )}
                       </div>
                     </div>
-                    {ws.step < walkthroughSteps.length && (
+                    {ws.step < filteredWalkthroughSteps.length && (
                       <div className="flex justify-center">
                         <ArrowDown className="h-4 w-4 text-muted-foreground" />
                       </div>
@@ -1231,13 +1608,13 @@ export default function AnalysisGuide() {
                 ))}
               </CardContent>
             </Card>
-          </div>
+          </div>}
 
-          <div id="toc-pages">
+          {filteredSections.length > 0 && <div id="toc-pages">
             <h2 className="text-lg font-semibold mb-4">Page-by-Page Breakdown</h2>
 
             <div className="space-y-4">
-              {sections.map((section) => (
+              {filteredSections.map((section) => (
                 <div key={section.id} id={`toc-page-${section.id}`}>
                   <Card data-testid={`card-guide-${section.id}`}>
                     <CardHeader>
@@ -1325,7 +1702,17 @@ export default function AnalysisGuide() {
                 </div>
               ))}
             </div>
-          </div>
+          </div>}
+
+          {q && matchCount === 0 && (
+            <Card data-testid="card-no-results">
+              <CardContent className="py-8 text-center">
+                <Search className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">No results found for "{searchQuery.trim()}"</p>
+                <p className="text-xs text-muted-foreground mt-1">Try broader keywords like "DCF", "tokenomics", "portfolio", or "crypto"</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
