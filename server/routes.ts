@@ -1756,12 +1756,13 @@ export async function registerRoutes(server: Server, app: Express) {
     const project = await storage.getCryptoProject(req.params.id as string, userId);
     if (!project) return res.status(404).json({ message: "Project not found" });
     const existing = await storage.getTokenAllocations(project.id);
-    if (existing.length > 0) return res.status(400).json({ message: "Allocations already exist. Delete them first to re-seed." });
+    if (existing.length > 0) return res.status(400).json({ message: "Allocations already exist. Clear them first to re-seed." });
 
-    const { lookupCuratedAllocations, mapCuratedToAllocations } = await import("./crypto-data");
+    const { lookupCuratedAllocations, mapCuratedToAllocations, researchAllocationsWithAI, mapAIToAllocations } = await import("./crypto-data");
     let allocationsToCreate: Record<string, unknown>[] = [];
     let source = "fallback";
 
+    // Priority 1: Curated verified data
     const slugsToTry = [project.symbol, project.coingeckoId, project.name].filter(Boolean) as string[];
     for (const s of slugsToTry) {
       const curatedData = lookupCuratedAllocations(s);
@@ -1772,6 +1773,23 @@ export async function registerRoutes(server: Server, app: Express) {
       }
     }
 
+    // Priority 2: AI-powered research
+    if (allocationsToCreate.length === 0) {
+      try {
+        const tokenName = project.name || "";
+        const tokenSymbol = project.symbol || "";
+        const totalSupply = project.totalSupply || project.maxSupply || null;
+        const aiResult = await researchAllocationsWithAI(tokenName, tokenSymbol, totalSupply);
+        if (aiResult && aiResult.allocations.length > 0) {
+          allocationsToCreate = mapAIToAllocations(aiResult, project.id, totalSupply);
+          source = `ai-researched:${aiResult.confidence}`;
+        }
+      } catch (err) {
+        console.error("AI allocation research failed, falling back to template:", err);
+      }
+    }
+
+    // Priority 3: Generic industry-average template
     if (allocationsToCreate.length === 0) {
       const totalSupply = project.totalSupply || project.maxSupply || 0;
       allocationsToCreate = [
@@ -1789,6 +1807,15 @@ export async function registerRoutes(server: Server, app: Express) {
       results.push(created);
     }
     res.json({ source, allocations: results });
+  });
+
+  app.delete("/api/crypto/projects/:id/allocations/clear", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const project = await storage.getCryptoProject(req.params.id as string, userId);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    await storage.deleteAllTokenAllocations(project.id);
+    res.json({ success: true });
   });
 
   app.patch("/api/crypto/allocations/:id", async (req: Request, res: Response) => {

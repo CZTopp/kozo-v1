@@ -679,3 +679,122 @@ export function mapCuratedToAllocations(data: TokenAllocationData, projectId: st
     sortOrder: i,
   }));
 }
+
+// ===================== OpenAI Allocation Research Service =====================
+
+interface AIAllocationResult {
+  allocations: AllocationEntry[];
+  totalSupply: number | null;
+  confidence: "high" | "medium" | "low";
+  notes: string;
+}
+
+export async function researchAllocationsWithAI(
+  tokenName: string,
+  tokenSymbol: string,
+  totalSupply: number | null,
+): Promise<AIAllocationResult | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.log("OpenAI API key not configured, skipping AI research");
+    return null;
+  }
+
+  const { default: OpenAI } = await import("openai");
+  const openai = new OpenAI({ apiKey });
+
+  const supplyContext = totalSupply
+    ? `The token has a total/max supply of ${totalSupply.toLocaleString()} tokens.`
+    : "Total supply is unknown.";
+
+  const prompt = `You are a cryptocurrency tokenomics analyst. Research and provide the known token allocation breakdown for the cryptocurrency "${tokenName}" (symbol: ${tokenSymbol}).
+
+${supplyContext}
+
+Return a JSON object with this exact structure:
+{
+  "allocations": [
+    {
+      "category": "Category Name (e.g. Team, Investors, Community)",
+      "standardGroup": "one of: team, investors, public, treasury, community",
+      "percentage": 20.0,
+      "vestingMonths": 48 or null,
+      "cliffMonths": 12 or null,
+      "tgePercent": 0 or null,
+      "vestingType": "one of: linear, cliff, immediate, custom",
+      "description": "Brief description of this allocation bucket and vesting terms",
+      "references": "Known sources: whitepaper URLs, blog posts, documentation links"
+    }
+  ],
+  "totalSupply": 1000000000 or null,
+  "confidence": "high if well-documented major token, medium if publicly known but less documented, low if uncertain",
+  "notes": "Brief note about data quality and any caveats"
+}
+
+Rules:
+- Percentages MUST sum to exactly 100%
+- Use real data from the project's whitepaper, documentation, ICO/token sale details, and public announcements
+- Include vesting schedules if known (vestingMonths = total vesting duration, cliffMonths = initial lockup before any tokens release)
+- tgePercent = percentage of that allocation released at Token Generation Event (launch)
+- standardGroup must be one of: team, investors, public, treasury, community
+- If you don't have reliable data for this token, set confidence to "low" and provide your best estimate based on similar projects
+- For references, include specific URLs when known (whitepaper, blog posts, official docs)
+- Return ONLY valid JSON, no markdown or explanation`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.1,
+      max_tokens: 2000,
+      response_format: { type: "json_object" },
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) return null;
+
+    const parsed = JSON.parse(content) as AIAllocationResult;
+
+    if (!parsed.allocations || !Array.isArray(parsed.allocations) || parsed.allocations.length === 0) {
+      return null;
+    }
+
+    const totalPct = parsed.allocations.reduce((sum, a) => sum + (a.percentage || 0), 0);
+    if (totalPct < 90 || totalPct > 110) {
+      console.log(`AI allocation percentages sum to ${totalPct}%, expected ~100%`);
+    }
+
+    return parsed;
+  } catch (err) {
+    console.error("OpenAI allocation research error:", err);
+    return null;
+  }
+}
+
+export function mapAIToAllocations(
+  data: AIAllocationResult,
+  projectId: string,
+  totalSupply: number | null,
+): Record<string, unknown>[] {
+  const supply = totalSupply || data.totalSupply || null;
+  return data.allocations.map((a, i) => ({
+    projectId,
+    category: a.category,
+    standardGroup: a.standardGroup || inferStandardGroup(a.category),
+    percentage: Math.round((a.percentage || 0) * 100) / 100,
+    amount: supply ? Math.round(supply * (a.percentage / 100)) : null,
+    vestingMonths: a.vestingMonths || null,
+    cliffMonths: a.cliffMonths || null,
+    tgePercent: a.tgePercent ?? null,
+    vestingType: a.vestingType || "custom",
+    dataSource: `AI-Researched (${data.confidence} confidence)`,
+    releasedPercent: null,
+    releasedAmount: null,
+    precision: null,
+    assumption: `AI-Researched (${data.confidence})`,
+    references: a.references || null,
+    description: a.description || null,
+    notes: data.notes || null,
+    sortOrder: i,
+  }));
+}

@@ -96,6 +96,17 @@ Kozo is a comprehensive financial modeling and valuation platform designed to pr
 - **Cached Data API**: `GET /api/crypto/projects/:id/cached-data` returns cached on-chain/DeFi data with staleness flags
 - **New schema columns**: `cachedOnchainData`, `onchainDataFetchedAt`, `cachedDefiData`, `defiDataFetchedAt`, `chainId`, `contractAddress`, `stakingContract`, `notes`
 
+### Token Allocation Research Service
+- **AI-Powered Allocation Research**: When seeding allocations for a project, the system uses a 3-tier priority chain:
+  1. **Curated Data** (highest confidence): Verified allocation data for 13 major tokens (BTC, ETH, SOL, AVAX, UNI, AAVE, ARB, OP, LINK, MATIC, TRX, MNT, HASH)
+  2. **AI Research** (OpenAI gpt-4o-mini): For any token not in the curated list, calls OpenAI with structured prompt to research allocation breakdowns from training data (whitepapers, docs, research reports). Returns categories, percentages, vesting schedules, and references with confidence level (high/medium/low)
+  3. **Industry Template** (fallback): Generic industry-average allocations if both above fail
+- **Clear & Re-seed**: Users can clear all allocations and re-seed to get fresh data
+- **AI Disclaimer Banner**: Yellow warning banner shown when allocations are AI-researched, advising review
+- **CoinGecko Supply Enrichment**: AI percentage results are multiplied by project's total/max supply to calculate token amounts
+- **Source Attribution**: Each allocation entry shows its source (Curated/AI-Researched/Industry Average) in the table
+- Key files: server/crypto-data.ts (curated data + AI research service), server/routes.ts (seed + clear endpoints), client/src/pages/crypto-tokenomics.tsx
+
 ### Admin Panel
 - `isAdmin` boolean column on `users` table, default `false`
 - Admin middleware: checks `users.isAdmin` before allowing access to `/api/admin/*` routes

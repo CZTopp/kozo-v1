@@ -148,6 +148,7 @@ export interface IStorage {
   createTokenAllocation(data: InsertTokenAllocation): Promise<TokenAllocation>;
   updateTokenAllocation(id: string, data: Partial<InsertTokenAllocation>): Promise<TokenAllocation>;
   deleteTokenAllocation(id: string): Promise<void>;
+  deleteAllTokenAllocations(projectId: string): Promise<void>;
 
   getFundraisingRounds(projectId: string): Promise<FundraisingRound[]>;
   createFundraisingRound(data: InsertFundraisingRound): Promise<FundraisingRound>;
@@ -682,6 +683,10 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTokenAllocation(id: string) {
     await db.delete(tokenAllocations).where(eq(tokenAllocations.id, id));
+  }
+
+  async deleteAllTokenAllocations(projectId: string) {
+    await db.delete(tokenAllocations).where(eq(tokenAllocations.projectId, projectId));
   }
 
   async getFundraisingRounds(projectId: string) {
