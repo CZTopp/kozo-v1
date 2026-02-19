@@ -7,8 +7,8 @@ import { fetchAndParseEdgar } from "./edgar-parser";
 import { searchCompanyByTicker, getCompanyFilings, fetchAndParseAllStatements } from "./sec-search";
 import { streamCopilotToResponse } from "./copilot";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
-import { revenuePeriods } from "@shared/schema";
+import { eq, and, sql, count } from "drizzle-orm";
+import { revenuePeriods, users, financialModels, portfolioPositions, cryptoProjects } from "@shared/schema";
 import { isAuthenticated } from "./replit_integrations/auth";
 import {
   insertFinancialModelSchema, insertRevenueLineItemSchema,
@@ -1320,6 +1320,56 @@ export async function registerRoutes(server: Server, app: Express) {
         res.end();
       }
     }
+  });
+
+  const isAdmin = async (req: Request, res: Response, next: Function) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user?.isAdmin) return res.status(403).json({ message: "Forbidden" });
+    next();
+  };
+
+  app.get("/api/admin/stats", isAdmin as any, async (_req: Request, res: Response) => {
+    const [userCount] = await db.select({ value: count() }).from(users);
+    const [modelCount] = await db.select({ value: count() }).from(financialModels);
+    const [positionCount] = await db.select({ value: count() }).from(portfolioPositions);
+    const [cryptoCount] = await db.select({ value: count() }).from(cryptoProjects);
+    res.json({
+      users: userCount.value,
+      models: modelCount.value,
+      positions: positionCount.value,
+      cryptoProjects: cryptoCount.value,
+    });
+  });
+
+  app.get("/api/admin/users", isAdmin as any, async (_req: Request, res: Response) => {
+    const allUsers = await db.select().from(users);
+    const modelsPerUser = await db
+      .select({ userId: financialModels.userId, value: count() })
+      .from(financialModels)
+      .groupBy(financialModels.userId);
+    const positionsPerUser = await db
+      .select({ userId: portfolioPositions.userId, value: count() })
+      .from(portfolioPositions)
+      .groupBy(portfolioPositions.userId);
+
+    const enriched = allUsers.map((u) => ({
+      ...u,
+      modelCount: modelsPerUser.find((m) => m.userId === u.id)?.value ?? 0,
+      positionCount: positionsPerUser.find((p) => p.userId === u.id)?.value ?? 0,
+    }));
+    res.json(enriched);
+  });
+
+  app.patch("/api/admin/users/:id", isAdmin as any, async (req: Request<Params>, res: Response) => {
+    const currentUserId = (req as any).user?.claims?.sub as string;
+    const { isAdmin: makeAdmin } = req.body;
+    if (typeof makeAdmin !== "boolean") return res.status(400).json({ message: "isAdmin must be boolean" });
+    if (req.params.id === currentUserId) return res.status(400).json({ message: "Cannot modify your own admin status" });
+    const [updated] = await db.update(users).set({ isAdmin: makeAdmin }).where(eq(users.id, req.params.id)).returning();
+    if (!updated) return res.status(404).json({ message: "User not found" });
+    res.json(updated);
   });
 
 }

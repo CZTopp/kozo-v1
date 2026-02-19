@@ -22,6 +22,7 @@ import {
   Globe,
   RefreshCw,
   Coins,
+  Shield,
 } from "lucide-react";
 import {
   Sidebar,
@@ -71,6 +72,7 @@ import { Label } from "@/components/ui/label";
 import { useModel } from "@/lib/model-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 
 const modelingItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -96,6 +98,7 @@ export function AppSidebar() {
   const [location] = useLocation();
   const { models, selectedModel, setSelectedModelId } = useModel();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -399,6 +402,23 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {user?.isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Administration</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={location === "/admin"}>
+                    <Link href="/admin" data-testid="link-nav-admin">
+                      <Shield className="h-4 w-4" />
+                      <span>Admin Panel</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

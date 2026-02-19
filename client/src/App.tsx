@@ -29,6 +29,7 @@ import CryptoDashboard from "@/pages/crypto-dashboard";
 import CryptoTokenomics from "@/pages/crypto-tokenomics";
 import CryptoFinancials from "@/pages/crypto-financials";
 import CryptoValuation from "@/pages/crypto-valuation";
+import AdminPage from "@/pages/admin";
 import Landing from "@/pages/landing";
 
 function Router() {
@@ -49,6 +50,7 @@ function Router() {
       <Route path="/crypto/tokenomics/:id" component={CryptoTokenomics} />
       <Route path="/crypto/financials/:id" component={CryptoFinancials} />
       <Route path="/crypto/valuation/:id" component={CryptoValuation} />
+      <Route path="/admin" component={AdminPage} />
       <Route component={NotFound} />
     </Switch>
   );

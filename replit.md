@@ -79,3 +79,11 @@ Foresight is a comprehensive financial modeling and valuation platform designed 
 - Import flow: ticker search → CIK → filing list → parse all 3 statements → preview → import with year range expansion
 - Import creates quarterly revenue periods (annual÷4), IS/BS/CF actuals, triggers cascade recalculation
 - Key files: server/sec-search.ts, client/src/components/import-sec-modal.tsx, client/src/pages/revenue-forecast.tsx
+
+### Admin Panel
+- `isAdmin` boolean column on `users` table, default `false`
+- Admin middleware: checks `users.isAdmin` before allowing access to `/api/admin/*` routes
+- **Admin Routes**: `GET /api/admin/stats` (system counts), `GET /api/admin/users` (all users with model/position counts), `PATCH /api/admin/users/:id` (toggle admin)
+- **Admin Page** (`/admin`): System stats cards, user list with admin grant/revoke, protected client-side via `user?.isAdmin`
+- Admin nav link in sidebar only visible to admin users
+- Key files: client/src/pages/admin.tsx, server/routes.ts (admin routes at bottom)
