@@ -279,12 +279,12 @@ const sections = [
     title: "Tokenomics Modeler",
     icon: PieChart,
     path: "/crypto/tokenomics",
-    purpose: "Comprehensive tokenomics analysis similar to Tokenomist.ai. Five tabs cover token allocations, supply schedule, fundraising rounds, incentive mapping, and whitepaper upload. Includes governance/DAO info and projected 2035 supply calculations.",
+    purpose: "Comprehensive tokenomics analysis with five tabs covering token allocations, supply schedule, fundraising rounds, incentive mapping, and whitepaper upload. Includes governance/DAO info and projected 2035 supply calculations.",
     keyMetrics: ["Token Allocations (%)", "Projected 2035 Supply", "Circulating/Total Ratio", "FDV/MCap Ratio", "Inflation Estimate", "Total Raised", "Governance Type"],
     howToUse: [
       "Allocations Tab: Define how tokens are distributed (Team, Investors, Community, Treasury, etc.). Each allocation has percentage, token amount, vesting period, cliff, and TGE unlock. The donut chart updates in real-time.",
       "  -- Token amounts are auto-calculated from the projected 2035 supply (max supply or total supply) when you enter a percentage.",
-      "  -- 'Untracked' allocation is shown when total tracked allocations are below 100%, following the Tokenomist.ai methodology.",
+      "  -- 'Untracked' allocation is shown when total tracked allocations are below 100%, representing tokens not yet categorized.",
       "Supply Schedule Tab: Track token unlock events over time. Each entry has a label, amount, unlock date, and vesting period. A cumulative unlock area chart shows the token release timeline.",
       "Fundraising Tab: Record funding rounds with type (Seed, Private, Public/IDO, etc.), amount raised, valuation, date, token price, and lead investors. Total raised is auto-summed.",
       "Incentives Tab: Map stakeholder incentives (Liquidity Providers, Stakers, Validators, etc.) with reward type, source, APY estimates, and sustainability flags. Load pre-built templates for major protocols (BTC, ETH, SOL, UNI, AAVE).",
@@ -1113,7 +1113,7 @@ const featureGuides = [
           "Token amount is auto-calculated from the projected 2035 supply (max supply or total supply).",
           "Click 'Save' to add the allocation to the breakdown chart.",
         ],
-        notes: "The projected 2035 supply is calculated as: max supply if available, otherwise total supply. This follows the Tokenomist.ai methodology. Allocations below 100% total show an 'Untracked' slice in the donut chart.",
+        notes: "The projected 2035 supply is calculated as: max supply if available, otherwise total supply. Allocations below 100% total show an 'Untracked' slice in the donut chart.",
       },
       {
         name: "Edit or Delete Allocations",
