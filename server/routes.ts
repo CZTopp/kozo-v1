@@ -1758,20 +1758,17 @@ export async function registerRoutes(server: Server, app: Express) {
     const existing = await storage.getTokenAllocations(project.id);
     if (existing.length > 0) return res.status(400).json({ message: "Allocations already exist. Delete them first to re-seed." });
 
-    const { fetchMessariAllocations, mapMessariToAllocations } = await import("./crypto-data");
-    const slug = project.symbol || project.coingeckoId || project.name;
+    const { lookupCuratedAllocations, mapCuratedToAllocations } = await import("./crypto-data");
     let allocationsToCreate: Record<string, unknown>[] = [];
     let source = "fallback";
 
-    if (slug) {
-      const slugsToTry = [project.symbol, project.coingeckoId, project.name].filter(Boolean) as string[];
-      for (const s of slugsToTry) {
-        const messariData = await fetchMessariAllocations(s);
-        if (messariData && messariData.allocations && messariData.allocations.length > 0) {
-          allocationsToCreate = mapMessariToAllocations(messariData, project.id);
-          source = "messari";
-          break;
-        }
+    const slugsToTry = [project.symbol, project.coingeckoId, project.name].filter(Boolean) as string[];
+    for (const s of slugsToTry) {
+      const curatedData = lookupCuratedAllocations(s);
+      if (curatedData) {
+        allocationsToCreate = mapCuratedToAllocations(curatedData, project.id);
+        source = "curated";
+        break;
       }
     }
 

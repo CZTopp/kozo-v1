@@ -481,31 +481,25 @@ export const INCENTIVE_TEMPLATES: Record<string, IncentiveTemplate[]> = {
   ],
 };
 
-// ===================== Messari Token Unlocks API =====================
+// ===================== Token Allocation Data =====================
 
-interface MessariAllocation {
-  allocationRecipient: string;
-  totalAllocationUSD: number;
-  totalAllocationNative: number;
-  cumulativeUnlockedUSD: number;
-  cumulativeUnlockedNative: number;
-  unlocksRemainingUSD: number;
-  unlocksRemainingNative: number;
-  percentOfUnlocksCompleted: number;
+interface AllocationEntry {
+  category: string;
+  standardGroup: string;
+  percentage: number;
+  amount: number | null;
+  vestingMonths: number | null;
+  cliffMonths: number | null;
+  tgePercent: number | null;
+  vestingType: string;
+  assumption: string;
   description: string;
-  assumptions: string;
-  sources: { sourceType: string; source: string }[];
+  references: string;
 }
 
-interface MessariAssetAllocation {
-  asset: { id: string; name: string; slug: string; symbol: string };
-  genesisDate: string;
-  projectedEndDate: string;
-  totalAllocationNative: number;
-  totalAllocationUSD: number;
-  percentOfUnlocksCompleted: number;
-  allocationRecipientCount: number;
-  allocations: MessariAllocation[];
+interface TokenAllocationData {
+  totalSupply: number;
+  allocations: AllocationEntry[];
 }
 
 function inferStandardGroup(recipient: string): string {
@@ -517,94 +511,138 @@ function inferStandardGroup(recipient: string): string {
   return "community";
 }
 
-function parseVestingFromDescription(desc: string): { vestingMonths: number | null; cliffMonths: number | null; tgePercent: number | null; vestingType: string } {
-  const result: { vestingMonths: number | null; cliffMonths: number | null; tgePercent: number | null; vestingType: string } = {
-    vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "linear"
-  };
-  if (!desc) return result;
-  const lower = desc.toLowerCase();
+const CURATED_ALLOCATIONS: Record<string, TokenAllocationData> = {
+  "aave": {
+    totalSupply: 16000000,
+    allocations: [
+      { category: "LEND to AAVE Migrator", standardGroup: "community", percentage: 81.25, amount: 13000000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Inferred On-chain", description: "13 million AAVE tokens redeemed by LEND token holders at 100:1 ratio", references: "https://etherscan.io, https://github.com/aave/aave-token" },
+      { category: "AAVE Ecosystem Reserve", standardGroup: "treasury", percentage: 18.75, amount: 3000000, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Vesting Contract", description: "3 million AAVE allocated to the Aave Ecosystem Reserve for protocol development", references: "https://etherscan.io, https://github.com/aave/aave-token" },
+    ],
+  },
+  "pixels": {
+    totalSupply: 5000000000,
+    allocations: [
+      { category: "Play and Earn", standardGroup: "community", percentage: 34, amount: 1700000000, vestingMonths: 60, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "Unlocks monthly over 60 months for in-game rewards", references: "https://www.binance.com/en/research/projects/pixels" },
+      { category: "Ecosystem Fund", standardGroup: "treasury", percentage: 20, amount: 1000000000, vestingMonths: 60, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "Ecosystem development and grants, unlocks monthly over 60 months", references: "https://www.binance.com/en/research/projects/pixels" },
+      { category: "Team", standardGroup: "team", percentage: 22, amount: 1100000000, vestingMonths: 48, cliffMonths: 12, tgePercent: 0, vestingType: "linear", assumption: "Public Project Data", description: "Team allocation with 12-month cliff followed by 48-month linear vesting", references: "https://www.binance.com/en/research/projects/pixels" },
+      { category: "Investors", standardGroup: "investors", percentage: 17, amount: 850000000, vestingMonths: 36, cliffMonths: 6, tgePercent: 0, vestingType: "linear", assumption: "Public Project Data", description: "Private investors with 6-month cliff then 36-month linear vest", references: "https://www.binance.com/en/research/projects/pixels" },
+      { category: "Binance Launchpool", standardGroup: "public", percentage: 7, amount: 350000000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "100% released at TGE via Binance Launchpool", references: "https://www.binance.com/en/research/projects/pixels" },
+    ],
+  },
+  "bitcoin": {
+    totalSupply: 21000000,
+    allocations: [
+      { category: "Block Rewards (Mining)", standardGroup: "community", percentage: 100, amount: 21000000, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Protocol Emission", description: "All 21M BTC distributed via proof-of-work mining. Block reward halves every 210,000 blocks (~4 years). ~19.9M mined as of 2025.", references: "https://bitcoin.org/bitcoin.pdf" },
+    ],
+  },
+  "ethereum": {
+    totalSupply: 72009990.5,
+    allocations: [
+      { category: "Crowdsale Participants", standardGroup: "public", percentage: 83.33, amount: 60000000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "60M ETH sold in July-August 2014 crowdsale at ~$0.31 per ETH", references: "https://blog.ethereum.org/2014/07/22/launching-the-ether-sale" },
+      { category: "Ethereum Foundation", standardGroup: "treasury", percentage: 8.33, amount: 6000000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "6M ETH allocated to Ethereum Foundation for development", references: "https://blog.ethereum.org/2014/07/22/launching-the-ether-sale" },
+      { category: "Early Contributors", standardGroup: "team", percentage: 8.33, amount: 6009990.5, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "~6M ETH allocated to early contributors and developers", references: "https://blog.ethereum.org/2014/07/22/launching-the-ether-sale" },
+    ],
+  },
+  "solana": {
+    totalSupply: 589000000,
+    allocations: [
+      { category: "Seed Round", standardGroup: "investors", percentage: 16.23, amount: 95600000, vestingMonths: 24, cliffMonths: 12, tgePercent: 0, vestingType: "linear", assumption: "Public Project Data", description: "Seed investors, 12-month cliff then 24-month linear vest", references: "https://solana.com/solana-whitepaper.pdf, https://messari.io/project/solana" },
+      { category: "Founding Sale", standardGroup: "investors", percentage: 12.92, amount: 76100000, vestingMonths: 24, cliffMonths: 12, tgePercent: 0, vestingType: "linear", assumption: "Public Project Data", description: "Founding round investors", references: "https://messari.io/project/solana" },
+      { category: "Team", standardGroup: "team", percentage: 12.79, amount: 75300000, vestingMonths: 48, cliffMonths: 12, tgePercent: 0, vestingType: "linear", assumption: "Public Project Data", description: "Core team allocation with 12-month cliff and 48-month vesting", references: "https://messari.io/project/solana" },
+      { category: "Foundation", standardGroup: "treasury", percentage: 10.46, amount: 61600000, vestingMonths: 48, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "Solana Foundation for ecosystem development", references: "https://solana.org" },
+      { category: "Validator Sale", standardGroup: "investors", percentage: 5.18, amount: 30500000, vestingMonths: 24, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "Validator sale participants", references: "https://messari.io/project/solana" },
+      { category: "Community Reserve", standardGroup: "community", percentage: 38.89, amount: 229000000, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Public Project Data", description: "Community and ecosystem incentives including staking rewards", references: "https://solana.org" },
+      { category: "Strategic Sale", standardGroup: "investors", percentage: 1.88, amount: 11100000, vestingMonths: 24, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "Strategic round", references: "https://messari.io/project/solana" },
+      { category: "Auction (CoinList)", standardGroup: "public", percentage: 1.64, amount: 9650000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "CoinList public auction, 100% released at TGE", references: "https://coinlist.co/solana" },
+    ],
+  },
+  "uniswap": {
+    totalSupply: 1000000000,
+    allocations: [
+      { category: "Community Governance", standardGroup: "community", percentage: 43, amount: 430000000, vestingMonths: 48, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "43% for community governance treasury, vesting over 4 years", references: "https://blog.uniswap.org/uni" },
+      { category: "Team & Employees", standardGroup: "team", percentage: 21.266, amount: 212660000, vestingMonths: 48, cliffMonths: 12, tgePercent: 0, vestingType: "linear", assumption: "Vesting Contract", description: "Team with 1-year cliff and 4-year total vesting", references: "https://blog.uniswap.org/uni, https://etherscan.io" },
+      { category: "Investors", standardGroup: "investors", percentage: 18.044, amount: 180440000, vestingMonths: 48, cliffMonths: 12, tgePercent: 0, vestingType: "linear", assumption: "Vesting Contract", description: "Investors with 1-year cliff and 4-year total vesting", references: "https://blog.uniswap.org/uni" },
+      { category: "Advisors", standardGroup: "team", percentage: 0.69, amount: 6900000, vestingMonths: 48, cliffMonths: 12, tgePercent: 0, vestingType: "linear", assumption: "Vesting Contract", description: "Advisors with 1-year cliff and 4-year total vesting", references: "https://blog.uniswap.org/uni" },
+      { category: "Community Airdrop", standardGroup: "community", percentage: 15, amount: 150000000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Inferred On-chain", description: "15% airdropped to historical users (400 UNI per address)", references: "https://blog.uniswap.org/uni" },
+      { category: "Liquidity Mining", standardGroup: "community", percentage: 2, amount: 20000000, vestingMonths: 2, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "Initial liquidity mining program", references: "https://blog.uniswap.org/uni" },
+    ],
+  },
+  "arbitrum": {
+    totalSupply: 10000000000,
+    allocations: [
+      { category: "DAO Treasury", standardGroup: "treasury", percentage: 42.78, amount: 4278000000, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Public Project Data", description: "DAO treasury controlled by governance", references: "https://docs.arbitrum.foundation/airdrop-eligibility-distribution" },
+      { category: "Team & Advisors", standardGroup: "team", percentage: 26.94, amount: 2694000000, vestingMonths: 48, cliffMonths: 12, tgePercent: 0, vestingType: "linear", assumption: "Public Project Data", description: "Team and advisors with 1-year cliff and 4-year vesting", references: "https://docs.arbitrum.foundation/airdrop-eligibility-distribution" },
+      { category: "Investors", standardGroup: "investors", percentage: 17.53, amount: 1753000000, vestingMonths: 48, cliffMonths: 12, tgePercent: 0, vestingType: "linear", assumption: "Public Project Data", description: "Investors with 1-year cliff and 4-year vesting", references: "https://docs.arbitrum.foundation/airdrop-eligibility-distribution" },
+      { category: "Airdrop", standardGroup: "community", percentage: 11.62, amount: 1162000000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Inferred On-chain", description: "Community airdrop to eligible addresses", references: "https://docs.arbitrum.foundation/airdrop-eligibility-distribution" },
+      { category: "DAOs in Ecosystem", standardGroup: "community", percentage: 1.13, amount: 113000000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "Airdrop to DAOs building on Arbitrum", references: "https://docs.arbitrum.foundation/airdrop-eligibility-distribution" },
+    ],
+  },
+  "optimism": {
+    totalSupply: 4294967296,
+    allocations: [
+      { category: "Ecosystem Fund", standardGroup: "treasury", percentage: 25, amount: 1073741824, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Public Project Data", description: "Ecosystem fund for grants, partnerships, and growth", references: "https://community.optimism.io/docs/governance/allocations/" },
+      { category: "Retroactive Public Goods", standardGroup: "community", percentage: 20, amount: 858993459, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Public Project Data", description: "Funding public goods retroactively via RPGF rounds", references: "https://community.optimism.io/docs/governance/allocations/" },
+      { category: "Core Contributors", standardGroup: "team", percentage: 19, amount: 816044186, vestingMonths: 48, cliffMonths: 12, tgePercent: 0, vestingType: "linear", assumption: "Public Project Data", description: "Core team with 1-year cliff and 4-year vesting", references: "https://community.optimism.io/docs/governance/allocations/" },
+      { category: "Investors", standardGroup: "investors", percentage: 17, amount: 730144440, vestingMonths: 48, cliffMonths: 12, tgePercent: 0, vestingType: "linear", assumption: "Public Project Data", description: "Investors with 1-year cliff and 4-year vesting", references: "https://community.optimism.io/docs/governance/allocations/" },
+      { category: "Airdrop", standardGroup: "community", percentage: 19, amount: 816044186, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Inferred On-chain", description: "Community airdrop across multiple seasons", references: "https://community.optimism.io/docs/governance/allocations/" },
+    ],
+  },
+  "chainlink": {
+    totalSupply: 1000000000,
+    allocations: [
+      { category: "Node Operators & Ecosystem", standardGroup: "community", percentage: 35, amount: 350000000, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Public Project Data", description: "Reserved for node operator rewards and ecosystem incentives", references: "https://chain.link/whitepaper" },
+      { category: "Public Token Sale", standardGroup: "public", percentage: 35, amount: 350000000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "Sold in September 2017 ICO at $0.11 per LINK", references: "https://chain.link/whitepaper" },
+      { category: "Company (Chainlink Labs)", standardGroup: "team", percentage: 30, amount: 300000000, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Public Project Data", description: "Retained by Chainlink Labs for development and operations", references: "https://chain.link/whitepaper" },
+    ],
+  },
+  "polygon": {
+    totalSupply: 10000000000,
+    allocations: [
+      { category: "Staking Rewards", standardGroup: "community", percentage: 12, amount: 1200000000, vestingMonths: 60, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "Staking rewards distributed over 5 years", references: "https://polygon.technology/papers/pol-whitepaper" },
+      { category: "Team", standardGroup: "team", percentage: 16, amount: 1600000000, vestingMonths: 48, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "Team allocation vesting over 4 years", references: "https://polygon.technology" },
+      { category: "Advisors", standardGroup: "team", percentage: 4, amount: 400000000, vestingMonths: 48, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "Advisors vesting over 4 years", references: "https://polygon.technology" },
+      { category: "Ecosystem", standardGroup: "treasury", percentage: 23.33, amount: 2333000000, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Public Project Data", description: "Ecosystem development fund", references: "https://polygon.technology" },
+      { category: "Foundation", standardGroup: "treasury", percentage: 21.86, amount: 2186000000, vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "custom", assumption: "Public Project Data", description: "Foundation reserve for long-term development", references: "https://polygon.technology" },
+      { category: "Launchpad & IEO", standardGroup: "public", percentage: 19, amount: 1900000000, vestingMonths: null, cliffMonths: null, tgePercent: 100, vestingType: "immediate", assumption: "Public Project Data", description: "Binance Launchpad IEO (April 2019) and private sales", references: "https://www.binance.com/en/research/projects/matic-network" },
+      { category: "Private Sale", standardGroup: "investors", percentage: 3.8, amount: 380000000, vestingMonths: 24, cliffMonths: null, tgePercent: null, vestingType: "linear", assumption: "Public Project Data", description: "Early private sale investors", references: "https://polygon.technology" },
+    ],
+  },
+};
 
-  const tgeMatch = lower.match(/(\d+(?:\.\d+)?)\s*%\s*(?:of allocation\s+)?(?:released\s+)?(?:at|on)\s*tge/i) || lower.match(/tge.*?(\d+(?:\.\d+)?)\s*%/i);
-  if (tgeMatch) result.tgePercent = parseFloat(tgeMatch[1]);
-  if (/100%\s*(?:vested|released|unlocked)\s*(?:at|on)\s*tge/i.test(lower) || /100%\s*(?:of allocation\s+)?released at tge/i.test(lower)) {
-    result.tgePercent = 100; result.vestingType = "immediate"; return result;
+const ALLOCATION_ALIASES: Record<string, string> = {
+  "btc": "bitcoin", "eth": "ethereum", "sol": "solana", "uni": "uniswap",
+  "link": "chainlink", "arb": "arbitrum", "op": "optimism", "matic": "polygon",
+  "pol": "polygon", "pixel": "pixels", "pixel-online": "pixels",
+};
+
+export function lookupCuratedAllocations(symbolOrSlug: string): TokenAllocationData | null {
+  const key = symbolOrSlug.toLowerCase().trim();
+  if (CURATED_ALLOCATIONS[key]) return CURATED_ALLOCATIONS[key];
+  if (ALLOCATION_ALIASES[key] && CURATED_ALLOCATIONS[ALLOCATION_ALIASES[key]]) {
+    return CURATED_ALLOCATIONS[ALLOCATION_ALIASES[key]];
   }
-
-  const cliffMatch = lower.match(/(\d+)[\s-]*month\s*cliff/i) || lower.match(/(\d+)[\s-]*year\s*cliff/i);
-  if (cliffMatch) {
-    result.cliffMonths = lower.includes("year") ? parseInt(cliffMatch[1]) * 12 : parseInt(cliffMatch[1]);
-  }
-
-  const vestMatch = lower.match(/(\d+)[\s-]*month\s*(?:linear\s*)?vest/i) || lower.match(/(\d+)[\s-]*year\s*(?:linear\s*)?vest/i)
-    || lower.match(/over\s*(\d+)\s*months/i) || lower.match(/over\s*(\d+)\s*years/i);
-  if (vestMatch) {
-    result.vestingMonths = (lower.includes("year") && !lower.match(/over\s*\d+\s*months/i)) ? parseInt(vestMatch[1]) * 12 : parseInt(vestMatch[1]);
-  }
-
-  if (/non-linear|governance|custom/i.test(lower)) result.vestingType = "custom";
-  else if (/cliff/i.test(lower) && !result.vestingMonths) result.vestingType = "cliff";
-  else if (/immediate|instant|tge/i.test(lower) && result.tgePercent === 100) result.vestingType = "immediate";
-
-  return result;
+  return null;
 }
 
-export async function fetchMessariAllocations(symbolOrSlug: string): Promise<MessariAssetAllocation | null> {
-  const apiKey = process.env.MESSARI_API_KEY;
-  const headers: Record<string, string> = { "Accept": "application/json" };
-  if (apiKey) headers["X-Messari-API-Key"] = apiKey;
-
-  try {
-    const url = `${MESSARI_BASE}/token-unlocks/v1/allocations?assetId=${encodeURIComponent(symbolOrSlug.toLowerCase())}`;
-    const resp = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
-    if (!resp.ok) {
-      console.log(`Messari API returned ${resp.status} for ${symbolOrSlug}`);
-      return null;
-    }
-    const json = await resp.json();
-    const data = json?.data;
-    if (!data || !Array.isArray(data) || data.length === 0) return null;
-
-    const match = data.find((d: MessariAssetAllocation) =>
-      d.asset.symbol.toLowerCase() === symbolOrSlug.toLowerCase() ||
-      d.asset.slug.toLowerCase() === symbolOrSlug.toLowerCase() ||
-      d.asset.name.toLowerCase() === symbolOrSlug.toLowerCase()
-    ) || data[0];
-
-    return match;
-  } catch (err) {
-    console.error(`Messari fetch error for ${symbolOrSlug}:`, err);
-    return null;
-  }
-}
-
-export function mapMessariToAllocations(data: MessariAssetAllocation, projectId: string): Record<string, unknown>[] {
-  const totalNative = data.totalAllocationNative || 1;
-  return data.allocations.map((a, i) => {
-    const pct = totalNative > 0 ? (a.totalAllocationNative / totalNative) * 100 : 0;
-    const relPct = a.percentOfUnlocksCompleted * 100;
-    const vesting = parseVestingFromDescription(a.description);
-    const refs = a.sources.map(s => s.source).filter(Boolean).join(", ");
-    const sourceTypes = a.sources.map(s => s.sourceType).filter(Boolean).join(", ");
-
-    return {
-      projectId,
-      category: a.allocationRecipient,
-      standardGroup: inferStandardGroup(a.allocationRecipient),
-      percentage: Math.round(pct * 100) / 100,
-      amount: a.totalAllocationNative,
-      vestingMonths: vesting.vestingMonths,
-      cliffMonths: vesting.cliffMonths,
-      tgePercent: vesting.tgePercent,
-      vestingType: vesting.vestingType,
-      dataSource: sourceTypes || "Messari",
-      releasedPercent: Math.round(relPct * 100) / 100,
-      releasedAmount: a.cumulativeUnlockedNative,
-      precision: null,
-      assumption: a.assumptions || null,
-      references: refs || null,
-      description: a.description || null,
-      notes: null,
-      sortOrder: i,
-    };
-  });
+export function mapCuratedToAllocations(data: TokenAllocationData, projectId: string): Record<string, unknown>[] {
+  return data.allocations.map((a, i) => ({
+    projectId,
+    category: a.category,
+    standardGroup: a.standardGroup,
+    percentage: a.percentage,
+    amount: a.amount,
+    vestingMonths: a.vestingMonths,
+    cliffMonths: a.cliffMonths,
+    tgePercent: a.tgePercent,
+    vestingType: a.vestingType,
+    dataSource: a.assumption || "Curated",
+    releasedPercent: null,
+    releasedAmount: null,
+    precision: null,
+    assumption: a.assumption || null,
+    references: a.references || null,
+    description: a.description || null,
+    notes: null,
+    sortOrder: i,
+  }));
 }

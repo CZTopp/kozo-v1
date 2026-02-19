@@ -142,7 +142,7 @@ export default function CryptoTokenomics() {
 
   const seedAllocationsMutation = useMutation({
     mutationFn: async () => { const res = await apiRequest("POST", `/api/crypto/projects/${projectId}/allocations/seed`); return res.json(); },
-    onSuccess: (data: { source: string }) => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "allocations"] }); toast({ title: data.source === "messari" ? "Real allocation data loaded from Messari" : "Standard template allocations seeded" }); },
+    onSuccess: (data: { source: string }) => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "allocations"] }); toast({ title: data.source === "curated" ? "Real allocation data loaded" : "Standard template allocations seeded" }); },
     onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
 
