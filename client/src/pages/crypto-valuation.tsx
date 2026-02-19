@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import type { CryptoProject, ProtocolMetric, TokenIncentive } from "@shared/schema";
+import type { CryptoProject, ProtocolMetric, TokenIncentive, ProtocolRevenueForecast, TokenFlowEntry } from "@shared/schema";
 import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, Shield, DollarSign, Activity, Target, Scale, Users, Lock, Zap, Info } from "lucide-react";
 
 function formatCompact(value: number | null | undefined): string {
@@ -63,6 +63,16 @@ export default function CryptoValuation() {
     enabled: !!projectId,
   });
 
+  const { data: revenueForecasts } = useQuery<ProtocolRevenueForecast[]>({
+    queryKey: ["/api/crypto/projects", projectId, "revenue-forecasts"],
+    enabled: !!projectId,
+  });
+
+  const { data: tokenFlows } = useQuery<TokenFlowEntry[]>({
+    queryKey: ["/api/crypto/projects", projectId, "token-flows"],
+    enabled: !!projectId,
+  });
+
   const [discountRate, setDiscountRate] = useState(15);
   const [growthRate, setGrowthRate] = useState(10);
   const [terminalGrowth, setTerminalGrowth] = useState(2);
@@ -104,6 +114,19 @@ export default function CryptoValuation() {
     : 0;
   const hasRevenue = annualizedRevenue > 0;
 
+  const baseForecasts = (revenueForecasts || [])
+    .filter(f => f.scenario === "base")
+    .sort((a, b) => a.year - b.year);
+  const hasForecastData = baseForecasts.length > 0;
+  const forecastProjections = baseForecasts.filter(f => (f.growthRate || 0) > 0 || f.year >= new Date().getFullYear());
+  const futureForecasts = forecastProjections.length > 0 ? forecastProjections : baseForecasts.slice(-5);
+
+  const sortedFlows = (tokenFlows || []).sort((a, b) => a.period - b.period);
+  const hasTokenFlowData = sortedFlows.length > 0;
+  const projectedSupply = hasTokenFlowData
+    ? sortedFlows[sortedFlows.length - 1].cumulativeSupply || 0
+    : 0;
+
   const currentPrice = project.currentPrice || 0;
   const marketCap = project.marketCap || 0;
   const fdv = project.fullyDilutedValuation || 0;
@@ -113,24 +136,41 @@ export default function CryptoValuation() {
   const maxSupply = project.maxSupply || 0;
   const volume24h = project.volume24h || 0;
 
+  const effectiveSupply = hasTokenFlowData && projectedSupply > 0
+    ? projectedSupply
+    : circulatingSupply;
+
   const dcfProjections = [];
   let totalPV = 0;
   const dr = discountRate / 100;
   const gr = growthRate / 100;
   const tg = terminalGrowth / 100;
 
-  for (let y = 1; y <= projectionYears; y++) {
-    const revenue = annualizedRevenue * Math.pow(1 + gr, y);
-    const discounted = revenue / Math.pow(1 + dr, y);
-    totalPV += discounted;
-    dcfProjections.push({ year: y, revenue, discounted });
+  if (hasForecastData && futureForecasts.length > 0) {
+    for (let y = 0; y < futureForecasts.length; y++) {
+      const fc = futureForecasts[y];
+      const cashFlow = fc.netValueAccrual || fc.projectedRevenue || 0;
+      const discounted = cashFlow / Math.pow(1 + dr, y + 1);
+      totalPV += discounted;
+      dcfProjections.push({ year: y + 1, revenue: cashFlow, discounted });
+    }
+  } else {
+    for (let y = 1; y <= projectionYears; y++) {
+      const revenue = annualizedRevenue * Math.pow(1 + gr, y);
+      const discounted = revenue / Math.pow(1 + dr, y);
+      totalPV += discounted;
+      dcfProjections.push({ year: y, revenue, discounted });
+    }
   }
 
-  const lastYearRevenue = annualizedRevenue * Math.pow(1 + gr, projectionYears);
+  const yearsUsed = dcfProjections.length;
+  const lastYearRevenue = dcfProjections.length > 0
+    ? dcfProjections[dcfProjections.length - 1].revenue
+    : annualizedRevenue * Math.pow(1 + gr, projectionYears);
   const terminalValue = dr > tg ? (lastYearRevenue * (1 + tg)) / (dr - tg) : 0;
-  const terminalValueDiscounted = terminalValue / Math.pow(1 + dr, projectionYears);
+  const terminalValueDiscounted = terminalValue / Math.pow(1 + dr, yearsUsed);
   const totalValuation = totalPV + terminalValueDiscounted;
-  const impliedPrice = circulatingSupply > 0 ? totalValuation / circulatingSupply : 0;
+  const impliedPrice = effectiveSupply > 0 ? totalValuation / effectiveSupply : 0;
   const upsideDownside = currentPrice > 0 ? ((impliedPrice - currentPrice) / currentPrice) * 100 : 0;
 
   const circulatingPercent = totalSupply > 0 ? (circulatingSupply / totalSupply) * 100 : 100;
@@ -559,8 +599,32 @@ export default function CryptoValuation() {
                     <Input id="projection-years" type="number" value={projectionYears} onChange={(e) => setProjectionYears(Number(e.target.value))} data-testid="input-projection-years" />
                   </div>
                 </div>
-                <div className="mt-3 text-xs text-muted-foreground">
-                  Annualized Revenue (from last {recentMetrics.length} days): {formatCompact(annualizedRevenue)}
+                <div className="mt-3 space-y-1">
+                  <div className="text-xs text-muted-foreground">
+                    Annualized Revenue (from last {recentMetrics.length} days): {formatCompact(annualizedRevenue)}
+                  </div>
+                  {hasForecastData && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="secondary" data-testid="badge-forecast-source">
+                        <DollarSign className="h-3 w-3 mr-1" />
+                        Using Revenue Forecast Data
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {futureForecasts.length} projected years from Revenue Forecast model
+                      </span>
+                    </div>
+                  )}
+                  {hasTokenFlowData && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="secondary" data-testid="badge-tokenflow-source">
+                        <Activity className="h-3 w-3 mr-1" />
+                        Using Token Flow Supply
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        Projected supply: {formatSupply(projectedSupply)} (vs current: {formatSupply(circulatingSupply)})
+                      </span>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

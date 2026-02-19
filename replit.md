@@ -80,6 +80,15 @@ Foresight is a comprehensive financial modeling and valuation platform designed 
 - Import creates quarterly revenue periods (annual÷4), IS/BS/CF actuals, triggers cascade recalculation
 - Key files: server/sec-search.ts, client/src/components/import-sec-modal.tsx, client/src/pages/revenue-forecast.tsx
 
+### Protocol Revenue Forecasting & Token Flow Model
+- **2 new DB tables**: `protocol_revenue_forecasts` (year, fees, revenue, growth, takeRate, emissionCost, netValueAccrual, scenario), `token_flow_entries` (period, periodLabel, minting, unlocks, burns, buybacks, stakingLockups, netFlow, cumulativeSupply)
+- **Protocol Revenue Forecast** (`/crypto/revenue/:id`): Auto-seed from DefiLlama actuals, 3-5 year editable projection table, bull/base/bear scenarios, emission cost tracking, net value accrual calculation, revenue vs emissions chart
+- **Token Flow Model** (`/crypto/token-flows/:id`): Period-by-period editable table, auto-seed from supply schedules, on-chain data via thirdweb Insight (burn events, staking balances, holder concentration), waterfall chart, cumulative supply projection
+- **Cascade Integration**: Revenue forecast net accrual and token flow projected supply feed into crypto valuation DCF for improved implied token price
+- **Thirdweb Insight** (`server/thirdweb-data.ts`): Optional integration for real on-chain data (burn rates, staking balances, holder concentration). Free tier 300K queries/month. Requires THIRDWEB_CLIENT_ID env var.
+- **API Routes**: CRUD + seed for both tables, on-chain data endpoint
+- Key files: server/thirdweb-data.ts, client/src/pages/crypto-revenue-forecast.tsx, crypto-token-flows.tsx, crypto-valuation.tsx (updated)
+
 ### Admin Panel
 - `isAdmin` boolean column on `users` table, default `false`
 - Admin middleware: checks `users.isAdmin` before allowing access to `/api/admin/*` routes

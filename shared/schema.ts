@@ -381,6 +381,33 @@ export const protocolMetrics = pgTable("protocol_metrics", {
   dailyVolume: real("daily_volume").default(0),
 });
 
+export const protocolRevenueForecasts = pgTable("protocol_revenue_forecasts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => cryptoProjects.id, { onDelete: "cascade" }),
+  year: integer("year").notNull(),
+  projectedFees: real("projected_fees").default(0),
+  projectedRevenue: real("projected_revenue").default(0),
+  growthRate: real("growth_rate").default(0),
+  takeRate: real("take_rate").default(0),
+  emissionCost: real("emission_cost").default(0),
+  netValueAccrual: real("net_value_accrual").default(0),
+  scenario: text("scenario").notNull().default("base"),
+});
+
+export const tokenFlowEntries = pgTable("token_flow_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => cryptoProjects.id, { onDelete: "cascade" }),
+  period: integer("period").notNull(),
+  periodLabel: text("period_label").notNull(),
+  minting: real("minting").default(0),
+  unlocks: real("unlocks").default(0),
+  burns: real("burns").default(0),
+  buybacks: real("buybacks").default(0),
+  stakingLockups: real("staking_lockups").default(0),
+  netFlow: real("net_flow").default(0),
+  cumulativeSupply: real("cumulative_supply").default(0),
+});
+
 export const insertFinancialModelSchema = createInsertSchema(financialModels, {
   sharesOutstanding: z.number().min(0).max(100000000000).optional(),
 }).omit({ id: true, createdAt: true });
@@ -411,6 +438,8 @@ export const insertCryptoProjectSchema = createInsertSchema(cryptoProjects).omit
 export const insertTokenSupplyScheduleSchema = createInsertSchema(tokenSupplySchedules).omit({ id: true });
 export const insertTokenIncentiveSchema = createInsertSchema(tokenIncentives).omit({ id: true });
 export const insertProtocolMetricSchema = createInsertSchema(protocolMetrics).omit({ id: true });
+export const insertProtocolRevenueForecastSchema = createInsertSchema(protocolRevenueForecasts).omit({ id: true });
+export const insertTokenFlowEntrySchema = createInsertSchema(tokenFlowEntries).omit({ id: true });
 
 export type FinancialModel = typeof financialModels.$inferSelect;
 export type InsertFinancialModel = z.infer<typeof insertFinancialModelSchema>;
@@ -454,3 +483,7 @@ export type TokenIncentive = typeof tokenIncentives.$inferSelect;
 export type InsertTokenIncentive = z.infer<typeof insertTokenIncentiveSchema>;
 export type ProtocolMetric = typeof protocolMetrics.$inferSelect;
 export type InsertProtocolMetric = z.infer<typeof insertProtocolMetricSchema>;
+export type ProtocolRevenueForecast = typeof protocolRevenueForecasts.$inferSelect;
+export type InsertProtocolRevenueForecast = z.infer<typeof insertProtocolRevenueForecastSchema>;
+export type TokenFlowEntry = typeof tokenFlowEntries.$inferSelect;
+export type InsertTokenFlowEntry = z.infer<typeof insertTokenFlowEntrySchema>;

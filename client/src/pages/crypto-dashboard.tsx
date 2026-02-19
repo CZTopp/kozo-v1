@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { CryptoProject } from "@shared/schema";
 import { Link } from "wouter";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
-import { Search, RefreshCw, Trash2, ArrowUpRight, ArrowDownRight, Plus, Loader2, TrendingUp, Activity, Coins } from "lucide-react";
+import { Search, RefreshCw, Trash2, ArrowUpRight, ArrowDownRight, Plus, Loader2, TrendingUp, Activity, Coins, DollarSign, GitBranch } from "lucide-react";
 
 function formatCompact(n: number | null | undefined): string {
   if (n == null || isNaN(n)) return "--";
@@ -360,6 +360,18 @@ export default function CryptoDashboard() {
                     <Button variant="outline" size="sm" data-testid={`link-valuation-${project.id}`}>
                       <TrendingUp className="h-3.5 w-3.5 mr-1" />
                       Valuation
+                    </Button>
+                  </Link>
+                  <Link href={`/crypto/revenue/${project.id}`}>
+                    <Button variant="outline" size="sm" data-testid={`link-revenue-forecast-${project.id}`}>
+                      <DollarSign className="h-3.5 w-3.5 mr-1" />
+                      Revenue
+                    </Button>
+                  </Link>
+                  <Link href={`/crypto/token-flows/${project.id}`}>
+                    <Button variant="outline" size="sm" data-testid={`link-token-flows-${project.id}`}>
+                      <GitBranch className="h-3.5 w-3.5 mr-1" />
+                      Token Flows
                     </Button>
                   </Link>
                 </div>

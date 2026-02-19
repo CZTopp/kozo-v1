@@ -7,6 +7,7 @@ import {
   macroIndicators, marketIndices, portfolioRedFlags,
   scenarios, assumptions, actuals, reports,
   cryptoProjects, tokenSupplySchedules, tokenIncentives, protocolMetrics,
+  protocolRevenueForecasts, tokenFlowEntries,
   type FinancialModel, type InsertFinancialModel,
   type RevenueLineItem, type InsertRevenueLineItem,
   type RevenuePeriod, type InsertRevenuePeriod,
@@ -28,6 +29,8 @@ import {
   type TokenSupplySchedule, type InsertTokenSupplySchedule,
   type TokenIncentive, type InsertTokenIncentive,
   type ProtocolMetric, type InsertProtocolMetric,
+  type ProtocolRevenueForecast, type InsertProtocolRevenueForecast,
+  type TokenFlowEntry, type InsertTokenFlowEntry,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -129,6 +132,14 @@ export interface IStorage {
   getProtocolMetrics(projectId: string): Promise<ProtocolMetric[]>;
   upsertProtocolMetrics(data: InsertProtocolMetric[]): Promise<ProtocolMetric[]>;
   deleteProtocolMetrics(projectId: string): Promise<void>;
+
+  getRevenueForecasts(projectId: string, scenario?: string): Promise<ProtocolRevenueForecast[]>;
+  upsertRevenueForecasts(data: InsertProtocolRevenueForecast[]): Promise<ProtocolRevenueForecast[]>;
+  deleteRevenueForecasts(projectId: string, scenario?: string): Promise<void>;
+
+  getTokenFlowEntries(projectId: string): Promise<TokenFlowEntry[]>;
+  upsertTokenFlowEntries(data: InsertTokenFlowEntry[]): Promise<TokenFlowEntry[]>;
+  deleteTokenFlowEntries(projectId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -572,6 +583,53 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProtocolMetrics(projectId: string) {
     await db.delete(protocolMetrics).where(eq(protocolMetrics.projectId, projectId));
+  }
+
+  async getRevenueForecasts(projectId: string, scenario?: string) {
+    if (scenario) {
+      return db.select().from(protocolRevenueForecasts).where(
+        and(eq(protocolRevenueForecasts.projectId, projectId), eq(protocolRevenueForecasts.scenario, scenario))
+      );
+    }
+    return db.select().from(protocolRevenueForecasts).where(eq(protocolRevenueForecasts.projectId, projectId));
+  }
+
+  async upsertRevenueForecasts(data: InsertProtocolRevenueForecast[]) {
+    if (data.length === 0) return [];
+    const results: ProtocolRevenueForecast[] = [];
+    for (const row of data) {
+      const [inserted] = await db.insert(protocolRevenueForecasts).values(row).returning();
+      results.push(inserted);
+    }
+    return results;
+  }
+
+  async deleteRevenueForecasts(projectId: string, scenario?: string) {
+    if (scenario) {
+      await db.delete(protocolRevenueForecasts).where(
+        and(eq(protocolRevenueForecasts.projectId, projectId), eq(protocolRevenueForecasts.scenario, scenario))
+      );
+    } else {
+      await db.delete(protocolRevenueForecasts).where(eq(protocolRevenueForecasts.projectId, projectId));
+    }
+  }
+
+  async getTokenFlowEntries(projectId: string) {
+    return db.select().from(tokenFlowEntries).where(eq(tokenFlowEntries.projectId, projectId));
+  }
+
+  async upsertTokenFlowEntries(data: InsertTokenFlowEntry[]) {
+    if (data.length === 0) return [];
+    const results: TokenFlowEntry[] = [];
+    for (const row of data) {
+      const [inserted] = await db.insert(tokenFlowEntries).values(row).returning();
+      results.push(inserted);
+    }
+    return results;
+  }
+
+  async deleteTokenFlowEntries(projectId: string) {
+    await db.delete(tokenFlowEntries).where(eq(tokenFlowEntries.projectId, projectId));
   }
 }
 

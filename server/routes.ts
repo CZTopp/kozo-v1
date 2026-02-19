@@ -27,6 +27,7 @@ import {
   searchDefiLlamaProtocols, getProtocolTVLHistory, getProtocolFees, getProtocolRevenue,
   INCENTIVE_TEMPLATES,
 } from "./crypto-data";
+import { getOnChainTokenData } from "./thirdweb-data";
 
 type Params = Record<string, string>;
 
@@ -1268,6 +1269,233 @@ export async function registerRoutes(server: Server, app: Express) {
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
+  });
+
+  app.post("/api/crypto/projects/:id/onchain-data", async (req: Request<Params>, res: Response) => {
+    try {
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const project = await storage.getCryptoProject(req.params.id, userId);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const { tokenAddress, chainId, stakingContract } = req.body;
+      if (!tokenAddress) return res.status(400).json({ message: "tokenAddress is required" });
+
+      const data = await getOnChainTokenData(
+        tokenAddress,
+        chainId || 1,
+        stakingContract,
+        project.circulatingSupply || undefined,
+        project.totalSupply || undefined
+      );
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/crypto/projects/:id/revenue-forecasts", async (req: Request<Params>, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const project = await storage.getCryptoProject(req.params.id, userId);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    const scenario = req.query.scenario as string | undefined;
+    const forecasts = await storage.getRevenueForecasts(project.id, scenario);
+    res.json(forecasts);
+  });
+
+  app.post("/api/crypto/projects/:id/revenue-forecasts", async (req: Request<Params>, res: Response) => {
+    try {
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const project = await storage.getCryptoProject(req.params.id, userId);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      const scenario = req.body.scenario || "base";
+      await storage.deleteRevenueForecasts(project.id, scenario);
+      const rows = (req.body.forecasts || []).map((f: any) => ({
+        ...f,
+        projectId: project.id,
+        scenario,
+      }));
+      const result = await storage.upsertRevenueForecasts(rows);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/crypto/projects/:id/revenue-forecasts/seed", async (req: Request<Params>, res: Response) => {
+    try {
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const project = await storage.getCryptoProject(req.params.id, userId);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const metrics = await storage.getProtocolMetrics(project.id);
+      const incentives = await storage.getTokenIncentives(project.id);
+
+      const yearlyFees: Record<number, number> = {};
+      const yearlyRevenue: Record<number, number> = {};
+      for (const m of metrics) {
+        const year = parseInt(m.date.substring(0, 4));
+        if (!isNaN(year)) {
+          yearlyFees[year] = (yearlyFees[year] || 0) + (m.dailyFees || 0);
+          yearlyRevenue[year] = (yearlyRevenue[year] || 0) + (m.dailyRevenue || 0);
+        }
+      }
+
+      const years = Object.keys(yearlyFees).map(Number).sort();
+      const lastYear = years.length > 0 ? years[years.length - 1] : new Date().getFullYear();
+      const lastFees = yearlyFees[lastYear] || 0;
+      const lastRevenue = yearlyRevenue[lastYear] || 0;
+      const takeRate = lastFees > 0 ? lastRevenue / lastFees : 0.5;
+
+      const totalEmissionPercent = incentives.reduce((sum, inc) => sum + (inc.allocationPercent || 0), 0);
+
+      const baseGrowth = 0.15;
+      const projYears = project.projectionYears || 5;
+      const currentYear = new Date().getFullYear();
+
+      const forecasts: any[] = [];
+      for (const yr of years) {
+        forecasts.push({
+          projectId: project.id,
+          year: yr,
+          projectedFees: yearlyFees[yr] || 0,
+          projectedRevenue: yearlyRevenue[yr] || 0,
+          growthRate: 0,
+          takeRate,
+          emissionCost: 0,
+          netValueAccrual: yearlyRevenue[yr] || 0,
+          scenario: "base",
+        });
+      }
+
+      for (let i = 1; i <= projYears; i++) {
+        const yr = (lastYear < currentYear ? currentYear : lastYear) + i;
+        const decay = Math.pow(0.85, i - 1);
+        const growth = baseGrowth * decay;
+        const prevFees = i === 1 ? lastFees : (forecasts[forecasts.length - 1]?.projectedFees || lastFees);
+        const fees = prevFees * (1 + growth);
+        const revenue = fees * takeRate;
+        const emission = revenue * (totalEmissionPercent / 100) * Math.pow(0.8, i - 1);
+        forecasts.push({
+          projectId: project.id,
+          year: yr,
+          projectedFees: Math.round(fees),
+          projectedRevenue: Math.round(revenue),
+          growthRate: growth,
+          takeRate,
+          emissionCost: Math.round(emission),
+          netValueAccrual: Math.round(revenue - emission),
+          scenario: "base",
+        });
+      }
+
+      await storage.deleteRevenueForecasts(project.id, "base");
+      const result = await storage.upsertRevenueForecasts(forecasts);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/crypto/projects/:id/revenue-forecasts", async (req: Request<Params>, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const project = await storage.getCryptoProject(req.params.id, userId);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    const scenario = req.query.scenario as string | undefined;
+    await storage.deleteRevenueForecasts(project.id, scenario);
+    res.json({ success: true });
+  });
+
+  app.get("/api/crypto/projects/:id/token-flows", async (req: Request<Params>, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const project = await storage.getCryptoProject(req.params.id, userId);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    const entries = await storage.getTokenFlowEntries(project.id);
+    res.json(entries);
+  });
+
+  app.post("/api/crypto/projects/:id/token-flows", async (req: Request<Params>, res: Response) => {
+    try {
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const project = await storage.getCryptoProject(req.params.id, userId);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      await storage.deleteTokenFlowEntries(project.id);
+      const rows = (req.body.entries || []).map((e: any) => ({
+        ...e,
+        projectId: project.id,
+      }));
+      const result = await storage.upsertTokenFlowEntries(rows);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/crypto/projects/:id/token-flows/seed", async (req: Request<Params>, res: Response) => {
+    try {
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const project = await storage.getCryptoProject(req.params.id, userId);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const schedules = await storage.getTokenSupplySchedules(project.id);
+      const currentSupply = project.circulatingSupply || 0;
+      const totalSupply = project.totalSupply || currentSupply;
+      const maxSupply = project.maxSupply || totalSupply;
+
+      const periods = 12;
+      const entries: any[] = [];
+      let cumSupply = currentSupply;
+
+      const totalScheduleTokens = schedules.reduce((sum, s) => sum + (s.amount || 0), 0);
+      const avgUnlockPerPeriod = totalScheduleTokens > 0 ? totalScheduleTokens / periods : 0;
+
+      const estimatedBurnRate = currentSupply * 0.001;
+      const estimatedStaking = currentSupply * 0.02;
+
+      for (let i = 0; i < periods; i++) {
+        const unlocks = avgUnlockPerPeriod * Math.pow(0.9, i);
+        const minting = i < 6 ? (maxSupply - totalSupply) * 0.01 * Math.pow(0.85, i) : 0;
+        const burns = estimatedBurnRate;
+        const staking = estimatedStaking * Math.pow(0.95, i);
+        const netFlow = minting + unlocks - burns - staking;
+        cumSupply += netFlow;
+
+        entries.push({
+          projectId: project.id,
+          period: i + 1,
+          periodLabel: `Q${(i % 4) + 1} ${new Date().getFullYear() + Math.floor(i / 4)}`,
+          minting: Math.round(minting),
+          unlocks: Math.round(unlocks),
+          burns: Math.round(burns),
+          buybacks: 0,
+          stakingLockups: Math.round(staking),
+          netFlow: Math.round(netFlow),
+          cumulativeSupply: Math.round(cumSupply),
+        });
+      }
+
+      await storage.deleteTokenFlowEntries(project.id);
+      const result = await storage.upsertTokenFlowEntries(entries);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/crypto/projects/:id/token-flows", async (req: Request<Params>, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const project = await storage.getCryptoProject(req.params.id, userId);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    await storage.deleteTokenFlowEntries(project.id);
+    res.json({ success: true });
   });
 
   app.post("/api/copilot", async (req: Request, res: Response) => {
