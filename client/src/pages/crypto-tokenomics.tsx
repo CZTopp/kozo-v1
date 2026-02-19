@@ -48,10 +48,19 @@ function formatPrice(n: number | null | undefined): string {
 
 const emptySupplyForm = { label: "", amount: 0, percentOfTotal: 0, unlockDate: "", vestingMonths: 0 };
 const emptyIncentiveForm = { role: "", contribution: "", rewardType: "", rewardSource: "", allocationPercent: 0, estimatedApy: 0, vestingMonths: 0, isSustainable: true, sustainabilityNotes: "" };
-const emptyAllocationForm = { category: "", percentage: 0, amount: 0, vestingMonths: 0, cliffMonths: 0, tgePercent: 0, notes: "" };
+const emptyAllocationForm = { category: "", standardGroup: "", percentage: 0, amount: 0, vestingMonths: 0, cliffMonths: 0, tgePercent: 0, vestingType: "linear", dataSource: "", notes: "" };
 const emptyFundraisingForm = { roundType: "", amount: 0, valuation: 0, date: "", leadInvestors: "", tokenPrice: 0, notes: "" };
 
-const ALLOCATION_CATEGORIES = ["Team", "Investors", "Community", "Treasury", "Ecosystem", "Advisors", "Public Sale", "Liquidity", "Staking Rewards", "Foundation", "Marketing", "Airdrop"];
+const STANDARD_GROUPS = [
+  { value: "team", label: "Founder & Team", categories: ["Founder & Team", "Core Team", "Advisors", "Partners"] },
+  { value: "investors", label: "Private Investors", categories: ["Private Investors", "Seed Round", "Strategic Round", "Series A/B"] },
+  { value: "public", label: "Public Sale", categories: ["Public Sale", "ICO", "IEO", "IDO", "Launchpad"] },
+  { value: "treasury", label: "Treasury & Reserve", categories: ["Treasury & Reserve", "Foundation", "DAO Treasury", "Reserve", "Ecosystem Fund"] },
+  { value: "community", label: "Community & Ecosystem", categories: ["Community & Ecosystem", "Airdrops", "Staking Rewards", "Liquidity Mining", "Grants", "Marketing"] },
+];
+const ALLOCATION_CATEGORIES = ["Founder & Team", "Private Investors", "Public Sale", "Treasury & Reserve", "Community & Ecosystem", "Advisors", "DAO Treasury", "Ecosystem Fund", "Staking Rewards", "Liquidity", "Marketing", "Airdrop", "Foundation", "Partners"];
+const VESTING_TYPES = ["linear", "cliff", "immediate", "custom"];
+const INDUSTRY_BENCHMARKS = { team: 20, investors: 16, public: 4.6, treasury: 27, community: 37 };
 const ROUND_TYPES = ["Pre-Seed", "Seed", "Private", "Strategic", "Public/IDO", "Series A", "Series B", "OTC", "Treasury Sale"];
 const GOVERNANCE_TYPES = ["DAO", "Multi-sig", "Foundation", "Council", "Hybrid", "None"];
 
@@ -131,6 +140,12 @@ export default function CryptoTokenomics() {
     onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
 
+  const seedAllocationsMutation = useMutation({
+    mutationFn: async () => { const res = await apiRequest("POST", `/api/crypto/projects/${projectId}/allocations/seed`); return res.json(); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "allocations"] }); toast({ title: "Standard allocations seeded" }); },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
   const createAllocationMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => { const res = await apiRequest("POST", `/api/crypto/projects/${projectId}/allocations`, data); return res.json(); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "allocations"] }); setAllocationFormOpen(false); setEditingAllocationId(null); setAllocationForm({ ...emptyAllocationForm }); toast({ title: "Allocation added" }); },
@@ -184,7 +199,8 @@ export default function CryptoTokenomics() {
     if (!allocationForm.category.trim()) { toast({ title: "Category is required", variant: "destructive" }); return; }
     const pct = Number(allocationForm.percentage) || 0;
     const computedAmount = allocationForm.amount > 0 ? allocationForm.amount : (projectedSupply2035 > 0 ? projectedSupply2035 * (pct / 100) : 0);
-    const payload = { projectId, category: allocationForm.category.trim(), percentage: pct, amount: computedAmount, vestingMonths: Number(allocationForm.vestingMonths) || null, cliffMonths: Number(allocationForm.cliffMonths) || null, tgePercent: Number(allocationForm.tgePercent) || null, notes: allocationForm.notes.trim() || null, sortOrder: (allocations?.length || 0) };
+    const group = allocationForm.standardGroup || STANDARD_GROUPS.find(g => g.categories.includes(allocationForm.category.trim()))?.value || null;
+    const payload = { projectId, category: allocationForm.category.trim(), standardGroup: group, percentage: pct, amount: computedAmount, vestingMonths: Number(allocationForm.vestingMonths) || null, cliffMonths: Number(allocationForm.cliffMonths) || null, tgePercent: Number(allocationForm.tgePercent) || null, vestingType: allocationForm.vestingType || null, dataSource: allocationForm.dataSource.trim() || null, notes: allocationForm.notes.trim() || null, sortOrder: (allocations?.length || 0) };
     if (editingAllocationId) { updateAllocationMutation.mutate({ id: editingAllocationId, data: payload }); } else { createAllocationMutation.mutate(payload); }
   }
 
@@ -202,7 +218,7 @@ export default function CryptoTokenomics() {
 
   function openEditAllocation(alloc: TokenAllocation) {
     setEditingAllocationId(alloc.id);
-    setAllocationForm({ category: alloc.category, percentage: alloc.percentage || 0, amount: alloc.amount || 0, vestingMonths: alloc.vestingMonths || 0, cliffMonths: alloc.cliffMonths || 0, tgePercent: alloc.tgePercent || 0, notes: alloc.notes || "" });
+    setAllocationForm({ category: alloc.category, standardGroup: alloc.standardGroup || "", percentage: alloc.percentage || 0, amount: alloc.amount || 0, vestingMonths: alloc.vestingMonths || 0, cliffMonths: alloc.cliffMonths || 0, tgePercent: alloc.tgePercent || 0, vestingType: alloc.vestingType || "linear", dataSource: alloc.dataSource || "", notes: alloc.notes || "" });
     setAllocationFormOpen(true);
   }
 
@@ -283,6 +299,21 @@ export default function CryptoTokenomics() {
   if (untrackedPct > 0.5 && allocationPieData.length > 0) {
     allocationPieData.push({ name: "Untracked", value: untrackedPct });
   }
+
+  const groupedAllocPct: Record<string, number> = {};
+  (allocations || []).forEach(a => {
+    const g = a.standardGroup || STANDARD_GROUPS.find(sg => sg.categories.includes(a.category))?.value || "community";
+    groupedAllocPct[g] = (groupedAllocPct[g] || 0) + (a.percentage || 0);
+  });
+
+  const vestingTimelineData = (allocations || []).filter(a => a.percentage > 0 && (a.vestingMonths || a.cliffMonths || a.tgePercent)).map(a => ({
+    category: a.category,
+    tgePercent: a.tgePercent || 0,
+    cliffMonths: a.cliffMonths || 0,
+    vestingMonths: a.vestingMonths || 0,
+    vestingType: a.vestingType || "linear",
+    percentage: a.percentage,
+  }));
 
   const totalRaised = (fundraisingRounds || []).reduce((s, r) => s + (r.amount || 0), 0);
 
@@ -408,21 +439,29 @@ export default function CryptoTokenomics() {
         <TabsContent value="allocations" className="mt-4 space-y-4">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div>
-              <h2 className="text-lg font-semibold" data-testid="text-allocations-title">Token Allocations</h2>
+              <h2 className="text-lg font-semibold" data-testid="text-allocations-title">Token Allocation & Vesting</h2>
               {projectedSupply2035 > 0 && (
                 <p className="text-xs text-muted-foreground flex items-center gap-1" data-testid="text-projected-supply">
                   <Info className="h-3 w-3" />
-                  Projected Supply (2035): {formatSupply(projectedSupply2035)} &middot; Tracked: {totalAllocPct.toFixed(1)}% &middot; Untracked: {untrackedPct.toFixed(1)}%
+                  Total Supply: {formatSupply(projectedSupply2035)} · Tracked: {totalAllocPct.toFixed(1)}%{untrackedPct > 0.5 ? ` · Untracked: ${untrackedPct.toFixed(1)}%` : ""}
                 </p>
               )}
             </div>
-            <Button onClick={() => { setEditingAllocationId(null); setAllocationForm({ ...emptyAllocationForm }); setAllocationFormOpen(true); }} data-testid="button-add-allocation">
-              <Plus className="h-4 w-4 mr-1" />Add Allocation
-            </Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {(!allocations || allocations.length === 0) && (
+                <Button variant="outline" onClick={() => seedAllocationsMutation.mutate()} disabled={seedAllocationsMutation.isPending} data-testid="button-seed-allocations">
+                  {seedAllocationsMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+                  Seed Standard Categories
+                </Button>
+              )}
+              <Button onClick={() => { setEditingAllocationId(null); setAllocationForm({ ...emptyAllocationForm }); setAllocationFormOpen(true); }} data-testid="button-add-allocation">
+                <Plus className="h-4 w-4 mr-1" />Add Allocation
+              </Button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-2 space-y-4">
               <Card>
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
@@ -432,9 +471,9 @@ export default function CryptoTokenomics() {
                           <TableHead className="font-semibold">Category</TableHead>
                           <TableHead className="text-right font-semibold">%</TableHead>
                           <TableHead className="text-right font-semibold">Tokens</TableHead>
-                          <TableHead className="text-right font-semibold">Vesting</TableHead>
-                          <TableHead className="text-right font-semibold">Cliff</TableHead>
+                          <TableHead className="font-semibold">Vesting</TableHead>
                           <TableHead className="text-right font-semibold">TGE %</TableHead>
+                          <TableHead className="font-semibold">Source</TableHead>
                           <TableHead className="text-center font-semibold">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -443,18 +482,22 @@ export default function CryptoTokenomics() {
                           <TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
                         )}
                         {!allocationsLoading && (!allocations || allocations.length === 0) && (
-                          <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground" data-testid="text-no-allocations">No allocations defined yet.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground" data-testid="text-no-allocations">No allocations defined yet. Use "Seed Standard Categories" to start with industry-standard groups.</TableCell></TableRow>
                         )}
                         {(allocations || []).map((a) => {
                           const computedTokens = a.amount || (projectedSupply2035 > 0 ? projectedSupply2035 * ((a.percentage || 0) / 100) : 0);
+                          const vestingLabel = a.vestingType === "immediate" ? "Immediate" : a.vestingMonths ? `${a.cliffMonths ? a.cliffMonths + "mo cliff + " : ""}${a.vestingMonths}mo ${a.vestingType || "linear"}` : "--";
                           return (
                             <TableRow key={a.id} data-testid={`row-allocation-${a.id}`}>
-                              <TableCell className="font-medium" data-testid={`text-alloc-category-${a.id}`}>{a.category}</TableCell>
-                              <TableCell className="text-right" data-testid={`text-alloc-pct-${a.id}`}>{(a.percentage || 0).toFixed(1)}%</TableCell>
+                              <TableCell data-testid={`text-alloc-category-${a.id}`}>
+                                <div className="font-medium">{a.category}</div>
+                                {a.notes && <div className="text-[11px] text-muted-foreground truncate max-w-[200px]">{a.notes}</div>}
+                              </TableCell>
+                              <TableCell className="text-right font-medium" data-testid={`text-alloc-pct-${a.id}`}>{(a.percentage || 0).toFixed(1)}%</TableCell>
                               <TableCell className="text-right" data-testid={`text-alloc-tokens-${a.id}`}>{formatSupply(computedTokens)}</TableCell>
-                              <TableCell className="text-right">{a.vestingMonths ? `${a.vestingMonths}mo` : "--"}</TableCell>
-                              <TableCell className="text-right">{a.cliffMonths ? `${a.cliffMonths}mo` : "--"}</TableCell>
-                              <TableCell className="text-right">{a.tgePercent != null ? `${a.tgePercent}%` : "--"}</TableCell>
+                              <TableCell className="text-xs">{vestingLabel}</TableCell>
+                              <TableCell className="text-right">{a.tgePercent != null && a.tgePercent > 0 ? `${a.tgePercent}%` : "--"}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{a.dataSource || "--"}</TableCell>
                               <TableCell className="text-center">
                                 <div className="flex items-center justify-center gap-0.5">
                                   <Button size="icon" variant="ghost" onClick={() => openEditAllocation(a)} data-testid={`button-edit-alloc-${a.id}`}><Edit2 className="h-3.5 w-3.5" /></Button>
@@ -477,44 +520,114 @@ export default function CryptoTokenomics() {
                   </div>
                 </CardContent>
               </Card>
-              {(allocations || []).length > 0 && untrackedPct > 0.5 && (
-                <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1" data-testid="text-untracked-notice">
-                  <Info className="h-3 w-3 shrink-0" />
-                  Calculated from projected 2035 supply and excluding untracked allocations ({untrackedPct.toFixed(1)}%)
-                </p>
+
+              {(allocations || []).length > 0 && (
+                <Card data-testid="card-benchmark-comparison">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">vs. Industry Benchmarks (2023 Avg)</CardTitle></CardHeader>
+                  <CardContent className="space-y-3">
+                    {STANDARD_GROUPS.map(sg => {
+                      const projectPct = groupedAllocPct[sg.value] || 0;
+                      const benchPct = INDUSTRY_BENCHMARKS[sg.value as keyof typeof INDUSTRY_BENCHMARKS] || 0;
+                      const diff = projectPct - benchPct;
+                      return (
+                        <div key={sg.value} className="space-y-1" data-testid={`benchmark-${sg.value}`}>
+                          <div className="flex items-center justify-between gap-2 text-xs">
+                            <span className="font-medium">{sg.label}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground">Avg: {benchPct}%</span>
+                              <span className={`font-medium ${Math.abs(diff) < 3 ? "text-muted-foreground" : diff > 0 ? "text-amber-500" : "text-blue-500"}`}>
+                                {projectPct.toFixed(1)}% ({diff > 0 ? "+" : ""}{diff.toFixed(1)}%)
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex gap-1 items-center">
+                            <div className="flex-1 h-2 rounded-md bg-muted overflow-hidden relative">
+                              <div className="absolute h-full rounded-md bg-muted-foreground/30" style={{ width: `${Math.min(benchPct, 100)}%` }} />
+                              <div className="absolute h-full rounded-md" style={{ width: `${Math.min(projectPct, 100)}%`, backgroundColor: COLORS[STANDARD_GROUPS.indexOf(sg) % COLORS.length] }} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <p className="text-[10px] text-muted-foreground pt-1">Source: TokenUnlocks Standard Allocation Framework (72 limited-supply tokens, 2023)</p>
+                  </CardContent>
+                </Card>
               )}
             </div>
 
-            {allocationPieData.length > 0 && (
-              <Card data-testid="card-allocation-pie">
-                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Allocation Breakdown</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={allocationPieData} cx="50%" cy="50%" outerRadius={80} innerRadius={40} dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                          {allocationPieData.map((_, i) => (
-                            <Cell key={i} fill={i === allocationPieData.length - 1 && allocationPieData[i].name === "Untracked" ? "hsl(var(--muted))" : COLORS[i % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="space-y-1.5 mt-2">
-                    {allocationPieData.map((d, i) => (
-                      <div key={i} className="flex items-center justify-between gap-2 text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: d.name === "Untracked" ? "hsl(var(--muted))" : COLORS[i % COLORS.length] }} />
-                          <span className="truncate">{d.name}</span>
+            <div className="space-y-4">
+              {allocationPieData.length > 0 && (
+                <Card data-testid="card-allocation-pie">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Allocation Breakdown</CardTitle></CardHeader>
+                  <CardContent>
+                    <div className="h-56">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={allocationPieData} cx="50%" cy="50%" outerRadius={75} innerRadius={40} dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                            {allocationPieData.map((_, i) => (
+                              <Cell key={i} fill={i === allocationPieData.length - 1 && allocationPieData[i].name === "Untracked" ? "hsl(var(--muted))" : COLORS[i % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="space-y-1.5 mt-2">
+                      {allocationPieData.map((d, i) => (
+                        <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: d.name === "Untracked" ? "hsl(var(--muted))" : COLORS[i % COLORS.length] }} />
+                            <span className="truncate">{d.name}</span>
+                          </div>
+                          <span className="text-muted-foreground">{d.value.toFixed(1)}%</span>
                         </div>
-                        <span className="text-muted-foreground">{d.value.toFixed(1)}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {vestingTimelineData.length > 0 && (
+                <Card data-testid="card-vesting-timeline">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Vesting Timeline</CardTitle></CardHeader>
+                  <CardContent className="space-y-2.5">
+                    {vestingTimelineData.map((v, i) => {
+                      const maxMonths = Math.max(...vestingTimelineData.map(d => (d.cliffMonths || 0) + (d.vestingMonths || 0)), 1);
+                      const totalDuration = (v.cliffMonths || 0) + (v.vestingMonths || 0);
+                      const cliffWidth = maxMonths > 0 ? ((v.cliffMonths || 0) / maxMonths) * 100 : 0;
+                      const vestWidth = maxMonths > 0 ? ((v.vestingMonths || 0) / maxMonths) * 100 : 0;
+                      return (
+                        <div key={i} className="space-y-0.5" data-testid={`vesting-bar-${i}`}>
+                          <div className="flex items-center justify-between gap-2 text-xs">
+                            <span className="font-medium truncate">{v.category}</span>
+                            <span className="text-muted-foreground shrink-0">
+                              {v.vestingType === "immediate" ? "Immediate" : `${totalDuration}mo`}
+                              {v.tgePercent > 0 ? ` · ${v.tgePercent}% TGE` : ""}
+                            </span>
+                          </div>
+                          <div className="flex h-3 rounded-md overflow-hidden bg-muted">
+                            {v.tgePercent > 0 && (
+                              <div className="h-full" style={{ width: `${Math.max((v.tgePercent / 100) * (vestWidth + cliffWidth), 2)}%`, backgroundColor: COLORS[i % COLORS.length], opacity: 1 }} title={`TGE: ${v.tgePercent}%`} />
+                            )}
+                            {v.cliffMonths > 0 && (
+                              <div className="h-full bg-muted-foreground/20" style={{ width: `${cliffWidth}%` }} title={`Cliff: ${v.cliffMonths}mo`} />
+                            )}
+                            {v.vestingMonths > 0 && (
+                              <div className="h-full" style={{ width: `${vestWidth}%`, backgroundColor: COLORS[i % COLORS.length], opacity: 0.6 }} title={`Vesting: ${v.vestingMonths}mo ${v.vestingType}`} />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="flex items-center gap-3 pt-1 text-[10px] text-muted-foreground flex-wrap">
+                      <div className="flex items-center gap-1"><div className="h-2 w-3 rounded-sm" style={{ backgroundColor: COLORS[0] }} />TGE</div>
+                      <div className="flex items-center gap-1"><div className="h-2 w-3 rounded-sm bg-muted-foreground/20" />Cliff</div>
+                      <div className="flex items-center gap-1"><div className="h-2 w-3 rounded-sm" style={{ backgroundColor: COLORS[0], opacity: 0.6 }} />Linear Vest</div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           </div>
         </TabsContent>
 

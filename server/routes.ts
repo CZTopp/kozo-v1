@@ -1750,6 +1750,29 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(allocation);
   });
 
+  app.post("/api/crypto/projects/:id/allocations/seed", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const project = await storage.getCryptoProject(req.params.id as string, userId);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    const existing = await storage.getTokenAllocations(project.id);
+    if (existing.length > 0) return res.status(400).json({ message: "Allocations already exist. Delete them first to re-seed." });
+    const totalSupply = project.totalSupply || project.maxSupply || 0;
+    const standardAllocations = [
+      { category: "Founder & Team", standardGroup: "team", percentage: 20, amount: totalSupply ? totalSupply * 0.20 : null, vestingMonths: 48, cliffMonths: 12, tgePercent: 0, vestingType: "linear", dataSource: null, notes: "Core contributors, advisors, partners", sortOrder: 0 },
+      { category: "Private Investors", standardGroup: "investors", percentage: 16, amount: totalSupply ? totalSupply * 0.16 : null, vestingMonths: 36, cliffMonths: 6, tgePercent: 0, vestingType: "linear", dataSource: null, notes: "Seed, Series A/B, strategic rounds", sortOrder: 1 },
+      { category: "Public Sale", standardGroup: "public", percentage: 5, amount: totalSupply ? totalSupply * 0.05 : null, vestingMonths: 0, cliffMonths: 0, tgePercent: 100, vestingType: "immediate", dataSource: null, notes: "ICO, IEO, IDO, public sale", sortOrder: 2 },
+      { category: "Treasury & Reserve", standardGroup: "treasury", percentage: 27, amount: totalSupply ? totalSupply * 0.27 : null, vestingMonths: 30, cliffMonths: 0, tgePercent: 10, vestingType: "linear", dataSource: null, notes: "Foundation funds, ecosystem, future initiatives", sortOrder: 3 },
+      { category: "Community & Ecosystem", standardGroup: "community", percentage: 32, amount: totalSupply ? totalSupply * 0.32 : null, vestingMonths: 30, cliffMonths: 0, tgePercent: 5, vestingType: "linear", dataSource: null, notes: "Airdrops, staking rewards, liquidity mining, grants", sortOrder: 4 },
+    ];
+    const results = [];
+    for (const alloc of standardAllocations) {
+      const created = await storage.createTokenAllocation({ ...alloc, projectId: project.id });
+      results.push(created);
+    }
+    res.json(results);
+  });
+
   app.patch("/api/crypto/allocations/:id", async (req: Request, res: Response) => {
     const allocation = await storage.updateTokenAllocation(req.params.id as string, req.body);
     res.json(allocation);
