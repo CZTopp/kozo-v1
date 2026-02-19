@@ -218,7 +218,8 @@ export default function CryptoTokenomics() {
 
   function openEditAllocation(alloc: TokenAllocation) {
     setEditingAllocationId(alloc.id);
-    setAllocationForm({ category: alloc.category, standardGroup: alloc.standardGroup || "", percentage: alloc.percentage || 0, amount: alloc.amount || 0, vestingMonths: alloc.vestingMonths || 0, cliffMonths: alloc.cliffMonths || 0, tgePercent: alloc.tgePercent || 0, vestingType: alloc.vestingType || "linear", dataSource: alloc.dataSource || "", notes: alloc.notes || "" });
+    const autoGroup = alloc.standardGroup || STANDARD_GROUPS.find(g => g.categories.includes(alloc.category))?.value || "";
+    setAllocationForm({ category: alloc.category, standardGroup: autoGroup, percentage: alloc.percentage || 0, amount: alloc.amount || 0, vestingMonths: alloc.vestingMonths || 0, cliffMonths: alloc.cliffMonths || 0, tgePercent: alloc.tgePercent || 0, vestingType: alloc.vestingType || "linear", dataSource: alloc.dataSource || "", notes: alloc.notes || "" });
     setAllocationFormOpen(true);
   }
 
@@ -1025,18 +1026,32 @@ export default function CryptoTokenomics() {
 
       {/* Allocation Dialog */}
       <Dialog open={allocationFormOpen} onOpenChange={(open) => { setAllocationFormOpen(open); if (!open) setEditingAllocationId(null); }}>
-        <DialogContent data-testid="dialog-allocation-form">
+        <DialogContent className="max-w-lg" data-testid="dialog-allocation-form">
           <DialogHeader><DialogTitle>{editingAllocationId ? "Edit Allocation" : "Add Allocation"}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div className="space-y-1">
-              <Label>Category</Label>
-              <Select value={allocationForm.category} onValueChange={(v) => setAllocationForm(f => ({ ...f, category: v }))}>
-                <SelectTrigger data-testid="select-alloc-category"><SelectValue placeholder="Select category" /></SelectTrigger>
-                <SelectContent>
-                  {ALLOCATION_CATEGORIES.map(c => (<SelectItem key={c} value={c}>{c}</SelectItem>))}
-                  <SelectItem value="Other">Other</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Category</Label>
+                <Select value={allocationForm.category} onValueChange={(v) => {
+                  const autoGroup = STANDARD_GROUPS.find(g => g.categories.includes(v))?.value || "";
+                  setAllocationForm(f => ({ ...f, category: v, standardGroup: autoGroup }));
+                }}>
+                  <SelectTrigger data-testid="select-alloc-category"><SelectValue placeholder="Select category" /></SelectTrigger>
+                  <SelectContent>
+                    {ALLOCATION_CATEGORIES.map(c => (<SelectItem key={c} value={c}>{c}</SelectItem>))}
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Standard Group</Label>
+                <Select value={allocationForm.standardGroup} onValueChange={(v) => setAllocationForm(f => ({ ...f, standardGroup: v }))}>
+                  <SelectTrigger data-testid="select-alloc-group"><SelectValue placeholder="Auto-detected" /></SelectTrigger>
+                  <SelectContent>
+                    {STANDARD_GROUPS.map(g => (<SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -1051,10 +1066,23 @@ export default function CryptoTokenomics() {
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="space-y-1">
+                <Label>Vesting Type</Label>
+                <Select value={allocationForm.vestingType} onValueChange={(v) => setAllocationForm(f => ({ ...f, vestingType: v }))}>
+                  <SelectTrigger data-testid="select-alloc-vesting-type"><SelectValue placeholder="Linear" /></SelectTrigger>
+                  <SelectContent>
+                    {VESTING_TYPES.map(t => (<SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1"><Label>Vesting (Mo)</Label><Input type="number" value={allocationForm.vestingMonths || ""} onChange={(e) => setAllocationForm(f => ({ ...f, vestingMonths: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-alloc-vesting" /></div>
               <div className="space-y-1"><Label>Cliff (Mo)</Label><Input type="number" value={allocationForm.cliffMonths || ""} onChange={(e) => setAllocationForm(f => ({ ...f, cliffMonths: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-alloc-cliff" /></div>
-              <div className="space-y-1"><Label>TGE Unlock %</Label><Input type="number" value={allocationForm.tgePercent || ""} onChange={(e) => setAllocationForm(f => ({ ...f, tgePercent: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-alloc-tge" /></div>
+              <div className="space-y-1"><Label>TGE %</Label><Input type="number" value={allocationForm.tgePercent || ""} onChange={(e) => setAllocationForm(f => ({ ...f, tgePercent: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-alloc-tge" /></div>
+            </div>
+            <div className="space-y-1">
+              <Label>Data Source</Label>
+              <Input value={allocationForm.dataSource} onChange={(e) => setAllocationForm(f => ({ ...f, dataSource: e.target.value }))} placeholder="e.g. Whitepaper, TokenUnlocks, CoinGecko" data-testid="input-alloc-datasource" />
             </div>
             <div className="space-y-1"><Label>Notes</Label><Input value={allocationForm.notes} onChange={(e) => setAllocationForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes..." data-testid="input-alloc-notes" /></div>
           </div>
