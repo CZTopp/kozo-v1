@@ -41,6 +41,10 @@ interface OnChainData {
   staking: { stakedBalance: number; stakingRatio: number };
   concentration: { top10Percent: number; top50Percent: number; holderCount: number };
   hasThirdwebData: boolean;
+  burnEstimate?: { totalBurned: number; burnPercent: number; hasBurnProgram: boolean; source: string };
+  chainType?: string;
+  chainName?: string;
+  note?: string;
 }
 
 interface LocalEntry {
@@ -83,7 +87,7 @@ export default function CryptoTokenFlows() {
     enabled: !!projectId,
   });
 
-  const { data: contractInfo } = useQuery<{ found: boolean; address?: string; chainId?: number; chainName?: string }>({
+  const { data: contractInfo } = useQuery<{ found: boolean; address?: string; chainId?: number | string; chainName?: string; isEvm?: boolean }>({
     queryKey: ["/api/crypto/projects", projectId, "contract-address"],
     enabled: !!projectId,
   });
@@ -164,10 +168,11 @@ export default function CryptoTokenFlows() {
 
   const onchainMutation = useMutation({
     mutationFn: async () => {
+      const parsedChainId = chainId === "solana" ? "solana" : parseInt(chainId);
       const res = await apiRequest("POST", `/api/crypto/projects/${projectId}/onchain-data`, {
         tokenAddress,
-        chainId: parseInt(chainId),
-        ...(stakingAddress ? { stakingAddress } : {}),
+        chainId: parsedChainId,
+        ...(stakingAddress ? { stakingContract: stakingAddress } : {}),
       });
       return res.json();
     },
@@ -352,10 +357,13 @@ export default function CryptoTokenFlows() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="1">Ethereum</SelectItem>
+                      <SelectItem value="solana">Solana</SelectItem>
                       <SelectItem value="137">Polygon</SelectItem>
                       <SelectItem value="42161">Arbitrum</SelectItem>
                       <SelectItem value="8453">Base</SelectItem>
                       <SelectItem value="10">Optimism</SelectItem>
+                      <SelectItem value="56">BSC</SelectItem>
+                      <SelectItem value="43114">Avalanche</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -383,49 +391,89 @@ export default function CryptoTokenFlows() {
               </Button>
 
               {onchainData && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3" data-testid="onchain-results">
-                  <Card data-testid="card-burn-rate">
-                    <CardContent className="pt-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <ArrowDownRight className="h-4 w-4 text-red-500" />
-                        <span className="text-xs text-muted-foreground">Burn Rate</span>
-                      </div>
-                      <div className="text-lg font-bold" data-testid="text-burn-rate">
-                        {formatSupply(onchainData.burns.recentBurnRate)}/day
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Total burned: {formatSupply(onchainData.burns.totalBurned)}
-                      </p>
-                    </CardContent>
-                  </Card>
-                  <Card data-testid="card-staking-ratio">
-                    <CardContent className="pt-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Coins className="h-4 w-4 text-blue-500" />
-                        <span className="text-xs text-muted-foreground">Staking Ratio</span>
-                      </div>
-                      <div className="text-lg font-bold" data-testid="text-staking-ratio">
-                        {(onchainData.staking.stakingRatio * 100).toFixed(1)}%
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Staked: {formatSupply(onchainData.staking.stakedBalance)}
-                      </p>
-                    </CardContent>
-                  </Card>
-                  <Card data-testid="card-concentration">
-                    <CardContent className="pt-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Link2 className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Holder Concentration</span>
-                      </div>
-                      <div className="text-lg font-bold" data-testid="text-holder-count">
-                        {onchainData.concentration.holderCount.toLocaleString()} holders
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Top 10: {(onchainData.concentration.top10Percent * 100).toFixed(1)}% | Top 50: {(onchainData.concentration.top50Percent * 100).toFixed(1)}%
-                      </p>
-                    </CardContent>
-                  </Card>
+                <div className="space-y-3 mt-3">
+                  {onchainData.note && (
+                    <div className="text-xs text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2" data-testid="text-chain-note">
+                      {onchainData.note}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="onchain-results">
+                    <Card data-testid="card-burn-rate">
+                      <CardContent className="pt-4">
+                        <div className="flex items-center gap-2 mb-1">
+                          <ArrowDownRight className="h-4 w-4 text-red-500" />
+                          <span className="text-xs text-muted-foreground">
+                            {onchainData.burnEstimate?.hasBurnProgram ? "Burn Program" : "Burn Rate"}
+                          </span>
+                        </div>
+                        {onchainData.burnEstimate?.hasBurnProgram ? (
+                          <>
+                            <div className="text-lg font-bold" data-testid="text-burn-rate">
+                              {onchainData.burnEstimate.burnPercent.toFixed(2)}% burned
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Total burned: {formatSupply(onchainData.burnEstimate.totalBurned)}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Source: {onchainData.burnEstimate.source === "max_supply_delta" ? "maxSupply vs totalSupply" : "supply data"}
+                            </p>
+                            {onchainData.burns.totalBurned > 0 && onchainData.chainType === "evm" && (
+                              <p className="text-xs text-muted-foreground">
+                                On-chain confirmed: {formatSupply(onchainData.burns.totalBurned)}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-lg font-bold" data-testid="text-burn-rate">
+                              {onchainData.burns.recentBurnRate > 0
+                                ? `${formatSupply(onchainData.burns.recentBurnRate)}/day`
+                                : "No burns detected"}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Total burned: {formatSupply(onchainData.burns.totalBurned)}
+                            </p>
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
+                    <Card data-testid="card-staking-ratio">
+                      <CardContent className="pt-4">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Coins className="h-4 w-4 text-blue-500" />
+                          <span className="text-xs text-muted-foreground">Staking Ratio</span>
+                        </div>
+                        <div className="text-lg font-bold" data-testid="text-staking-ratio">
+                          {onchainData.staking.stakingRatio > 0
+                            ? `${(onchainData.staking.stakingRatio * 100).toFixed(1)}%`
+                            : "N/A"}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {onchainData.staking.stakedBalance > 0
+                            ? `Staked: ${formatSupply(onchainData.staking.stakedBalance)}`
+                            : onchainData.chainType === "non-evm" ? "Not available for this chain" : "No staking data"}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card data-testid="card-concentration">
+                      <CardContent className="pt-4">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Link2 className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">Holder Concentration</span>
+                        </div>
+                        <div className="text-lg font-bold" data-testid="text-holder-count">
+                          {onchainData.concentration.holderCount > 0
+                            ? `${onchainData.concentration.holderCount.toLocaleString()} holders`
+                            : "N/A"}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {onchainData.concentration.holderCount > 0
+                            ? `Top 10: ${(onchainData.concentration.top10Percent * 100).toFixed(1)}% | Top 50: ${(onchainData.concentration.top50Percent * 100).toFixed(1)}%`
+                            : onchainData.chainType === "non-evm" ? "Not available for this chain" : "No holder data"}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
               )}
             </CardContent>

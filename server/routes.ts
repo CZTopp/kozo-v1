@@ -25,11 +25,20 @@ import {
 import {
   searchCoins, searchCoinByContract, looksLikeContractAddress, getCoinMarketData, getMultipleCoinMarketData, mapCoinGeckoToProject,
   searchDefiLlamaProtocols, getProtocolTVLHistory, getProtocolFees, getProtocolRevenue,
-  INCENTIVE_TEMPLATES, getCoinContractAddress,
+  INCENTIVE_TEMPLATES, getCoinContractAddress, estimateBurnFromSupply,
 } from "./crypto-data";
 import { getOnChainTokenData } from "./thirdweb-data";
 
 type Params = Record<string, string>;
+
+function formatNum(n: number | null | undefined): string {
+  if (n == null || isNaN(n)) return "N/A";
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return n.toLocaleString();
+}
 
 export async function registerRoutes(server: Server, app: Express) {
   const publicPaths = ["/api/login", "/api/logout", "/api/callback", "/api/auth/user"];
@@ -1414,14 +1423,47 @@ export async function registerRoutes(server: Server, app: Express) {
       const { tokenAddress, chainId, stakingContract } = req.body;
       if (!tokenAddress) return res.status(400).json({ message: "tokenAddress is required" });
 
-      const data = await getOnChainTokenData(
-        tokenAddress,
-        chainId || 1,
-        stakingContract,
-        project.circulatingSupply || undefined,
-        project.totalSupply || undefined
-      );
-      res.json(data);
+      const isEvmChain = typeof chainId === "number" && chainId > 0;
+
+      if (isEvmChain) {
+        const data = await getOnChainTokenData(
+          tokenAddress,
+          chainId,
+          stakingContract,
+          project.circulatingSupply || undefined,
+          project.totalSupply || undefined
+        );
+        const burnEstimate = estimateBurnFromSupply(project.totalSupply, project.maxSupply, project.circulatingSupply);
+        if (data.burns.totalBurned === 0 && burnEstimate.hasBurnProgram) {
+          data.burns.totalBurned = burnEstimate.totalBurned;
+        }
+        res.json({ ...data, burnEstimate, chainType: "evm" });
+      } else {
+        const burnEstimate = estimateBurnFromSupply(project.totalSupply, project.maxSupply, project.circulatingSupply);
+        const chainLabel = chainId === "solana" ? "Solana" : String(chainId);
+        const noteLines = [`On-chain queries not available for ${chainLabel}.`];
+        if (burnEstimate.source === "max_supply_delta") {
+          noteLines.push(`Burn data derived from CoinGecko: maxSupply (${formatNum(project.maxSupply)}) vs totalSupply (${formatNum(project.totalSupply)}).`);
+        } else if (burnEstimate.source === "supply_gap") {
+          noteLines.push(`Supply gap detected (${formatNum((project.totalSupply || 0) - (project.circulatingSupply || 0))} tokens locked/vesting). No confirmed burn program from supply data — use manual entry for known burns/buybacks.`);
+        } else {
+          noteLines.push("No burn signal from supply data. Use manual entry if this token has a burn/buyback program.");
+        }
+        res.json({
+          burns: {
+            totalBurned: burnEstimate.totalBurned,
+            recentBurnRate: 0,
+            burnEvents: 0,
+          },
+          staking: { stakedBalance: 0, stakingRatio: 0 },
+          concentration: { top10Percent: 0, top50Percent: 0, holderCount: 0 },
+          hasThirdwebData: false,
+          burnEstimate,
+          chainType: "non-evm",
+          chainName: chainLabel,
+          note: noteLines.join(" "),
+        });
+      }
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -1582,6 +1624,8 @@ export async function registerRoutes(server: Server, app: Express) {
       const totalSupply = project.totalSupply || currentSupply;
       const maxSupply = project.maxSupply || totalSupply;
 
+      const burnEstimate = estimateBurnFromSupply(project.totalSupply, project.maxSupply, project.circulatingSupply);
+
       const periods = 12;
       const entries: any[] = [];
       let cumSupply = currentSupply;
@@ -1589,15 +1633,18 @@ export async function registerRoutes(server: Server, app: Express) {
       const totalScheduleTokens = schedules.reduce((sum, s) => sum + (s.amount || 0), 0);
       const avgUnlockPerPeriod = totalScheduleTokens > 0 ? totalScheduleTokens / periods : 0;
 
-      const estimatedBurnRate = currentSupply * 0.001;
+      let estimatedBurnPerQuarter = currentSupply * 0.001;
+      let estimatedBuybackPerQuarter = 0;
+
       const estimatedStaking = currentSupply * 0.02;
 
       for (let i = 0; i < periods; i++) {
         const unlocks = avgUnlockPerPeriod * Math.pow(0.9, i);
         const minting = i < 6 ? (maxSupply - totalSupply) * 0.01 * Math.pow(0.85, i) : 0;
-        const burns = estimatedBurnRate;
+        const burns = estimatedBurnPerQuarter;
+        const buybacks = estimatedBuybackPerQuarter;
         const staking = estimatedStaking * Math.pow(0.95, i);
-        const netFlow = minting + unlocks - burns - staking;
+        const netFlow = minting + unlocks - burns - buybacks - staking;
         cumSupply += netFlow;
 
         entries.push({
@@ -1607,7 +1654,7 @@ export async function registerRoutes(server: Server, app: Express) {
           minting: Math.round(minting),
           unlocks: Math.round(unlocks),
           burns: Math.round(burns),
-          buybacks: 0,
+          buybacks: Math.round(buybacks),
           stakingLockups: Math.round(staking),
           netFlow: Math.round(netFlow),
           cumulativeSupply: Math.round(cumSupply),

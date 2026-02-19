@@ -174,12 +174,25 @@ const CHAIN_ID_TO_COINGECKO_PLATFORM: Record<number, string> = {
   8453: "base",
   43114: "avalanche",
   56: "binance-smart-chain",
+  solana: "solana",
+} as any;
+
+const COINGECKO_PLATFORM_TO_CHAIN: Record<string, { chainId: number | string; chainName: string }> = {
+  "ethereum": { chainId: 1, chainName: "Ethereum" },
+  "polygon-pos": { chainId: 137, chainName: "Polygon" },
+  "optimistic-ethereum": { chainId: 10, chainName: "Optimism" },
+  "arbitrum-one": { chainId: 42161, chainName: "Arbitrum" },
+  "base": { chainId: 8453, chainName: "Base" },
+  "avalanche": { chainId: 43114, chainName: "Avalanche" },
+  "binance-smart-chain": { chainId: 56, chainName: "BSC" },
+  "solana": { chainId: "solana", chainName: "Solana" },
 };
 
 interface CoinContractInfo {
   address: string;
-  chainId: number;
+  chainId: number | string;
   chainName: string;
+  isEvm: boolean;
 }
 
 export async function getCoinContractAddress(coingeckoId: string): Promise<CoinContractInfo | null> {
@@ -188,26 +201,37 @@ export async function getCoinContractAddress(coingeckoId: string): Promise<CoinC
     const data = await res.json();
     const platforms: Record<string, string> = data.platforms || {};
 
-    const priorityOrder = [1, 137, 42161, 8453, 10, 43114, 56];
-    for (const chainId of priorityOrder) {
+    const evmPriorityOrder = [1, 137, 42161, 8453, 10, 43114, 56];
+    for (const chainId of evmPriorityOrder) {
       const platform = CHAIN_ID_TO_COINGECKO_PLATFORM[chainId];
       if (platform && platforms[platform] && platforms[platform].length > 0) {
         return {
           address: platforms[platform],
           chainId,
-          chainName: platform,
+          chainName: COINGECKO_PLATFORM_TO_CHAIN[platform]?.chainName || platform,
+          isEvm: true,
         };
       }
     }
 
+    if (platforms["solana"] && platforms["solana"].length > 0) {
+      return {
+        address: platforms["solana"],
+        chainId: "solana",
+        chainName: "Solana",
+        isEvm: false,
+      };
+    }
+
     for (const [platform, address] of Object.entries(platforms)) {
       if (address && address.length > 0) {
-        const chainId = Object.entries(CHAIN_ID_TO_COINGECKO_PLATFORM)
-          .find(([, name]) => name === platform)?.[0];
+        const mapped = COINGECKO_PLATFORM_TO_CHAIN[platform];
+        const isEvm = mapped ? typeof mapped.chainId === "number" : false;
         return {
           address,
-          chainId: chainId ? parseInt(chainId) : 1,
-          chainName: platform,
+          chainId: mapped?.chainId ?? platform,
+          chainName: mapped?.chainName || platform,
+          isEvm,
         };
       }
     }
@@ -217,6 +241,50 @@ export async function getCoinContractAddress(coingeckoId: string): Promise<CoinC
     console.error("CoinGecko contract address lookup error:", err);
     return null;
   }
+}
+
+export interface BurnEstimate {
+  totalBurned: number;
+  burnPercent: number;
+  hasBurnProgram: boolean;
+  source: "max_supply_delta" | "supply_gap" | "none";
+}
+
+export function estimateBurnFromSupply(
+  totalSupply: number | null | undefined,
+  maxSupply: number | null | undefined,
+  circulatingSupply: number | null | undefined
+): BurnEstimate {
+  const total = totalSupply || 0;
+  const max = maxSupply || 0;
+  const circulating = circulatingSupply || 0;
+
+  if (max > 0 && total > 0 && max > total) {
+    const burned = max - total;
+    const burnPercent = (burned / max) * 100;
+    return {
+      totalBurned: burned,
+      burnPercent,
+      hasBurnProgram: burnPercent > 0.1,
+      source: "max_supply_delta",
+    };
+  }
+
+  if (total > 0 && circulating > 0 && total > circulating) {
+    return {
+      totalBurned: 0,
+      burnPercent: 0,
+      hasBurnProgram: false,
+      source: "supply_gap",
+    };
+  }
+
+  return {
+    totalBurned: 0,
+    burnPercent: 0,
+    hasBurnProgram: false,
+    source: "none",
+  };
 }
 
 interface DefiLlamaProtocol {
