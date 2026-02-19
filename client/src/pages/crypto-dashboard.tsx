@@ -105,6 +105,8 @@ export default function CryptoDashboard() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchDone, setSearchDone] = useState(false);
+  const [refreshCooldown, setRefreshCooldown] = useState(0);
+  const [addingId, setAddingId] = useState<string | null>(null);
 
   const { data: projects, isLoading: projectsLoading } = useQuery<CryptoProject[]>({
     queryKey: ["/api/crypto/projects"],
@@ -161,33 +163,64 @@ export default function CryptoDashboard() {
         if (res.ok) {
           const data = await res.json();
           setSearchResults(data.coins || data || []);
+        } else if (res.status === 429) {
+          toast({
+            title: "Rate limit reached",
+            description: "CoinGecko's free API has request limits. Please wait a moment before searching again.",
+            variant: "destructive",
+          });
+          setSearchResults([]);
         }
       } catch {
       } finally {
         setIsSearching(false);
         setSearchDone(true);
       }
-    }, 500);
+    }, 600);
     return () => clearTimeout(timer);
   }, [searchTerm]);
+
+  useEffect(() => {
+    if (refreshCooldown <= 0) return;
+    const t = setInterval(() => setRefreshCooldown(c => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [refreshCooldown]);
 
   const refreshMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/crypto/projects/refresh");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || `Error ${res.status}`);
+      }
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects"] });
       toast({ title: "Prices refreshed" });
+      setRefreshCooldown(15);
     },
     onError: (err: Error) => {
-      toast({ title: "Refresh failed", description: err.message, variant: "destructive" });
+      const isRateLimit = err.message.toLowerCase().includes("rate limit");
+      toast({
+        title: isRateLimit ? "Rate limit reached" : "Refresh failed",
+        description: isRateLimit
+          ? "CoinGecko's free API has request limits. Please wait a moment before trying again."
+          : err.message,
+        variant: "destructive",
+      });
+      if (isRateLimit) setRefreshCooldown(30);
     },
   });
 
   const addProjectMutation = useMutation({
     mutationFn: async (coingeckoId: string) => {
+      setAddingId(coingeckoId);
       const res = await apiRequest("POST", "/api/crypto/projects", { coingeckoId });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || `Error ${res.status}`);
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -195,10 +228,19 @@ export default function CryptoDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/crypto/dashboard-summary"] });
       setSearchTerm("");
       setSearchResults([]);
+      setAddingId(null);
       toast({ title: "Project added" });
     },
     onError: (err: Error) => {
-      toast({ title: "Error adding project", description: err.message, variant: "destructive" });
+      setAddingId(null);
+      const isRateLimit = err.message.toLowerCase().includes("rate limit");
+      toast({
+        title: isRateLimit ? "Rate limit reached" : "Error adding project",
+        description: isRateLimit
+          ? "CoinGecko's free API has request limits. Please wait a moment before adding another project."
+          : err.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -251,14 +293,16 @@ export default function CryptoDashboard() {
                 {searchResults.map((result) => (
                   <button
                     key={result.id}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover-elevate"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover-elevate disabled:opacity-50"
                     onClick={() => addProjectMutation.mutate(result.id)}
-                    disabled={addProjectMutation.isPending}
+                    disabled={addProjectMutation.isPending || addingId !== null}
                     data-testid={`button-add-project-${result.id}`}
                   >
-                    {result.thumb && (
+                    {addingId === result.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                    ) : result.thumb ? (
                       <img src={result.thumb} alt="" className="h-5 w-5 rounded-full" />
-                    )}
+                    ) : null}
                     <span className="font-medium">{result.name}</span>
                     <Badge variant="secondary" className="text-xs uppercase">{result.symbol}</Badge>
                     {result.market_cap_rank && (
@@ -272,7 +316,7 @@ export default function CryptoDashboard() {
           <Button
             variant="outline"
             onClick={() => refreshMutation.mutate()}
-            disabled={refreshMutation.isPending || !hasProjects}
+            disabled={refreshMutation.isPending || !hasProjects || refreshCooldown > 0}
             data-testid="button-refresh-prices"
           >
             {refreshMutation.isPending ? (
@@ -280,7 +324,7 @@ export default function CryptoDashboard() {
             ) : (
               <RefreshCw className="h-4 w-4 mr-1" />
             )}
-            Refresh
+            {refreshCooldown > 0 ? `Wait ${refreshCooldown}s` : "Refresh"}
           </Button>
         </div>
       </div>

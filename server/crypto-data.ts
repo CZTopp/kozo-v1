@@ -29,12 +29,26 @@ interface CoinGeckoMarketData {
   sparkline_in_7d?: { price: number[] };
 }
 
-async function fetchWithRetry(url: string, retries = 2): Promise<Response> {
+let lastCoinGeckoCall = 0;
+const MIN_CALL_INTERVAL_MS = 2500;
+
+async function throttledFetch(url: string): Promise<Response> {
+  const now = Date.now();
+  const elapsed = now - lastCoinGeckoCall;
+  if (elapsed < MIN_CALL_INTERVAL_MS) {
+    await new Promise(r => setTimeout(r, MIN_CALL_INTERVAL_MS - elapsed));
+  }
+  lastCoinGeckoCall = Date.now();
+  return fetch(url);
+}
+
+async function fetchWithRetry(url: string, retries = 3): Promise<Response> {
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const res = await fetch(url);
+    const res = await throttledFetch(url);
     if (res.ok) return res;
     if (res.status === 429 && attempt < retries) {
-      const wait = (attempt + 1) * 2000;
+      const wait = Math.min((attempt + 1) * 3000, 15000);
+      console.log(`[CoinGecko] Rate limited, waiting ${wait}ms before retry ${attempt + 1}/${retries}`);
       await new Promise(r => setTimeout(r, wait));
       continue;
     }

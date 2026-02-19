@@ -1217,7 +1217,15 @@ export async function registerRoutes(server: Server, app: Express) {
       const projects = await storage.getCryptoProjects(userId);
       if (projects.length === 0) return res.json({ updated: 0 });
       const ids = projects.map(p => p.coingeckoId);
-      const marketData = await getMultipleCoinMarketData(ids);
+      let marketData;
+      try {
+        marketData = await getMultipleCoinMarketData(ids);
+      } catch (fetchErr: any) {
+        if (fetchErr.message === "RATE_LIMITED") {
+          return res.status(429).json({ message: "CoinGecko rate limit reached. Please wait a moment and try again." });
+        }
+        return res.status(502).json({ message: "Could not reach CoinGecko API. Please try again shortly." });
+      }
       let updated = 0;
       for (const coin of marketData) {
         const project = projects.find(p => p.coingeckoId === coin.id);
