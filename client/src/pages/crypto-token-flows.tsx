@@ -88,9 +88,24 @@ export default function CryptoTokenFlows() {
     enabled: !!projectId,
   });
 
+  const { data: cachedData } = useQuery<any>({
+    queryKey: ["/api/crypto/projects", projectId, "cached-data"],
+    queryFn: () => fetch(`/api/crypto/projects/${projectId}/cached-data`).then(r => r.json()),
+    enabled: !!projectId,
+  });
+
+  useEffect(() => {
+    if (cachedData?.onchain && !onchainData) {
+      setOnchainData(cachedData.onchain);
+      setOnchainOpen(true);
+      if (cachedData.contractAddress) setTokenAddress(cachedData.contractAddress);
+      if (cachedData.chainId) setChainId(cachedData.chainId);
+    }
+  }, [cachedData]);
+
   const { data: contractInfo } = useQuery<{ found: boolean; address?: string; chainId?: number | string; chainName?: string; isEvm?: boolean }>({
     queryKey: ["/api/crypto/projects", projectId, "contract-address"],
-    enabled: !!projectId,
+    enabled: !!projectId && !cachedData?.contractAddress,
   });
 
   useEffect(() => {
@@ -179,6 +194,7 @@ export default function CryptoTokenFlows() {
     },
     onSuccess: (data: OnChainData) => {
       setOnchainData(data);
+      queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "cached-data"] });
       toast({ title: "On-chain data fetched" });
     },
     onError: (err: Error) => {
@@ -360,18 +376,26 @@ export default function CryptoTokenFlows() {
                   />
                 </div>
               </div>
-              <Button
-                onClick={() => onchainMutation.mutate()}
-                disabled={onchainMutation.isPending || !tokenAddress}
-                data-testid="button-fetch-onchain"
-              >
-                {onchainMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                ) : (
-                  <Database className="h-4 w-4 mr-1" />
+              <div className="flex items-center gap-2 flex-wrap">
+                {cachedData?.onchainFetchedAt && (
+                  <span className="text-xs text-muted-foreground" data-testid="text-onchain-fetched-at">
+                    Last fetched: {new Date(cachedData.onchainFetchedAt).toLocaleDateString()}
+                    {cachedData.onchainStale && <Badge variant="outline" className="ml-1 text-[10px] py-0">Stale</Badge>}
+                  </span>
                 )}
-                Fetch On-Chain Data
-              </Button>
+                <Button
+                  onClick={() => onchainMutation.mutate()}
+                  disabled={onchainMutation.isPending || !tokenAddress}
+                  data-testid="button-fetch-onchain"
+                >
+                  {onchainMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Database className="h-4 w-4 mr-1" />
+                  )}
+                  {cachedData?.onchainStale ? "Refresh On-Chain Data" : "Fetch On-Chain Data"}
+                </Button>
+              </div>
 
               {onchainData && (
                 <div className="space-y-3 mt-3">

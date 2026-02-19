@@ -55,6 +55,12 @@ export default function CryptoFinancials() {
     enabled: !!projectId,
   });
 
+  const { data: cachedData } = useQuery<any>({
+    queryKey: ["/api/crypto/projects", projectId, "cached-data"],
+    queryFn: () => fetch(`/api/crypto/projects/${projectId}/cached-data`).then(r => r.json()),
+    enabled: !!projectId,
+  });
+
   const fetchDefiMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", `/api/crypto/projects/${projectId}/fetch-defi-data`);
@@ -63,6 +69,7 @@ export default function CryptoFinancials() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "protocol-metrics"] });
       queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "cached-data"] });
       toast({ title: "DeFi data fetched successfully" });
     },
     onError: (err: Error) => {
@@ -193,18 +200,26 @@ export default function CryptoFinancials() {
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <CryptoProjectNav projectId={projectId!} projectName={project.name} projectImage={project.image} projectSymbol={project.symbol} />
-        <Button
-          onClick={() => fetchDefiMutation.mutate()}
-          disabled={fetchDefiMutation.isPending || !project.defiLlamaId}
-          data-testid="button-fetch-defi"
-        >
-          {fetchDefiMutation.isPending ? (
-            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4 mr-1" />
+        <div className="flex items-center gap-2 flex-wrap">
+          {cachedData?.defiFetchedAt && (
+            <span className="text-xs text-muted-foreground" data-testid="text-defi-fetched-at">
+              Last fetched: {new Date(cachedData.defiFetchedAt).toLocaleDateString()}
+              {cachedData.defiStale && <Badge variant="outline" className="ml-1 text-[10px] py-0">Stale</Badge>}
+            </span>
           )}
-          {fetchDefiMutation.isPending ? "Fetching..." : "Fetch DeFi Data"}
-        </Button>
+          <Button
+            onClick={() => fetchDefiMutation.mutate()}
+            disabled={fetchDefiMutation.isPending || !project.defiLlamaId}
+            data-testid="button-fetch-defi"
+          >
+            {fetchDefiMutation.isPending ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-1" />
+            )}
+            {fetchDefiMutation.isPending ? "Fetching..." : cachedData?.defiStale ? "Refresh DeFi Data" : "Fetch DeFi Data"}
+          </Button>
+        </div>
       </div>
 
       {!project.defiLlamaId && (

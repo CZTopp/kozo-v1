@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { ArrowLeft, Coins, BarChart3, Target, TrendingUp, GitBranch } from "lucide-react";
+import { ArrowLeft, Coins, BarChart3, Target, TrendingUp, GitBranch, Settings } from "lucide-react";
 
 const NAV_ITEMS = [
   { label: "Tokenomics", path: "tokenomics", icon: Coins },
@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { label: "Valuation", path: "valuation", icon: Target },
   { label: "Revenue", path: "revenue", icon: TrendingUp },
   { label: "Token Flows", path: "token-flows", icon: GitBranch },
+  { label: "Settings", path: "settings", icon: Settings },
 ];
 
 interface CryptoProjectNavProps {

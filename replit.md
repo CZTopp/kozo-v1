@@ -89,6 +89,13 @@ Kozo is a comprehensive financial modeling and valuation platform designed to pr
 - **API Routes**: CRUD + seed for both tables, on-chain data endpoint
 - Key files: server/thirdweb-data.ts, client/src/pages/crypto-revenue-forecast.tsx, crypto-token-flows.tsx, crypto-valuation.tsx (updated)
 
+### Crypto Project Navigation & Settings
+- **CryptoProjectNav** (`client/src/components/crypto-project-nav.tsx`): Reusable nav bar across all crypto analysis pages (Tokenomics, Financials, Valuation, Revenue, Token Flows, Settings) with active state highlighting
+- **Project Settings** (`/crypto/settings/:id`): Centralized editing for project name, symbol, CoinGecko ID, chain/contract config, DefiLlama protocol (search+change+clear), valuation assumptions (discount/growth rates, projection years), governance info, and research notes
+- **Data Caching**: On-chain and DeFi data are cached in `crypto_projects` table (`cachedOnchainData`, `cachedDefiData` as jsonb, plus `onchainDataFetchedAt`, `defiDataFetchedAt` timestamps). Pages load cached data on mount; stale indicator shows when data is >24h old
+- **Cached Data API**: `GET /api/crypto/projects/:id/cached-data` returns cached on-chain/DeFi data with staleness flags
+- **New schema columns**: `cachedOnchainData`, `onchainDataFetchedAt`, `cachedDefiData`, `defiDataFetchedAt`, `chainId`, `contractAddress`, `stakingContract`, `notes`
+
 ### Admin Panel
 - `isAdmin` boolean column on `users` table, default `false`
 - Admin middleware: checks `users.isAdmin` before allowing access to `/api/admin/*` routes

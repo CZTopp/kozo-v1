@@ -31,6 +31,7 @@ import CryptoFinancials from "@/pages/crypto-financials";
 import CryptoValuation from "@/pages/crypto-valuation";
 import CryptoRevenueForecast from "@/pages/crypto-revenue-forecast";
 import CryptoTokenFlows from "@/pages/crypto-token-flows";
+import CryptoSettings from "@/pages/crypto-settings";
 import AdminPage from "@/pages/admin";
 import Landing from "@/pages/landing";
 
@@ -54,6 +55,7 @@ function Router() {
       <Route path="/crypto/valuation/:id" component={CryptoValuation} />
       <Route path="/crypto/revenue/:id" component={CryptoRevenueForecast} />
       <Route path="/crypto/token-flows/:id" component={CryptoTokenFlows} />
+      <Route path="/crypto/settings/:id" component={CryptoSettings} />
       <Route path="/admin" component={AdminPage} />
       <Route component={NotFound} />
     </Switch>

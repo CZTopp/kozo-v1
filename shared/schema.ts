@@ -346,6 +346,14 @@ export const cryptoProjects = pgTable("crypto_projects", {
   treasuryCurrency: text("treasury_currency"),
   governanceNotes: text("governance_notes"),
   whitepaper: text("whitepaper"),
+  cachedOnchainData: jsonb("cached_onchain_data"),
+  onchainDataFetchedAt: timestamp("onchain_data_fetched_at"),
+  cachedDefiData: jsonb("cached_defi_data"),
+  defiDataFetchedAt: timestamp("defi_data_fetched_at"),
+  chainId: text("chain_id"),
+  contractAddress: text("contract_address"),
+  stakingContract: text("staking_contract"),
+  notes: text("notes"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

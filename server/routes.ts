@@ -1183,7 +1183,7 @@ export async function registerRoutes(server: Server, app: Express) {
         "maxSupply", "ath", "athDate", "sparklineData", "image",
         "governanceType", "votingMechanism", "treasurySize", "treasuryCurrency",
         "governanceNotes", "whitepaper", "discountRate", "feeGrowthRate", "terminalGrowthRate",
-        "projectionYears"
+        "projectionYears", "chainId", "contractAddress", "stakingContract", "notes"
       ];
       const numericFields = ["currentPrice", "marketCap", "fullyDilutedValuation", "volume24h",
         "priceChange24h", "priceChange7d", "circulatingSupply", "totalSupply", "maxSupply", "ath",
@@ -1377,9 +1377,19 @@ export async function registerRoutes(server: Server, app: Express) {
         await storage.upsertProtocolMetrics(metrics);
       }
 
-      if (!project.defiLlamaId) {
-        await storage.updateCryptoProject(project.id, userId, { defiLlamaId: slug });
-      }
+      const latestMetrics = metrics.slice(-30);
+      const defiSummary = {
+        totalMetrics: metrics.length,
+        latestTvl: latestMetrics.length > 0 ? latestMetrics[latestMetrics.length - 1].tvl : 0,
+        latestFees: latestMetrics.length > 0 ? latestMetrics[latestMetrics.length - 1].dailyFees : 0,
+        latestRevenue: latestMetrics.length > 0 ? latestMetrics[latestMetrics.length - 1].dailyRevenue : 0,
+      };
+
+      await storage.updateCryptoProject(project.id, userId, {
+        defiLlamaId: slug,
+        cachedDefiData: defiSummary,
+        defiDataFetchedAt: new Date(),
+      });
 
       res.json({ imported: metrics.length, slug });
     } catch (err: any) {
@@ -1413,6 +1423,34 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
+  app.get("/api/crypto/projects/:id/cached-data", async (req: Request<Params>, res: Response) => {
+    try {
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const project = await storage.getCryptoProject(req.params.id, userId);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const now = Date.now();
+      const STALE_MS = 24 * 60 * 60 * 1000;
+      const onchainAge = project.onchainDataFetchedAt ? now - new Date(project.onchainDataFetchedAt).getTime() : null;
+      const defiAge = project.defiDataFetchedAt ? now - new Date(project.defiDataFetchedAt).getTime() : null;
+
+      res.json({
+        onchain: project.cachedOnchainData || null,
+        onchainFetchedAt: project.onchainDataFetchedAt || null,
+        onchainStale: onchainAge !== null ? onchainAge > STALE_MS : null,
+        defi: project.cachedDefiData || null,
+        defiFetchedAt: project.defiDataFetchedAt || null,
+        defiStale: defiAge !== null ? defiAge > STALE_MS : null,
+        chainId: project.chainId || null,
+        contractAddress: project.contractAddress || null,
+        stakingContract: project.stakingContract || null,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/crypto/projects/:id/onchain-data", async (req: Request<Params>, res: Response) => {
     try {
       const userId = (req as any).user?.claims?.sub as string;
@@ -1437,7 +1475,15 @@ export async function registerRoutes(server: Server, app: Express) {
         if (data.burns.totalBurned === 0 && burnEstimate.hasBurnProgram) {
           data.burns.totalBurned = burnEstimate.totalBurned;
         }
-        res.json({ ...data, burnEstimate, chainType: "evm" });
+        const result = { ...data, burnEstimate, chainType: "evm" };
+        await storage.updateCryptoProject(project.id, userId, {
+          cachedOnchainData: result,
+          onchainDataFetchedAt: new Date(),
+          chainId: String(chainId),
+          contractAddress: tokenAddress,
+          stakingContract: stakingContract || null,
+        });
+        res.json(result);
       } else {
         const burnEstimate = estimateBurnFromSupply(project.totalSupply, project.maxSupply, project.circulatingSupply);
         const chainLabel = chainId === "solana" ? "Solana" : String(chainId);
@@ -1449,7 +1495,7 @@ export async function registerRoutes(server: Server, app: Express) {
         } else {
           noteLines.push("No burn signal from supply data. Use manual entry if this token has a burn/buyback program.");
         }
-        res.json({
+        const result = {
           burns: {
             totalBurned: burnEstimate.totalBurned,
             recentBurnRate: 0,
@@ -1462,7 +1508,15 @@ export async function registerRoutes(server: Server, app: Express) {
           chainType: "non-evm",
           chainName: chainLabel,
           note: noteLines.join(" "),
+        };
+        await storage.updateCryptoProject(project.id, userId, {
+          cachedOnchainData: result,
+          onchainDataFetchedAt: new Date(),
+          chainId: String(chainId),
+          contractAddress: tokenAddress,
+          stakingContract: stakingContract || null,
         });
+        res.json(result);
       }
     } catch (err: any) {
       res.status(500).json({ message: err.message });
