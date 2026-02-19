@@ -322,7 +322,10 @@ const sections = [
     howToUse: [
       "Discounted Fee Revenue: For revenue-generating DeFi protocols, this applies a DCF methodology to projected protocol revenue. Set discount rate, growth rate, terminal growth, and projection years.",
       "Comparable Analysis: Classifies tokens as Revenue-Generating, Speculative, or Meme. Revenue-generating tokens get P/R and P/Fee multiples compared to peers. Speculative tokens show honest 'no fundamental basis' notices.",
-      "Scenario Analysis: Bull/base/bear cases with adjustable multipliers. Each scenario shows an implied token price and upside/downside from current price.",
+      "Scenario Analysis: Three-scenario framework (Bull, Base, Bear) that applies market cap multipliers to the current valuation. Each scenario calculates an implied token price, percentage change from current price, implied FDV, and implied market cap.",
+      "  -- How to set multipliers logically: Start with Base at 1.0x (current valuation is fair). Set Bull based on upside catalysts you believe in (e.g., 3x if you expect major adoption growth). Set Bear based on downside risks (e.g., 0.3x if macro headwinds or competition could shrink the project significantly).",
+      "  -- Interpreting results: Compare the Bull upside % to the Bear downside %. A favorable risk/reward is when upside potential significantly exceeds downside risk (e.g., Bull +200% vs Bear -60% gives a ~3:1 ratio). The bar chart visually compares all three scenarios side by side.",
+      "  -- Example: Token at $1.00, $500M market cap. Bull 3x = $3.00 implied price (+200%), Base 1.2x = $1.20 (+20%), Bear 0.4x = $0.40 (-60%). The asymmetry tells you whether the risk/reward is attractive for your investment thesis.",
       "Key Risk Cards: Highlights concentration risk, regulatory risk, smart contract risk, and tokenomics red flags for each project.",
       "The cascade integration pulls net value accrual from Revenue Forecasts and projected supply from Token Flows to improve implied price accuracy.",
     ],
