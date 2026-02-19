@@ -1757,20 +1757,41 @@ export async function registerRoutes(server: Server, app: Express) {
     if (!project) return res.status(404).json({ message: "Project not found" });
     const existing = await storage.getTokenAllocations(project.id);
     if (existing.length > 0) return res.status(400).json({ message: "Allocations already exist. Delete them first to re-seed." });
-    const totalSupply = project.totalSupply || project.maxSupply || 0;
-    const standardAllocations = [
-      { category: "Founder & Team", standardGroup: "team", percentage: 20, amount: totalSupply ? totalSupply * 0.20 : null, vestingMonths: 48, cliffMonths: 12, tgePercent: 0, vestingType: "linear", dataSource: null, notes: "Core contributors, advisors, partners", sortOrder: 0 },
-      { category: "Private Investors", standardGroup: "investors", percentage: 16, amount: totalSupply ? totalSupply * 0.16 : null, vestingMonths: 36, cliffMonths: 6, tgePercent: 0, vestingType: "linear", dataSource: null, notes: "Seed, Series A/B, strategic rounds", sortOrder: 1 },
-      { category: "Public Sale", standardGroup: "public", percentage: 5, amount: totalSupply ? totalSupply * 0.05 : null, vestingMonths: 0, cliffMonths: 0, tgePercent: 100, vestingType: "immediate", dataSource: null, notes: "ICO, IEO, IDO, public sale", sortOrder: 2 },
-      { category: "Treasury & Reserve", standardGroup: "treasury", percentage: 27, amount: totalSupply ? totalSupply * 0.27 : null, vestingMonths: 30, cliffMonths: 0, tgePercent: 10, vestingType: "linear", dataSource: null, notes: "Foundation funds, ecosystem, future initiatives", sortOrder: 3 },
-      { category: "Community & Ecosystem", standardGroup: "community", percentage: 32, amount: totalSupply ? totalSupply * 0.32 : null, vestingMonths: 30, cliffMonths: 0, tgePercent: 5, vestingType: "linear", dataSource: null, notes: "Airdrops, staking rewards, liquidity mining, grants", sortOrder: 4 },
-    ];
+
+    const { fetchMessariAllocations, mapMessariToAllocations } = await import("./crypto-data");
+    const slug = project.symbol || project.coingeckoId || project.name;
+    let allocationsToCreate: Record<string, unknown>[] = [];
+    let source = "fallback";
+
+    if (slug) {
+      const slugsToTry = [project.symbol, project.coingeckoId, project.name].filter(Boolean) as string[];
+      for (const s of slugsToTry) {
+        const messariData = await fetchMessariAllocations(s);
+        if (messariData && messariData.allocations && messariData.allocations.length > 0) {
+          allocationsToCreate = mapMessariToAllocations(messariData, project.id);
+          source = "messari";
+          break;
+        }
+      }
+    }
+
+    if (allocationsToCreate.length === 0) {
+      const totalSupply = project.totalSupply || project.maxSupply || 0;
+      allocationsToCreate = [
+        { projectId: project.id, category: "Founder & Team", standardGroup: "team", percentage: 20, amount: totalSupply ? totalSupply * 0.20 : null, vestingMonths: 48, cliffMonths: 12, tgePercent: 0, vestingType: "linear", dataSource: "Industry Average", description: "Core contributors, advisors, partners", notes: null, sortOrder: 0 },
+        { projectId: project.id, category: "Private Investors", standardGroup: "investors", percentage: 16, amount: totalSupply ? totalSupply * 0.16 : null, vestingMonths: 36, cliffMonths: 6, tgePercent: 0, vestingType: "linear", dataSource: "Industry Average", description: "Seed, Series A/B, strategic rounds", notes: null, sortOrder: 1 },
+        { projectId: project.id, category: "Public Sale", standardGroup: "public", percentage: 5, amount: totalSupply ? totalSupply * 0.05 : null, vestingMonths: 0, cliffMonths: 0, tgePercent: 100, vestingType: "immediate", dataSource: "Industry Average", description: "ICO, IEO, IDO, public sale", notes: null, sortOrder: 2 },
+        { projectId: project.id, category: "Treasury & Reserve", standardGroup: "treasury", percentage: 27, amount: totalSupply ? totalSupply * 0.27 : null, vestingMonths: 30, cliffMonths: 0, tgePercent: 10, vestingType: "linear", dataSource: "Industry Average", description: "Foundation funds, ecosystem, future initiatives", notes: null, sortOrder: 3 },
+        { projectId: project.id, category: "Community & Ecosystem", standardGroup: "community", percentage: 32, amount: totalSupply ? totalSupply * 0.32 : null, vestingMonths: 30, cliffMonths: 0, tgePercent: 5, vestingType: "linear", dataSource: "Industry Average", description: "Airdrops, staking rewards, liquidity mining, grants", notes: null, sortOrder: 4 },
+      ];
+    }
+
     const results = [];
-    for (const alloc of standardAllocations) {
-      const created = await storage.createTokenAllocation({ ...alloc, projectId: project.id });
+    for (const alloc of allocationsToCreate) {
+      const created = await storage.createTokenAllocation(alloc as any);
       results.push(created);
     }
-    res.json(results);
+    res.json({ source, allocations: results });
   });
 
   app.patch("/api/crypto/allocations/:id", async (req: Request, res: Response) => {

@@ -48,7 +48,7 @@ function formatPrice(n: number | null | undefined): string {
 
 const emptySupplyForm = { label: "", amount: 0, percentOfTotal: 0, unlockDate: "", vestingMonths: 0 };
 const emptyIncentiveForm = { role: "", contribution: "", rewardType: "", rewardSource: "", allocationPercent: 0, estimatedApy: 0, vestingMonths: 0, isSustainable: true, sustainabilityNotes: "" };
-const emptyAllocationForm = { category: "", standardGroup: "", percentage: 0, amount: 0, vestingMonths: 0, cliffMonths: 0, tgePercent: 0, vestingType: "linear", dataSource: "", notes: "" };
+const emptyAllocationForm = { category: "", standardGroup: "", percentage: 0, amount: 0, vestingMonths: 0, cliffMonths: 0, tgePercent: 0, vestingType: "linear", dataSource: "", releasedPercent: 0, assumption: "", references: "", description: "", notes: "" };
 const emptyFundraisingForm = { roundType: "", amount: 0, valuation: 0, date: "", leadInvestors: "", tokenPrice: 0, notes: "" };
 
 const STANDARD_GROUPS = [
@@ -142,7 +142,7 @@ export default function CryptoTokenomics() {
 
   const seedAllocationsMutation = useMutation({
     mutationFn: async () => { const res = await apiRequest("POST", `/api/crypto/projects/${projectId}/allocations/seed`); return res.json(); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "allocations"] }); toast({ title: "Standard allocations seeded" }); },
+    onSuccess: (data: { source: string }) => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "allocations"] }); toast({ title: data.source === "messari" ? "Real allocation data loaded from Messari" : "Standard template allocations seeded" }); },
     onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
 
@@ -200,7 +200,7 @@ export default function CryptoTokenomics() {
     const pct = Number(allocationForm.percentage) || 0;
     const computedAmount = allocationForm.amount > 0 ? allocationForm.amount : (projectedSupply2035 > 0 ? projectedSupply2035 * (pct / 100) : 0);
     const group = allocationForm.standardGroup || STANDARD_GROUPS.find(g => g.categories.includes(allocationForm.category.trim()))?.value || null;
-    const payload = { projectId, category: allocationForm.category.trim(), standardGroup: group, percentage: pct, amount: computedAmount, vestingMonths: Number(allocationForm.vestingMonths) || null, cliffMonths: Number(allocationForm.cliffMonths) || null, tgePercent: Number(allocationForm.tgePercent) || null, vestingType: allocationForm.vestingType || null, dataSource: allocationForm.dataSource.trim() || null, notes: allocationForm.notes.trim() || null, sortOrder: (allocations?.length || 0) };
+    const payload = { projectId, category: allocationForm.category.trim(), standardGroup: group, percentage: pct, amount: computedAmount, vestingMonths: Number(allocationForm.vestingMonths) || null, cliffMonths: Number(allocationForm.cliffMonths) || null, tgePercent: Number(allocationForm.tgePercent) || null, vestingType: allocationForm.vestingType || null, dataSource: allocationForm.dataSource.trim() || null, releasedPercent: Number(allocationForm.releasedPercent) || null, assumption: allocationForm.assumption.trim() || null, references: allocationForm.references.trim() || null, description: allocationForm.description.trim() || null, notes: allocationForm.notes.trim() || null, sortOrder: (allocations?.length || 0) };
     if (editingAllocationId) { updateAllocationMutation.mutate({ id: editingAllocationId, data: payload }); } else { createAllocationMutation.mutate(payload); }
   }
 
@@ -219,7 +219,7 @@ export default function CryptoTokenomics() {
   function openEditAllocation(alloc: TokenAllocation) {
     setEditingAllocationId(alloc.id);
     const autoGroup = alloc.standardGroup || STANDARD_GROUPS.find(g => g.categories.includes(alloc.category))?.value || "";
-    setAllocationForm({ category: alloc.category, standardGroup: autoGroup, percentage: alloc.percentage || 0, amount: alloc.amount || 0, vestingMonths: alloc.vestingMonths || 0, cliffMonths: alloc.cliffMonths || 0, tgePercent: alloc.tgePercent || 0, vestingType: alloc.vestingType || "linear", dataSource: alloc.dataSource || "", notes: alloc.notes || "" });
+    setAllocationForm({ category: alloc.category, standardGroup: autoGroup, percentage: alloc.percentage || 0, amount: alloc.amount || 0, vestingMonths: alloc.vestingMonths || 0, cliffMonths: alloc.cliffMonths || 0, tgePercent: alloc.tgePercent || 0, vestingType: alloc.vestingType || "linear", dataSource: alloc.dataSource || "", releasedPercent: alloc.releasedPercent || 0, assumption: alloc.assumption || "", references: alloc.references || "", description: alloc.description || "", notes: alloc.notes || "" });
     setAllocationFormOpen(true);
   }
 
@@ -452,7 +452,7 @@ export default function CryptoTokenomics() {
               {(!allocations || allocations.length === 0) && (
                 <Button variant="outline" onClick={() => seedAllocationsMutation.mutate()} disabled={seedAllocationsMutation.isPending} data-testid="button-seed-allocations">
                   {seedAllocationsMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
-                  Seed Standard Categories
+                  Seed Allocations
                 </Button>
               )}
               <Button onClick={() => { setEditingAllocationId(null); setAllocationForm({ ...emptyAllocationForm }); setAllocationFormOpen(true); }} data-testid="button-add-allocation">
@@ -472,8 +472,8 @@ export default function CryptoTokenomics() {
                           <TableHead className="font-semibold">Category</TableHead>
                           <TableHead className="text-right font-semibold">%</TableHead>
                           <TableHead className="text-right font-semibold">Tokens</TableHead>
+                          <TableHead className="text-right font-semibold">Released</TableHead>
                           <TableHead className="font-semibold">Vesting</TableHead>
-                          <TableHead className="text-right font-semibold">TGE %</TableHead>
                           <TableHead className="font-semibold">Source</TableHead>
                           <TableHead className="text-center font-semibold">Actions</TableHead>
                         </TableRow>
@@ -483,22 +483,34 @@ export default function CryptoTokenomics() {
                           <TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
                         )}
                         {!allocationsLoading && (!allocations || allocations.length === 0) && (
-                          <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground" data-testid="text-no-allocations">No allocations defined yet. Use "Seed Standard Categories" to start with industry-standard groups.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground" data-testid="text-no-allocations">No allocations defined yet. Use "Seed Allocations" to load real project data.</TableCell></TableRow>
                         )}
                         {(allocations || []).map((a) => {
                           const computedTokens = a.amount || (projectedSupply2035 > 0 ? projectedSupply2035 * ((a.percentage || 0) / 100) : 0);
-                          const vestingLabel = a.vestingType === "immediate" ? "Immediate" : a.vestingMonths ? `${a.cliffMonths ? a.cliffMonths + "mo cliff + " : ""}${a.vestingMonths}mo ${a.vestingType || "linear"}` : "--";
+                          const vestingLabel = a.vestingType === "immediate" ? "Immediate" : a.vestingMonths ? `${a.cliffMonths ? a.cliffMonths + "mo cliff + " : ""}${a.vestingMonths}mo ${a.vestingType || "linear"}` : (a.description ? a.description.substring(0, 60) : "--");
+                          const releasedLabel = a.releasedPercent != null ? `${a.releasedPercent.toFixed(1)}%` : "--";
                           return (
                             <TableRow key={a.id} data-testid={`row-allocation-${a.id}`}>
                               <TableCell data-testid={`text-alloc-category-${a.id}`}>
                                 <div className="font-medium">{a.category}</div>
-                                {a.notes && <div className="text-[11px] text-muted-foreground truncate max-w-[200px]">{a.notes}</div>}
+                                {a.description && <div className="text-[11px] text-muted-foreground truncate max-w-[240px]">{a.description}</div>}
                               </TableCell>
-                              <TableCell className="text-right font-medium" data-testid={`text-alloc-pct-${a.id}`}>{(a.percentage || 0).toFixed(1)}%</TableCell>
+                              <TableCell className="text-right font-medium" data-testid={`text-alloc-pct-${a.id}`}>{(a.percentage || 0).toFixed(2)}%</TableCell>
                               <TableCell className="text-right" data-testid={`text-alloc-tokens-${a.id}`}>{formatSupply(computedTokens)}</TableCell>
-                              <TableCell className="text-xs">{vestingLabel}</TableCell>
-                              <TableCell className="text-right">{a.tgePercent != null && a.tgePercent > 0 ? `${a.tgePercent}%` : "--"}</TableCell>
-                              <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{a.dataSource || "--"}</TableCell>
+                              <TableCell className="text-right text-xs" data-testid={`text-alloc-released-${a.id}`}>{releasedLabel}</TableCell>
+                              <TableCell className="text-xs max-w-[160px] truncate">{vestingLabel}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground">
+                                {a.references ? (
+                                  <div className="truncate max-w-[140px]">
+                                    {a.references.split(", ").map((ref, i) => {
+                                      try {
+                                        const domain = new URL(ref).hostname.replace("www.", "");
+                                        return <span key={i}>{i > 0 && ", "}<a href={ref} target="_blank" rel="noopener noreferrer" className="underline text-blue-500 hover:text-blue-400">{domain}</a></span>;
+                                      } catch { return <span key={i}>{i > 0 && ", "}{ref}</span>; }
+                                    })}
+                                  </div>
+                                ) : a.dataSource || "--"}
+                              </TableCell>
                               <TableCell className="text-center">
                                 <div className="flex items-center justify-center gap-0.5">
                                   <Button size="icon" variant="ghost" onClick={() => openEditAllocation(a)} data-testid={`button-edit-alloc-${a.id}`}><Edit2 className="h-3.5 w-3.5" /></Button>
@@ -1081,8 +1093,26 @@ export default function CryptoTokenomics() {
               <div className="space-y-1"><Label>TGE %</Label><Input type="number" value={allocationForm.tgePercent || ""} onChange={(e) => setAllocationForm(f => ({ ...f, tgePercent: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-alloc-tge" /></div>
             </div>
             <div className="space-y-1">
+              <Label>Description</Label>
+              <Input value={allocationForm.description} onChange={(e) => setAllocationForm(f => ({ ...f, description: e.target.value }))} placeholder="e.g. 48-month linear vesting with 12-month cliff" data-testid="input-alloc-description" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Released %</Label>
+                <Input type="number" value={allocationForm.releasedPercent || ""} onChange={(e) => setAllocationForm(f => ({ ...f, releasedPercent: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-alloc-released-pct" />
+              </div>
+              <div className="space-y-1">
+                <Label>Assumption</Label>
+                <Input value={allocationForm.assumption} onChange={(e) => setAllocationForm(f => ({ ...f, assumption: e.target.value }))} placeholder="e.g. Inferred On-chain, Vesting Contract" data-testid="input-alloc-assumption" />
+              </div>
+            </div>
+            <div className="space-y-1">
               <Label>Data Source</Label>
-              <Input value={allocationForm.dataSource} onChange={(e) => setAllocationForm(f => ({ ...f, dataSource: e.target.value }))} placeholder="e.g. Whitepaper, TokenUnlocks, CoinGecko" data-testid="input-alloc-datasource" />
+              <Input value={allocationForm.dataSource} onChange={(e) => setAllocationForm(f => ({ ...f, dataSource: e.target.value }))} placeholder="e.g. Whitepaper, Messari, On-chain" data-testid="input-alloc-datasource" />
+            </div>
+            <div className="space-y-1">
+              <Label>References (URLs)</Label>
+              <Input value={allocationForm.references} onChange={(e) => setAllocationForm(f => ({ ...f, references: e.target.value }))} placeholder="e.g. https://etherscan.io/..., https://docs.project.io/..." data-testid="input-alloc-references" />
             </div>
             <div className="space-y-1"><Label>Notes</Label><Input value={allocationForm.notes} onChange={(e) => setAllocationForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes..." data-testid="input-alloc-notes" /></div>
           </div>

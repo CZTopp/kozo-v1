@@ -1,5 +1,6 @@
 const COINGECKO_BASE = "https://api.coingecko.com/api/v3";
 const DEFILLAMA_BASE = "https://api.llama.fi";
+const MESSARI_BASE = "https://api.messari.io";
 
 interface CoinGeckoSearchResult {
   id: string;
@@ -479,3 +480,131 @@ export const INCENTIVE_TEMPLATES: Record<string, IncentiveTemplate[]> = {
     { role: "LDO Governance", contribution: "Vote on protocol parameters, node operator onboarding, fee structure", rewardType: "Governance Power over largest DeFi protocol by TVL", rewardSource: "N/A", allocationPercent: 0, estimatedApy: null, vestingMonths: null, isSustainable: true, sustainabilityNotes: "LDO holders govern a protocol managing 9M+ ETH. Treasury receives 5% of all staking rewards. Strong revenue but LDO token has no direct fee sharing." },
   ],
 };
+
+// ===================== Messari Token Unlocks API =====================
+
+interface MessariAllocation {
+  allocationRecipient: string;
+  totalAllocationUSD: number;
+  totalAllocationNative: number;
+  cumulativeUnlockedUSD: number;
+  cumulativeUnlockedNative: number;
+  unlocksRemainingUSD: number;
+  unlocksRemainingNative: number;
+  percentOfUnlocksCompleted: number;
+  description: string;
+  assumptions: string;
+  sources: { sourceType: string; source: string }[];
+}
+
+interface MessariAssetAllocation {
+  asset: { id: string; name: string; slug: string; symbol: string };
+  genesisDate: string;
+  projectedEndDate: string;
+  totalAllocationNative: number;
+  totalAllocationUSD: number;
+  percentOfUnlocksCompleted: number;
+  allocationRecipientCount: number;
+  allocations: MessariAllocation[];
+}
+
+function inferStandardGroup(recipient: string): string {
+  const lower = recipient.toLowerCase();
+  if (/team|founder|contributor|core|advisor|partner/i.test(lower)) return "team";
+  if (/investor|seed|private|strategic|series|venture|vc/i.test(lower)) return "investors";
+  if (/public|ico|ieo|ido|launchpad|sale/i.test(lower)) return "public";
+  if (/treasury|reserve|foundation|dao|protocol/i.test(lower)) return "treasury";
+  return "community";
+}
+
+function parseVestingFromDescription(desc: string): { vestingMonths: number | null; cliffMonths: number | null; tgePercent: number | null; vestingType: string } {
+  const result: { vestingMonths: number | null; cliffMonths: number | null; tgePercent: number | null; vestingType: string } = {
+    vestingMonths: null, cliffMonths: null, tgePercent: null, vestingType: "linear"
+  };
+  if (!desc) return result;
+  const lower = desc.toLowerCase();
+
+  const tgeMatch = lower.match(/(\d+(?:\.\d+)?)\s*%\s*(?:of allocation\s+)?(?:released\s+)?(?:at|on)\s*tge/i) || lower.match(/tge.*?(\d+(?:\.\d+)?)\s*%/i);
+  if (tgeMatch) result.tgePercent = parseFloat(tgeMatch[1]);
+  if (/100%\s*(?:vested|released|unlocked)\s*(?:at|on)\s*tge/i.test(lower) || /100%\s*(?:of allocation\s+)?released at tge/i.test(lower)) {
+    result.tgePercent = 100; result.vestingType = "immediate"; return result;
+  }
+
+  const cliffMatch = lower.match(/(\d+)[\s-]*month\s*cliff/i) || lower.match(/(\d+)[\s-]*year\s*cliff/i);
+  if (cliffMatch) {
+    result.cliffMonths = lower.includes("year") ? parseInt(cliffMatch[1]) * 12 : parseInt(cliffMatch[1]);
+  }
+
+  const vestMatch = lower.match(/(\d+)[\s-]*month\s*(?:linear\s*)?vest/i) || lower.match(/(\d+)[\s-]*year\s*(?:linear\s*)?vest/i)
+    || lower.match(/over\s*(\d+)\s*months/i) || lower.match(/over\s*(\d+)\s*years/i);
+  if (vestMatch) {
+    result.vestingMonths = (lower.includes("year") && !lower.match(/over\s*\d+\s*months/i)) ? parseInt(vestMatch[1]) * 12 : parseInt(vestMatch[1]);
+  }
+
+  if (/non-linear|governance|custom/i.test(lower)) result.vestingType = "custom";
+  else if (/cliff/i.test(lower) && !result.vestingMonths) result.vestingType = "cliff";
+  else if (/immediate|instant|tge/i.test(lower) && result.tgePercent === 100) result.vestingType = "immediate";
+
+  return result;
+}
+
+export async function fetchMessariAllocations(symbolOrSlug: string): Promise<MessariAssetAllocation | null> {
+  const apiKey = process.env.MESSARI_API_KEY;
+  const headers: Record<string, string> = { "Accept": "application/json" };
+  if (apiKey) headers["X-Messari-API-Key"] = apiKey;
+
+  try {
+    const url = `${MESSARI_BASE}/token-unlocks/v1/allocations?assetId=${encodeURIComponent(symbolOrSlug.toLowerCase())}`;
+    const resp = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
+    if (!resp.ok) {
+      console.log(`Messari API returned ${resp.status} for ${symbolOrSlug}`);
+      return null;
+    }
+    const json = await resp.json();
+    const data = json?.data;
+    if (!data || !Array.isArray(data) || data.length === 0) return null;
+
+    const match = data.find((d: MessariAssetAllocation) =>
+      d.asset.symbol.toLowerCase() === symbolOrSlug.toLowerCase() ||
+      d.asset.slug.toLowerCase() === symbolOrSlug.toLowerCase() ||
+      d.asset.name.toLowerCase() === symbolOrSlug.toLowerCase()
+    ) || data[0];
+
+    return match;
+  } catch (err) {
+    console.error(`Messari fetch error for ${symbolOrSlug}:`, err);
+    return null;
+  }
+}
+
+export function mapMessariToAllocations(data: MessariAssetAllocation, projectId: string): Record<string, unknown>[] {
+  const totalNative = data.totalAllocationNative || 1;
+  return data.allocations.map((a, i) => {
+    const pct = totalNative > 0 ? (a.totalAllocationNative / totalNative) * 100 : 0;
+    const relPct = a.percentOfUnlocksCompleted * 100;
+    const vesting = parseVestingFromDescription(a.description);
+    const refs = a.sources.map(s => s.source).filter(Boolean).join(", ");
+    const sourceTypes = a.sources.map(s => s.sourceType).filter(Boolean).join(", ");
+
+    return {
+      projectId,
+      category: a.allocationRecipient,
+      standardGroup: inferStandardGroup(a.allocationRecipient),
+      percentage: Math.round(pct * 100) / 100,
+      amount: a.totalAllocationNative,
+      vestingMonths: vesting.vestingMonths,
+      cliffMonths: vesting.cliffMonths,
+      tgePercent: vesting.tgePercent,
+      vestingType: vesting.vestingType,
+      dataSource: sourceTypes || "Messari",
+      releasedPercent: Math.round(relPct * 100) / 100,
+      releasedAmount: a.cumulativeUnlockedNative,
+      precision: null,
+      assumption: a.assumptions || null,
+      references: refs || null,
+      description: a.description || null,
+      notes: null,
+      sortOrder: i,
+    };
+  });
+}

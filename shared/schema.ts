@@ -434,6 +434,12 @@ export const tokenAllocations = pgTable("token_allocations", {
   tgePercent: real("tge_percent"),
   vestingType: text("vesting_type"),
   dataSource: text("data_source"),
+  releasedPercent: real("released_percent"),
+  releasedAmount: real("released_amount"),
+  precision: text("precision"),
+  assumption: text("assumption"),
+  references: text("references"),
+  description: text("description"),
   notes: text("notes"),
   sortOrder: integer("sort_order").default(0),
 });
