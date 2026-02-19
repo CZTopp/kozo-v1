@@ -606,12 +606,12 @@ export default function CryptoTokenomics() {
                 <Card data-testid="card-allocation-pie">
                   <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Allocation Breakdown</CardTitle></CardHeader>
                   <CardContent>
-                    <div className="h-56">
+                    <div className="h-48">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                          <Pie data={allocationPieData} cx="50%" cy="50%" outerRadius={75} innerRadius={40} dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                          <Pie data={allocationPieData} cx="50%" cy="50%" outerRadius={80} innerRadius={45} dataKey="value" nameKey="name" paddingAngle={1} stroke="none">
                             {allocationPieData.map((_, i) => (
-                              <Cell key={i} fill={i === allocationPieData.length - 1 && allocationPieData[i].name === "Untracked" ? "hsl(var(--muted))" : COLORS[i % COLORS.length]} />
+                              <Cell key={i} fill={i === allocationPieData.length - 1 && allocationPieData[i].name === "Untracked" ? "hsl(var(--muted))" : COLORS[i % COLORS.length]} stroke="none" />
                             ))}
                           </Pie>
                           <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} />
