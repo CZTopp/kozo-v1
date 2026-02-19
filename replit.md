@@ -61,6 +61,16 @@ Foresight is a comprehensive financial modeling and valuation platform designed 
 - **CoinGecko API**: Used for crypto market data (price, supply, volume, sparklines). Free API, no key required.
 - **DefiLlama API**: Used for DeFi protocol financials (TVL, fees, revenue). Free API, no key required.
 
+### Authentication & Multi-Tenancy
+- **Replit Auth (OIDC)**: Uses Replit as OpenID Connect provider for authentication
+- **Auth Routes**: `/api/login`, `/api/logout`, `/api/callback`, `/api/auth/user` (server-side redirects)
+- **Middleware**: `isAuthenticated` middleware protects all `/api/*` routes (except auth routes)
+- **Per-User Data Isolation**: `userId` column on `financial_models`, `portfolio_positions`, `macro_indicators`, `market_indices`, `portfolio_red_flags`, `crypto_projects` — all storage queries filter by authenticated user's `sub` claim
+- **Session Storage**: PostgreSQL-backed sessions via `connect-pg-simple`
+- **Frontend Auth**: `useAuth()` hook from `@/hooks/use-auth.ts` provides `{ user, isLoading, isAuthenticated }`
+- **Landing Page**: Unauthenticated users see `client/src/pages/landing.tsx` with hero, features, and login CTA
+- **Key files**: `server/replit_integrations/auth/`, `shared/models/auth.ts`, `client/src/hooks/use-auth.ts`, `client/src/pages/landing.tsx`
+
 ### IPO/INVEST Mode Architecture
 - `modelMode` field on financial_models: `'ipo'` (default) or `'invest'`
 - **IPO Mode**: Bottom-up forecasting with custom revenue streams, quarterly detail, manual entry

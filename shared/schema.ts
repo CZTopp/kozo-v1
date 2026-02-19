@@ -3,6 +3,8 @@ import { pgTable, text, varchar, numeric, integer, boolean, timestamp, jsonb, re
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export * from "./models/auth";
+
 export const financialModels = pgTable("financial_models", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -19,6 +21,7 @@ export const financialModels = pgTable("financial_models", {
   scenarioBearMultiplier: real("scenario_bear_multiplier").default(0.8),
   displayUnit: text("display_unit").notNull().default("ones"),
   modelMode: text("model_mode").notNull().default("ipo"),
+  userId: text("user_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -220,6 +223,7 @@ export const portfolioPositions = pgTable("portfolio_positions", {
   catalyst: text("catalyst"),
   sectorDriver: text("sector_driver"),
   comments: text("comments"),
+  userId: text("user_id"),
 });
 
 export const portfolioLots = pgTable("portfolio_lots", {
@@ -238,6 +242,7 @@ export const macroIndicators = pgTable("macro_indicators", {
   value: real("value").notNull().default(0),
   priorValue: real("prior_value"),
   displayFormat: text("display_format").default("percent"),
+  userId: text("user_id"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
@@ -250,6 +255,7 @@ export const marketIndices = pgTable("market_indices", {
   mtdReturn: real("mtd_return").default(0),
   dailyChangePercent: real("daily_change_percent").default(0),
   currentValue: real("current_value").default(0),
+  userId: text("user_id"),
 });
 
 export const portfolioRedFlags = pgTable("portfolio_red_flags", {
@@ -257,6 +263,7 @@ export const portfolioRedFlags = pgTable("portfolio_red_flags", {
   question: text("question").notNull(),
   answer: text("answer").notNull().default("No"),
   category: text("category").notNull().default("risk"),
+  userId: text("user_id"),
 });
 
 export const scenarios = pgTable("scenarios", {
@@ -328,6 +335,7 @@ export const cryptoProjects = pgTable("crypto_projects", {
   sparklineData: jsonb("sparkline_data"),
   image: text("image"),
   defiLlamaId: text("defi_llama_id"),
+  userId: text("user_id"),
   discountRate: real("discount_rate").default(0.15),
   feeGrowthRate: real("fee_growth_rate").default(0.10),
   terminalGrowthRate: real("terminal_growth_rate").default(0.02),

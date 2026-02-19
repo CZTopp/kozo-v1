@@ -9,6 +9,7 @@ import { streamCopilotToResponse } from "./copilot";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 import { revenuePeriods } from "@shared/schema";
+import { isAuthenticated } from "./replit_integrations/auth";
 import {
   insertFinancialModelSchema, insertRevenueLineItemSchema,
   insertRevenuePeriodSchema, insertIncomeStatementLineSchema,
@@ -30,25 +31,39 @@ import {
 type Params = Record<string, string>;
 
 export async function registerRoutes(server: Server, app: Express) {
-  app.get("/api/models", async (_req: Request, res: Response) => {
-    const models = await storage.getModels();
+  const publicPaths = ["/api/login", "/api/logout", "/api/callback", "/api/auth/user"];
+  app.use("/api", (req, res, next) => {
+    if (publicPaths.some(p => req.path === p || req.originalUrl === p)) return next();
+    isAuthenticated(req, res, next);
+  });
+
+  app.get("/api/models", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const models = await storage.getModels(userId);
     res.json(models);
   });
 
   app.get("/api/models/:id", async (req: Request<Params>, res: Response) => {
-    const model = await storage.getModel(req.params.id);
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const model = await storage.getModel(req.params.id, userId);
     if (!model) return res.status(404).json({ message: "Model not found" });
     res.json(model);
   });
 
   app.post("/api/models", async (req: Request<Params>, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const parsed = insertFinancialModelSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    const model = await storage.createModel(parsed.data);
+    const model = await storage.createModel({ ...parsed.data, userId });
     res.json(model);
   });
 
   app.patch("/api/models/:id", async (req: Request<Params>, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const body = req.body;
     const numericFields = [
       "growthDecayRate", "targetNetMargin",
@@ -71,11 +86,14 @@ export async function registerRoutes(server: Server, app: Express) {
     if (body.modelMode && !["ipo", "invest"].includes(body.modelMode)) {
       return res.status(400).json({ message: "modelMode must be 'ipo' or 'invest'" });
     }
-    const model = await storage.updateModel(req.params.id, body);
+    const model = await storage.updateModel(req.params.id, userId, body);
+    if (!model) return res.status(404).json({ message: "Model not found" });
     res.json(model);
   });
 
   app.patch("/api/models/:id/update-years", async (req: Request<Params>, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const { yearMapping, startYear, endYear } = req.body;
     if (!yearMapping || typeof yearMapping !== "object") {
       return res.status(400).json({ message: "yearMapping is required" });
@@ -98,12 +116,15 @@ export async function registerRoutes(server: Server, app: Express) {
       }
     }
 
-    const model = await storage.updateModel(req.params.id, { startYear, endYear });
+    const model = await storage.updateModel(req.params.id, userId, { startYear, endYear });
+    if (!model) return res.status(404).json({ message: "Model not found" });
     res.json(model);
   });
 
   app.delete("/api/models/:id", async (req: Request<Params>, res: Response) => {
-    await storage.deleteModel(req.params.id);
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    await storage.deleteModel(req.params.id, userId);
     res.json({ success: true });
   });
 
@@ -134,12 +155,14 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   app.post("/api/models/:modelId/revenue-line-items-with-periods", async (req: Request<Params>, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const { name, sortOrder } = req.body;
     if (!name || typeof name !== "string" || name.trim().length === 0) {
       return res.status(400).json({ message: "Name is required" });
     }
     const modelId = req.params.modelId;
-    const model = await storage.getModel(modelId);
+    const model = await storage.getModel(modelId, userId);
     if (!model) {
       return res.status(404).json({ message: "Model not found" });
     }
@@ -311,15 +334,19 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(val);
   });
 
-  app.get("/api/portfolio", async (_req: Request, res: Response) => {
-    const positions = await storage.getPortfolioPositions();
+  app.get("/api/portfolio", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const positions = await storage.getPortfolioPositions(userId);
     res.json(positions);
   });
 
   app.post("/api/portfolio", async (req: Request<Params>, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const parsed = insertPortfolioPositionSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    const pos = await storage.createPortfolioPosition(parsed.data);
+    const pos = await storage.createPortfolioPosition({ ...parsed.data, userId });
     await storage.createPortfolioLot({
       positionId: pos.id,
       sharesHeld: pos.sharesHeld || 0,
@@ -331,12 +358,17 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   app.patch("/api/portfolio/:id", async (req: Request<Params>, res: Response) => {
-    const pos = await storage.updatePortfolioPosition(req.params.id, req.body);
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const pos = await storage.updatePortfolioPosition(req.params.id, userId, req.body);
+    if (!pos) return res.status(404).json({ message: "Position not found" });
     res.json(pos);
   });
 
   app.delete("/api/portfolio/:id", async (req: Request<Params>, res: Response) => {
-    await storage.deletePortfolioPosition(req.params.id);
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    await storage.deletePortfolioPosition(req.params.id, userId);
     res.json({ success: true });
   });
 
@@ -377,34 +409,44 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json({ success: true, position });
   });
 
-  app.get("/api/macro-indicators", async (_req: Request, res: Response) => {
-    const indicators = await storage.getMacroIndicators();
+  app.get("/api/macro-indicators", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const indicators = await storage.getMacroIndicators(userId);
     res.json(indicators);
   });
 
   app.post("/api/macro-indicators", async (req: Request<Params>, res: Response) => {
-    const ind = await storage.upsertMacroIndicator(req.body);
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const ind = await storage.upsertMacroIndicator({ ...req.body, userId });
     res.json(ind);
   });
 
-  app.get("/api/market-indices", async (_req: Request, res: Response) => {
-    const indices = await storage.getMarketIndices();
+  app.get("/api/market-indices", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const indices = await storage.getMarketIndices(userId);
     res.json(indices);
   });
 
   app.post("/api/market-indices", async (req: Request<Params>, res: Response) => {
-    const idx = await storage.upsertMarketIndex(req.body);
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const idx = await storage.upsertMarketIndex({ ...req.body, userId });
     res.json(idx);
   });
 
-  app.post("/api/refresh-market-data", async (_req: Request, res: Response) => {
+  app.post("/api/refresh-market-data", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     try {
       const results: { indices: number; macro: number; errors: string[] } = { indices: 0, macro: 0, errors: [] };
 
       try {
         const liveIndices = await fetchLiveIndices();
         if (liveIndices.length > 0) {
-          await storage.replaceAllMarketIndices(liveIndices);
+          await storage.replaceAllMarketIndices(liveIndices, userId);
           results.indices = liveIndices.length;
         }
       } catch (err: any) {
@@ -416,7 +458,7 @@ export async function registerRoutes(server: Server, app: Express) {
         try {
           const liveIndicators = await fetchFredIndicators(fredApiKey);
           if (liveIndicators.length > 0) {
-            await storage.replaceAllMacroIndicators(liveIndicators);
+            await storage.replaceAllMacroIndicators(liveIndicators, userId);
             results.macro = liveIndicators.length;
           }
         } catch (err: any) {
@@ -432,9 +474,11 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
-  app.post("/api/refresh-portfolio-prices", async (_req: Request, res: Response) => {
+  app.post("/api/refresh-portfolio-prices", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     try {
-      const positions = await storage.getPortfolioPositions();
+      const positions = await storage.getPortfolioPositions(userId);
       if (positions.length === 0) {
         return res.json({ updated: 0, errors: [] });
       }
@@ -500,7 +544,7 @@ export async function registerRoutes(server: Server, app: Express) {
             updateData.beta = quote.beta;
           }
 
-          await storage.updatePortfolioPosition(position.id, updateData);
+          await storage.updatePortfolioPosition(position.id, userId, updateData);
           updated++;
         }
       }
@@ -512,11 +556,15 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   app.delete("/api/market-indices/:id", async (req: Request<Params>, res: Response) => {
-    await storage.deleteMarketIndex(req.params.id);
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    await storage.deleteMarketIndex(req.params.id, userId);
     res.json({ success: true });
   });
 
   app.post("/api/market-indices/add-custom", async (req: Request<Params>, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     try {
       const { symbol, name, region } = req.body;
       if (!symbol || typeof symbol !== "string") {
@@ -534,6 +582,7 @@ export async function registerRoutes(server: Server, app: Express) {
         ytdReturn: quote.ytdReturn,
         mtdReturn: quote.mtdReturn,
         dailyChangePercent: quote.dailyChangePercent,
+        userId,
       });
       res.json(idx);
     } catch (err: any) {
@@ -542,11 +591,15 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   app.delete("/api/macro-indicators/:id", async (req: Request<Params>, res: Response) => {
-    await storage.deleteMacroIndicator(req.params.id);
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    await storage.deleteMacroIndicator(req.params.id, userId);
     res.json({ success: true });
   });
 
   app.post("/api/macro-indicators/add-custom", async (req: Request<Params>, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     try {
       const { seriesId, name, category, displayFormat } = req.body;
       if (!seriesId || typeof seriesId !== "string") {
@@ -566,6 +619,7 @@ export async function registerRoutes(server: Server, app: Express) {
         value: result.value,
         priorValue: result.priorValue,
         displayFormat: displayFormat?.trim() || result.displayFormat,
+        userId,
       });
       res.json(ind);
     } catch (err: any) {
@@ -573,13 +627,17 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
-  app.get("/api/portfolio-red-flags", async (_req: Request, res: Response) => {
-    const flags = await storage.getPortfolioRedFlags();
+  app.get("/api/portfolio-red-flags", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const flags = await storage.getPortfolioRedFlags(userId);
     res.json(flags);
   });
 
   app.post("/api/portfolio-red-flags", async (req: Request<Params>, res: Response) => {
-    const flag = await storage.upsertPortfolioRedFlag(req.body);
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const flag = await storage.upsertPortfolioRedFlag({ ...req.body, userId });
     res.json(flag);
   });
 
@@ -699,7 +757,9 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.get("/api/models/:modelId/yahoo-fundamentals", async (req: Request<Params>, res: Response) => {
     try {
-      const model = await storage.getModel(req.params.modelId);
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const model = await storage.getModel(req.params.modelId, userId);
       if (!model) return res.status(404).json({ message: "Model not found" });
       if (!model.ticker) return res.status(400).json({ message: "No ticker set for this company. Set a ticker in Edit Company first." });
 
@@ -714,7 +774,9 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.post("/api/models/:modelId/sync-yahoo", async (req: Request<Params>, res: Response) => {
     try {
-      const model = await storage.getModel(req.params.modelId);
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const model = await storage.getModel(req.params.modelId, userId);
       if (!model) return res.status(404).json({ message: "Model not found" });
       if (!model.ticker) return res.status(400).json({ message: "No ticker set for this company." });
 
@@ -725,7 +787,7 @@ export async function registerRoutes(server: Server, app: Express) {
       if (data.sharesOutstanding > 0) updates.sharesOutstanding = data.sharesOutstanding;
 
       if (Object.keys(updates).length > 0) {
-        await storage.updateModel(model.id, updates);
+        await storage.updateModel(model.id, userId, updates);
       }
 
       const dcf = await storage.getDcfValuation(req.params.modelId);
@@ -804,8 +866,10 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.post("/api/models/:modelId/import-sec", async (req: Request<Params>, res: Response) => {
     try {
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
       const modelId = req.params.modelId;
-      const model = await storage.getModel(modelId);
+      const model = await storage.getModel(modelId, userId);
       if (!model) return res.status(404).json({ message: "Model not found" });
 
       const { filingUrl, years: selectedYears } = req.body;
@@ -827,7 +891,7 @@ export async function registerRoutes(server: Server, app: Express) {
       if (maxImportYear > newEndYear) newEndYear = maxImportYear;
 
       if (newStartYear !== model.startYear || newEndYear !== model.endYear) {
-        await storage.updateModel(modelId, { startYear: newStartYear, endYear: newEndYear });
+        await storage.updateModel(modelId, userId, { startYear: newStartYear, endYear: newEndYear });
       }
 
       const existingLineItems = await storage.getRevenueLineItems(modelId);
@@ -994,18 +1058,24 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
-  app.get("/api/crypto/projects", async (_req: Request, res: Response) => {
-    const projects = await storage.getCryptoProjects();
+  app.get("/api/crypto/projects", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const projects = await storage.getCryptoProjects(userId);
     res.json(projects);
   });
 
   app.get("/api/crypto/projects/:id", async (req: Request<Params>, res: Response) => {
-    const project = await storage.getCryptoProject(req.params.id);
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const project = await storage.getCryptoProject(req.params.id, userId);
     if (!project) return res.status(404).json({ message: "Project not found" });
     res.json(project);
   });
 
   app.post("/api/crypto/projects", async (req: Request<Params>, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     try {
       const { coingeckoId } = req.body;
       if (!coingeckoId) return res.status(400).json({ message: "coingeckoId is required" });
@@ -1020,7 +1090,7 @@ export async function registerRoutes(server: Server, app: Express) {
       }
       if (!coinData) return res.status(400).json({ message: `Could not find data for "${coingeckoId}"` });
       const projectData = mapCoinGeckoToProject(coinData);
-      const project = await storage.createCryptoProject(projectData);
+      const project = await storage.createCryptoProject({ ...projectData, userId });
 
       const templateKey = coingeckoId.toLowerCase();
       if (INCENTIVE_TEMPLATES[templateKey]) {
@@ -1041,13 +1111,16 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   app.patch("/api/crypto/projects/:id", async (req: Request<Params>, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     try {
       const allowedFields = ["name", "symbol", "coingeckoId", "defiLlamaId", "category", "currentPrice", "marketCap", "fullyDilutedValuation", "volume24h", "priceChange24h", "priceChange7d", "circulatingSupply", "totalSupply", "maxSupply", "ath", "athDate", "sparklineData", "image"];
       const filtered: Record<string, any> = {};
       for (const key of Object.keys(req.body)) {
         if (allowedFields.includes(key)) filtered[key] = req.body[key];
       }
-      const project = await storage.updateCryptoProject(req.params.id, filtered);
+      const project = await storage.updateCryptoProject(req.params.id, userId, filtered);
+      if (!project) return res.status(404).json({ message: "Project not found" });
       res.json(project);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -1055,13 +1128,17 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   app.delete("/api/crypto/projects/:id", async (req: Request<Params>, res: Response) => {
-    await storage.deleteCryptoProject(req.params.id);
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    await storage.deleteCryptoProject(req.params.id, userId);
     res.json({ success: true });
   });
 
-  app.post("/api/crypto/projects/refresh", async (_req: Request, res: Response) => {
+  app.post("/api/crypto/projects/refresh", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     try {
-      const projects = await storage.getCryptoProjects();
+      const projects = await storage.getCryptoProjects(userId);
       if (projects.length === 0) return res.json({ updated: 0 });
       const ids = projects.map(p => p.coingeckoId);
       const marketData = await getMultipleCoinMarketData(ids);
@@ -1070,7 +1147,7 @@ export async function registerRoutes(server: Server, app: Express) {
         const project = projects.find(p => p.coingeckoId === coin.id);
         if (project) {
           const mapped = mapCoinGeckoToProject(coin);
-          await storage.updateCryptoProject(project.id, mapped);
+          await storage.updateCryptoProject(project.id, userId, mapped);
           updated++;
         }
       }
@@ -1137,7 +1214,9 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.post("/api/crypto/projects/:id/fetch-defi-data", async (req: Request<Params>, res: Response) => {
     try {
-      const project = await storage.getCryptoProject(req.params.id);
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const project = await storage.getCryptoProject(req.params.id, userId);
       if (!project) return res.status(404).json({ message: "Project not found" });
       const slug = project.defiLlamaId || project.name.toLowerCase().replace(/\s+/g, "-");
 
@@ -1171,7 +1250,7 @@ export async function registerRoutes(server: Server, app: Express) {
       }
 
       if (!project.defiLlamaId) {
-        await storage.updateCryptoProject(project.id, { defiLlamaId: slug });
+        await storage.updateCryptoProject(project.id, userId, { defiLlamaId: slug });
       }
 
       res.json({ imported: metrics.length, slug });
@@ -1193,6 +1272,8 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.post("/api/copilot", async (req: Request, res: Response) => {
     try {
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
       const { modelId, message, history } = req.body;
       if (!modelId || !message) {
         return res.status(400).json({ message: "modelId and message are required" });
@@ -1217,6 +1298,7 @@ export async function registerRoutes(server: Server, app: Express) {
       try {
         await streamCopilotToResponse(
           modelId,
+          userId,
           message,
           history || [],
           res,

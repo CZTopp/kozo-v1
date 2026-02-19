@@ -7,8 +7,8 @@ function getOpenAIClient() {
   return new OpenAI({ apiKey });
 }
 
-export async function gatherModelContext(modelId: string) {
-  const model = await storage.getModel(modelId);
+export async function gatherModelContext(modelId: string, userId: string) {
+  const model = await storage.getModel(modelId, userId);
   if (!model) return null;
 
   const [revenuePeriods, lineItems, isLines, bsLines, cfLines, dcf, valComp] = await Promise.all([
@@ -134,12 +134,13 @@ Guidelines:
 
 export async function streamCopilotToResponse(
   modelId: string,
+  userId: string,
   message: string,
   conversationHistory: { role: "user" | "assistant"; content: string }[],
   res: import("express").Response,
   isDisconnected: () => boolean
 ): Promise<void> {
-  const context = await gatherModelContext(modelId);
+  const context = await gatherModelContext(modelId, userId);
 
   if (!context) {
     res.write(`data: ${JSON.stringify({ content: "I couldn't find the financial model. Please select a company from the sidebar first." })}\n\n`);

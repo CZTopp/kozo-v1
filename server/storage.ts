@@ -31,11 +31,11 @@ import {
 } from "@shared/schema";
 
 export interface IStorage {
-  getModels(): Promise<FinancialModel[]>;
-  getModel(id: string): Promise<FinancialModel | undefined>;
+  getModels(userId: string): Promise<FinancialModel[]>;
+  getModel(id: string, userId: string): Promise<FinancialModel | undefined>;
   createModel(data: InsertFinancialModel): Promise<FinancialModel>;
-  updateModel(id: string, data: Partial<InsertFinancialModel>): Promise<FinancialModel>;
-  deleteModel(id: string): Promise<void>;
+  updateModel(id: string, userId: string, data: Partial<InsertFinancialModel>): Promise<FinancialModel>;
+  deleteModel(id: string, userId: string): Promise<void>;
 
   getRevenueLineItems(modelId: string): Promise<RevenueLineItem[]>;
   createRevenueLineItem(data: InsertRevenueLineItem): Promise<RevenueLineItem>;
@@ -69,10 +69,10 @@ export interface IStorage {
   getValuationComparison(modelId: string): Promise<ValuationComparison | undefined>;
   upsertValuationComparison(data: InsertValuationComparison): Promise<ValuationComparison>;
 
-  getPortfolioPositions(): Promise<PortfolioPosition[]>;
+  getPortfolioPositions(userId: string): Promise<PortfolioPosition[]>;
   createPortfolioPosition(data: InsertPortfolioPosition): Promise<PortfolioPosition>;
-  updatePortfolioPosition(id: string, data: Partial<InsertPortfolioPosition>): Promise<PortfolioPosition>;
-  deletePortfolioPosition(id: string): Promise<void>;
+  updatePortfolioPosition(id: string, userId: string, data: Partial<InsertPortfolioPosition>): Promise<PortfolioPosition>;
+  deletePortfolioPosition(id: string, userId: string): Promise<void>;
 
   getPortfolioLots(positionId: string): Promise<PortfolioLot[]>;
   getAllPortfolioLots(): Promise<PortfolioLot[]>;
@@ -81,17 +81,17 @@ export interface IStorage {
   deletePortfolioLot(id: string): Promise<void>;
   recomputePositionFromLots(positionId: string): Promise<PortfolioPosition>;
 
-  getMacroIndicators(): Promise<MacroIndicator[]>;
+  getMacroIndicators(userId: string): Promise<MacroIndicator[]>;
   upsertMacroIndicator(data: InsertMacroIndicator): Promise<MacroIndicator>;
-  replaceAllMacroIndicators(data: InsertMacroIndicator[]): Promise<MacroIndicator[]>;
-  deleteMacroIndicator(id: string): Promise<void>;
+  replaceAllMacroIndicators(data: InsertMacroIndicator[], userId: string): Promise<MacroIndicator[]>;
+  deleteMacroIndicator(id: string, userId: string): Promise<void>;
 
-  getMarketIndices(): Promise<MarketIndex[]>;
+  getMarketIndices(userId: string): Promise<MarketIndex[]>;
   upsertMarketIndex(data: InsertMarketIndex): Promise<MarketIndex>;
-  replaceAllMarketIndices(data: InsertMarketIndex[]): Promise<MarketIndex[]>;
-  deleteMarketIndex(id: string): Promise<void>;
+  replaceAllMarketIndices(data: InsertMarketIndex[], userId: string): Promise<MarketIndex[]>;
+  deleteMarketIndex(id: string, userId: string): Promise<void>;
 
-  getPortfolioRedFlags(): Promise<PortfolioRedFlag[]>;
+  getPortfolioRedFlags(userId: string): Promise<PortfolioRedFlag[]>;
   upsertPortfolioRedFlag(data: InsertPortfolioRedFlag): Promise<PortfolioRedFlag>;
 
   getScenarios(modelId: string): Promise<Scenario[]>;
@@ -110,11 +110,11 @@ export interface IStorage {
   createReport(data: InsertReport): Promise<Report>;
   deleteReport(id: string): Promise<void>;
 
-  getCryptoProjects(): Promise<CryptoProject[]>;
-  getCryptoProject(id: string): Promise<CryptoProject | undefined>;
+  getCryptoProjects(userId: string): Promise<CryptoProject[]>;
+  getCryptoProject(id: string, userId: string): Promise<CryptoProject | undefined>;
   createCryptoProject(data: InsertCryptoProject): Promise<CryptoProject>;
-  updateCryptoProject(id: string, data: Partial<InsertCryptoProject>): Promise<CryptoProject>;
-  deleteCryptoProject(id: string): Promise<void>;
+  updateCryptoProject(id: string, userId: string, data: Partial<InsertCryptoProject>): Promise<CryptoProject>;
+  deleteCryptoProject(id: string, userId: string): Promise<void>;
 
   getTokenSupplySchedules(projectId: string): Promise<TokenSupplySchedule[]>;
   createTokenSupplySchedule(data: InsertTokenSupplySchedule): Promise<TokenSupplySchedule>;
@@ -132,12 +132,12 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  async getModels() {
-    return db.select().from(financialModels);
+  async getModels(userId: string) {
+    return db.select().from(financialModels).where(eq(financialModels.userId, userId));
   }
 
-  async getModel(id: string) {
-    const [model] = await db.select().from(financialModels).where(eq(financialModels.id, id));
+  async getModel(id: string, userId: string) {
+    const [model] = await db.select().from(financialModels).where(and(eq(financialModels.id, id), eq(financialModels.userId, userId)));
     return model;
   }
 
@@ -146,13 +146,13 @@ export class DatabaseStorage implements IStorage {
     return model;
   }
 
-  async updateModel(id: string, data: Partial<InsertFinancialModel>) {
-    const [model] = await db.update(financialModels).set(data).where(eq(financialModels.id, id)).returning();
+  async updateModel(id: string, userId: string, data: Partial<InsertFinancialModel>) {
+    const [model] = await db.update(financialModels).set(data).where(and(eq(financialModels.id, id), eq(financialModels.userId, userId))).returning();
     return model;
   }
 
-  async deleteModel(id: string) {
-    await db.delete(financialModels).where(eq(financialModels.id, id));
+  async deleteModel(id: string, userId: string) {
+    await db.delete(financialModels).where(and(eq(financialModels.id, id), eq(financialModels.userId, userId)));
   }
 
   async getRevenueLineItems(modelId: string) {
@@ -328,8 +328,8 @@ export class DatabaseStorage implements IStorage {
     return val;
   }
 
-  async getPortfolioPositions() {
-    return db.select().from(portfolioPositions);
+  async getPortfolioPositions(userId: string) {
+    return db.select().from(portfolioPositions).where(eq(portfolioPositions.userId, userId));
   }
 
   async createPortfolioPosition(data: InsertPortfolioPosition) {
@@ -337,13 +337,13 @@ export class DatabaseStorage implements IStorage {
     return pos;
   }
 
-  async updatePortfolioPosition(id: string, data: Partial<InsertPortfolioPosition>) {
-    const [pos] = await db.update(portfolioPositions).set(data).where(eq(portfolioPositions.id, id)).returning();
+  async updatePortfolioPosition(id: string, userId: string, data: Partial<InsertPortfolioPosition>) {
+    const [pos] = await db.update(portfolioPositions).set(data).where(and(eq(portfolioPositions.id, id), eq(portfolioPositions.userId, userId))).returning();
     return pos;
   }
 
-  async deletePortfolioPosition(id: string) {
-    await db.delete(portfolioPositions).where(eq(portfolioPositions.id, id));
+  async deletePortfolioPosition(id: string, userId: string) {
+    await db.delete(portfolioPositions).where(and(eq(portfolioPositions.id, id), eq(portfolioPositions.userId, userId)));
   }
 
   async getPortfolioLots(positionId: string) {
@@ -393,8 +393,8 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getMacroIndicators() {
-    return db.select().from(macroIndicators);
+  async getMacroIndicators(userId: string) {
+    return db.select().from(macroIndicators).where(eq(macroIndicators.userId, userId));
   }
 
   async upsertMacroIndicator(data: InsertMacroIndicator) {
@@ -402,19 +402,19 @@ export class DatabaseStorage implements IStorage {
     return ind;
   }
 
-  async replaceAllMacroIndicators(data: InsertMacroIndicator[]) {
-    await db.delete(macroIndicators);
+  async replaceAllMacroIndicators(data: InsertMacroIndicator[], userId: string) {
+    await db.delete(macroIndicators).where(eq(macroIndicators.userId, userId));
     if (data.length === 0) return [];
-    const result = await db.insert(macroIndicators).values(data).returning();
+    const result = await db.insert(macroIndicators).values(data.map(d => ({ ...d, userId }))).returning();
     return result;
   }
 
-  async deleteMacroIndicator(id: string) {
-    await db.delete(macroIndicators).where(eq(macroIndicators.id, id));
+  async deleteMacroIndicator(id: string, userId: string) {
+    await db.delete(macroIndicators).where(and(eq(macroIndicators.id, id), eq(macroIndicators.userId, userId)));
   }
 
-  async getMarketIndices() {
-    return db.select().from(marketIndices);
+  async getMarketIndices(userId: string) {
+    return db.select().from(marketIndices).where(eq(marketIndices.userId, userId));
   }
 
   async upsertMarketIndex(data: InsertMarketIndex) {
@@ -422,19 +422,19 @@ export class DatabaseStorage implements IStorage {
     return idx;
   }
 
-  async replaceAllMarketIndices(data: InsertMarketIndex[]) {
-    await db.delete(marketIndices);
+  async replaceAllMarketIndices(data: InsertMarketIndex[], userId: string) {
+    await db.delete(marketIndices).where(eq(marketIndices.userId, userId));
     if (data.length === 0) return [];
-    const result = await db.insert(marketIndices).values(data).returning();
+    const result = await db.insert(marketIndices).values(data.map(d => ({ ...d, userId }))).returning();
     return result;
   }
 
-  async deleteMarketIndex(id: string) {
-    await db.delete(marketIndices).where(eq(marketIndices.id, id));
+  async deleteMarketIndex(id: string, userId: string) {
+    await db.delete(marketIndices).where(and(eq(marketIndices.id, id), eq(marketIndices.userId, userId)));
   }
 
-  async getPortfolioRedFlags() {
-    return db.select().from(portfolioRedFlags);
+  async getPortfolioRedFlags(userId: string) {
+    return db.select().from(portfolioRedFlags).where(eq(portfolioRedFlags.userId, userId));
   }
 
   async upsertPortfolioRedFlag(data: InsertPortfolioRedFlag) {
@@ -495,12 +495,12 @@ export class DatabaseStorage implements IStorage {
     await db.delete(reports).where(eq(reports.id, id));
   }
 
-  async getCryptoProjects() {
-    return db.select().from(cryptoProjects);
+  async getCryptoProjects(userId: string) {
+    return db.select().from(cryptoProjects).where(eq(cryptoProjects.userId, userId));
   }
 
-  async getCryptoProject(id: string) {
-    const [project] = await db.select().from(cryptoProjects).where(eq(cryptoProjects.id, id));
+  async getCryptoProject(id: string, userId: string) {
+    const [project] = await db.select().from(cryptoProjects).where(and(eq(cryptoProjects.id, id), eq(cryptoProjects.userId, userId)));
     return project;
   }
 
@@ -509,13 +509,13 @@ export class DatabaseStorage implements IStorage {
     return project;
   }
 
-  async updateCryptoProject(id: string, data: Partial<InsertCryptoProject>) {
-    const [project] = await db.update(cryptoProjects).set(data).where(eq(cryptoProjects.id, id)).returning();
+  async updateCryptoProject(id: string, userId: string, data: Partial<InsertCryptoProject>) {
+    const [project] = await db.update(cryptoProjects).set(data).where(and(eq(cryptoProjects.id, id), eq(cryptoProjects.userId, userId))).returning();
     return project;
   }
 
-  async deleteCryptoProject(id: string) {
-    await db.delete(cryptoProjects).where(eq(cryptoProjects.id, id));
+  async deleteCryptoProject(id: string, userId: string) {
+    await db.delete(cryptoProjects).where(and(eq(cryptoProjects.id, id), eq(cryptoProjects.userId, userId)));
   }
 
   async getTokenSupplySchedules(projectId: string) {
