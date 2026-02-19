@@ -1157,10 +1157,33 @@ export async function registerRoutes(server: Server, app: Express) {
     const userId = (req as any).user?.claims?.sub as string;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     try {
-      const allowedFields = ["name", "symbol", "coingeckoId", "defiLlamaId", "category", "currentPrice", "marketCap", "fullyDilutedValuation", "volume24h", "priceChange24h", "priceChange7d", "circulatingSupply", "totalSupply", "maxSupply", "ath", "athDate", "sparklineData", "image"];
+      const allowedFields = [
+        "name", "symbol", "coingeckoId", "defiLlamaId", "category",
+        "currentPrice", "marketCap", "fullyDilutedValuation", "volume24h",
+        "priceChange24h", "priceChange7d", "circulatingSupply", "totalSupply",
+        "maxSupply", "ath", "athDate", "sparklineData", "image",
+        "governanceType", "votingMechanism", "treasurySize", "treasuryCurrency",
+        "governanceNotes", "discountRate", "feeGrowthRate", "terminalGrowthRate",
+        "projectionYears"
+      ];
+      const numericFields = ["currentPrice", "marketCap", "fullyDilutedValuation", "volume24h",
+        "priceChange24h", "priceChange7d", "circulatingSupply", "totalSupply", "maxSupply", "ath",
+        "treasurySize", "discountRate", "feeGrowthRate", "terminalGrowthRate"];
       const filtered: Record<string, any> = {};
       for (const key of Object.keys(req.body)) {
-        if (allowedFields.includes(key)) filtered[key] = req.body[key];
+        if (allowedFields.includes(key)) {
+          const val = req.body[key];
+          if (numericFields.includes(key)) {
+            filtered[key] = val != null ? Number(val) : null;
+          } else if (key === "projectionYears") {
+            filtered[key] = val != null ? Math.max(1, Math.min(20, Number(val) || 5)) : 5;
+          } else {
+            filtered[key] = val;
+          }
+        }
+      }
+      if (Object.keys(filtered).length === 0) {
+        return res.status(400).json({ message: "No valid fields to update" });
       }
       const project = await storage.updateCryptoProject(req.params.id, userId, filtered);
       if (!project) return res.status(404).json({ message: "Project not found" });

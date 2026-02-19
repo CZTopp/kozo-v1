@@ -340,6 +340,11 @@ export const cryptoProjects = pgTable("crypto_projects", {
   feeGrowthRate: real("fee_growth_rate").default(0.10),
   terminalGrowthRate: real("terminal_growth_rate").default(0.02),
   projectionYears: integer("projection_years").default(5),
+  governanceType: text("governance_type"),
+  votingMechanism: text("voting_mechanism"),
+  treasurySize: real("treasury_size"),
+  treasuryCurrency: text("treasury_currency"),
+  governanceNotes: text("governance_notes"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

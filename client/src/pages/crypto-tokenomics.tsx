@@ -10,14 +10,15 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import type { CryptoProject, TokenSupplySchedule, TokenIncentive, TokenAllocation, FundraisingRound } from "@shared/schema";
-import { ArrowLeft, Plus, Trash2, Shield, AlertTriangle, Download, Loader2, Users, Lock, Coins, Edit2 } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ArrowLeft, Plus, Trash2, Shield, AlertTriangle, Download, Loader2, Users, Lock, Coins, Edit2, Landmark, Vote, Wallet, Info } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
 
-const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))", "#f97316", "#06b6d4", "#8b5cf6"];
+const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))", "#f97316", "#06b6d4", "#8b5cf6", "#ec4899", "#14b8a6"];
 
 function formatCompact(n: number | null | undefined): string {
   if (n == null || isNaN(n)) return "--";
@@ -44,48 +45,14 @@ function formatPrice(n: number | null | undefined): string {
   return `$${n.toFixed(6)}`;
 }
 
-const emptySupplyForm = {
-  label: "",
-  amount: 0,
-  percentOfTotal: 0,
-  unlockDate: "",
-  vestingMonths: 0,
-};
+const emptySupplyForm = { label: "", amount: 0, percentOfTotal: 0, unlockDate: "", vestingMonths: 0 };
+const emptyIncentiveForm = { role: "", contribution: "", rewardType: "", rewardSource: "", allocationPercent: 0, estimatedApy: 0, vestingMonths: 0, isSustainable: true, sustainabilityNotes: "" };
+const emptyAllocationForm = { category: "", percentage: 0, amount: 0, vestingMonths: 0, cliffMonths: 0, tgePercent: 0, notes: "" };
+const emptyFundraisingForm = { roundType: "", amount: 0, valuation: 0, date: "", leadInvestors: "", tokenPrice: 0, notes: "" };
 
-const emptyIncentiveForm = {
-  role: "",
-  contribution: "",
-  rewardType: "",
-  rewardSource: "",
-  allocationPercent: 0,
-  estimatedApy: 0,
-  vestingMonths: 0,
-  isSustainable: true,
-  sustainabilityNotes: "",
-};
-
-const emptyAllocationForm = {
-  category: "",
-  percentage: 0,
-  amount: 0,
-  vestingMonths: 0,
-  cliffMonths: 0,
-  tgePercent: 0,
-  notes: "",
-};
-
-const emptyFundraisingForm = {
-  roundType: "",
-  amount: 0,
-  valuation: 0,
-  date: "",
-  leadInvestors: "",
-  tokenPrice: 0,
-  notes: "",
-};
-
-const ALLOCATION_CATEGORIES = ["Team", "Investors", "Community", "Treasury", "Ecosystem", "Advisors", "Public Sale", "Liquidity", "Staking Rewards"];
-const ROUND_TYPES = ["Pre-Seed", "Seed", "Private", "Strategic", "Public/IDO", "Series A", "Series B"];
+const ALLOCATION_CATEGORIES = ["Team", "Investors", "Community", "Treasury", "Ecosystem", "Advisors", "Public Sale", "Liquidity", "Staking Rewards", "Foundation", "Marketing", "Airdrop"];
+const ROUND_TYPES = ["Pre-Seed", "Seed", "Private", "Strategic", "Public/IDO", "Series A", "Series B", "OTC", "Treasury Sale"];
+const GOVERNANCE_TYPES = ["DAO", "Multi-sig", "Foundation", "Council", "Hybrid", "None"];
 
 export default function CryptoTokenomics() {
   const [, params] = useRoute("/crypto/tokenomics/:id");
@@ -94,120 +61,54 @@ export default function CryptoTokenomics() {
 
   const [supplyFormOpen, setSupplyFormOpen] = useState(false);
   const [supplyForm, setSupplyForm] = useState({ ...emptySupplyForm });
-
   const [incentiveFormOpen, setIncentiveFormOpen] = useState(false);
   const [editingIncentiveId, setEditingIncentiveId] = useState<string | null>(null);
   const [incentiveForm, setIncentiveForm] = useState({ ...emptyIncentiveForm });
-
   const [allocationFormOpen, setAllocationFormOpen] = useState(false);
   const [editingAllocationId, setEditingAllocationId] = useState<string | null>(null);
   const [allocationForm, setAllocationForm] = useState({ ...emptyAllocationForm });
-
   const [fundraisingFormOpen, setFundraisingFormOpen] = useState(false);
   const [editingFundraisingId, setEditingFundraisingId] = useState<string | null>(null);
   const [fundraisingForm, setFundraisingForm] = useState({ ...emptyFundraisingForm });
+  const [governanceEditing, setGovernanceEditing] = useState(false);
+  const [govForm, setGovForm] = useState({ governanceType: "", votingMechanism: "", treasurySize: 0, treasuryCurrency: "USD", governanceNotes: "" });
 
-  const { data: project, isLoading: projectLoading } = useQuery<CryptoProject>({
-    queryKey: ["/api/crypto/projects", projectId],
-    enabled: !!projectId,
-  });
+  const { data: project, isLoading: projectLoading } = useQuery<CryptoProject>({ queryKey: ["/api/crypto/projects", projectId], enabled: !!projectId });
+  const { data: schedules, isLoading: schedulesLoading } = useQuery<TokenSupplySchedule[]>({ queryKey: ["/api/crypto/projects", projectId, "supply-schedules"], enabled: !!projectId });
+  const { data: incentives, isLoading: incentivesLoading } = useQuery<TokenIncentive[]>({ queryKey: ["/api/crypto/projects", projectId, "incentives"], enabled: !!projectId });
+  const { data: allocations, isLoading: allocationsLoading } = useQuery<TokenAllocation[]>({ queryKey: ["/api/crypto/projects", projectId, "allocations"], enabled: !!projectId });
+  const { data: fundraisingRounds, isLoading: fundraisingLoading } = useQuery<FundraisingRound[]>({ queryKey: ["/api/crypto/projects", projectId, "fundraising"], enabled: !!projectId });
 
-  const { data: schedules, isLoading: schedulesLoading } = useQuery<TokenSupplySchedule[]>({
-    queryKey: ["/api/crypto/projects", projectId, "supply-schedules"],
-    enabled: !!projectId,
-  });
-
-  const { data: incentives, isLoading: incentivesLoading } = useQuery<TokenIncentive[]>({
-    queryKey: ["/api/crypto/projects", projectId, "incentives"],
-    enabled: !!projectId,
-  });
-
-  const { data: allocations, isLoading: allocationsLoading } = useQuery<TokenAllocation[]>({
-    queryKey: ["/api/crypto/projects", projectId, "allocations"],
-    enabled: !!projectId,
-  });
-
-  const { data: fundraisingRounds, isLoading: fundraisingLoading } = useQuery<FundraisingRound[]>({
-    queryKey: ["/api/crypto/projects", projectId, "fundraising"],
-    enabled: !!projectId,
-  });
+  const projectedSupply2035 = (() => {
+    if (!project) return 0;
+    return project.maxSupply || project.totalSupply || 0;
+  })();
 
   const createScheduleMutation = useMutation({
-    mutationFn: async (data: Record<string, unknown>) => {
-      const res = await apiRequest("POST", "/api/crypto/supply-schedules", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "supply-schedules"] });
-      setSupplyFormOpen(false);
-      setSupplyForm({ ...emptySupplyForm });
-      toast({ title: "Supply schedule entry added" });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
+    mutationFn: async (data: Record<string, unknown>) => { const res = await apiRequest("POST", "/api/crypto/supply-schedules", data); return res.json(); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "supply-schedules"] }); setSupplyFormOpen(false); setSupplyForm({ ...emptySupplyForm }); toast({ title: "Supply schedule entry added" }); },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
-
   const deleteScheduleMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/crypto/supply-schedules/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "supply-schedules"] });
-      toast({ title: "Supply schedule entry deleted" });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/crypto/supply-schedules/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "supply-schedules"] }); toast({ title: "Entry deleted" }); },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
-
   const createIncentiveMutation = useMutation({
-    mutationFn: async (data: Record<string, unknown>) => {
-      const res = await apiRequest("POST", "/api/crypto/incentives", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "incentives"] });
-      setIncentiveFormOpen(false);
-      setEditingIncentiveId(null);
-      setIncentiveForm({ ...emptyIncentiveForm });
-      toast({ title: editingIncentiveId ? "Incentive updated" : "Incentive added" });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
+    mutationFn: async (data: Record<string, unknown>) => { const res = await apiRequest("POST", "/api/crypto/incentives", data); return res.json(); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "incentives"] }); setIncentiveFormOpen(false); setEditingIncentiveId(null); setIncentiveForm({ ...emptyIncentiveForm }); toast({ title: editingIncentiveId ? "Incentive updated" : "Incentive added" }); },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
-
   const updateIncentiveMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => {
-      const res = await apiRequest("PATCH", `/api/crypto/incentives/${id}`, data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "incentives"] });
-      setIncentiveFormOpen(false);
-      setEditingIncentiveId(null);
-      setIncentiveForm({ ...emptyIncentiveForm });
-      toast({ title: "Incentive updated" });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => { const res = await apiRequest("PATCH", `/api/crypto/incentives/${id}`, data); return res.json(); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "incentives"] }); setIncentiveFormOpen(false); setEditingIncentiveId(null); setIncentiveForm({ ...emptyIncentiveForm }); toast({ title: "Incentive updated" }); },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
-
   const deleteIncentiveMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/crypto/incentives/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "incentives"] });
-      toast({ title: "Incentive deleted" });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/crypto/incentives/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "incentives"] }); toast({ title: "Incentive deleted" }); },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
-
   const loadTemplateMutation = useMutation({
     mutationFn: async () => {
       if (!project?.coingeckoId) throw new Error("No CoinGecko ID");
@@ -216,117 +117,128 @@ export default function CryptoTokenomics() {
       return res.json();
     },
     onSuccess: async (templateItems: Array<Record<string, unknown>>) => {
-      if (!templateItems.length) {
-        toast({ title: "No template found", description: "No pre-built incentive template available for this project.", variant: "destructive" });
-        return;
-      }
+      if (!templateItems.length) { toast({ title: "No template found", variant: "destructive" }); return; }
       for (const item of templateItems) {
-        await apiRequest("POST", "/api/crypto/incentives", {
-          projectId,
-          role: item.role || "",
-          contribution: item.contribution || "",
-          rewardType: item.rewardType || "",
-          rewardSource: item.rewardSource || "",
-          allocationPercent: item.allocationPercent || 0,
-          estimatedApy: item.estimatedApy || null,
-          vestingMonths: item.vestingMonths || null,
-          isSustainable: item.isSustainable ?? true,
-          sustainabilityNotes: item.sustainabilityNotes || null,
-          sortOrder: item.sortOrder || 0,
-        });
+        await apiRequest("POST", "/api/crypto/incentives", { projectId, role: item.role || "", contribution: item.contribution || "", rewardType: item.rewardType || "", rewardSource: item.rewardSource || "", allocationPercent: item.allocationPercent || 0, estimatedApy: item.estimatedApy || null, vestingMonths: item.vestingMonths || null, isSustainable: item.isSustainable ?? true, sustainabilityNotes: item.sustainabilityNotes || null, sortOrder: item.sortOrder || 0 });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "incentives"] });
-      toast({ title: "Template loaded", description: `${templateItems.length} incentive entries added.` });
+      toast({ title: "Template loaded", description: `${templateItems.length} entries added.` });
     },
-    onError: (err: Error) => {
-      toast({ title: "Error loading template", description: err.message, variant: "destructive" });
-    },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  const createAllocationMutation = useMutation({
+    mutationFn: async (data: Record<string, unknown>) => { const res = await apiRequest("POST", `/api/crypto/projects/${projectId}/allocations`, data); return res.json(); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "allocations"] }); setAllocationFormOpen(false); setEditingAllocationId(null); setAllocationForm({ ...emptyAllocationForm }); toast({ title: "Allocation added" }); },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+  const updateAllocationMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => { const res = await apiRequest("PATCH", `/api/crypto/allocations/${id}`, data); return res.json(); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "allocations"] }); setAllocationFormOpen(false); setEditingAllocationId(null); setAllocationForm({ ...emptyAllocationForm }); toast({ title: "Allocation updated" }); },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+  const deleteAllocationMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/crypto/allocations/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "allocations"] }); toast({ title: "Allocation deleted" }); },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  const createFundraisingMutation = useMutation({
+    mutationFn: async (data: Record<string, unknown>) => { const res = await apiRequest("POST", `/api/crypto/projects/${projectId}/fundraising`, data); return res.json(); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "fundraising"] }); setFundraisingFormOpen(false); setEditingFundraisingId(null); setFundraisingForm({ ...emptyFundraisingForm }); toast({ title: "Round added" }); },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+  const updateFundraisingMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => { const res = await apiRequest("PATCH", `/api/crypto/fundraising/${id}`, data); return res.json(); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "fundraising"] }); setFundraisingFormOpen(false); setEditingFundraisingId(null); setFundraisingForm({ ...emptyFundraisingForm }); toast({ title: "Round updated" }); },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+  const deleteFundraisingMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/crypto/fundraising/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "fundraising"] }); toast({ title: "Round deleted" }); },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  const updateGovernanceMutation = useMutation({
+    mutationFn: async (data: Record<string, unknown>) => { const res = await apiRequest("PATCH", `/api/crypto/projects/${projectId}`, data); return res.json(); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId] }); setGovernanceEditing(false); toast({ title: "Governance info updated" }); },
+    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
 
   function handleSaveSupply() {
-    if (!supplyForm.label.trim()) {
-      toast({ title: "Label is required", variant: "destructive" });
-      return;
-    }
-    createScheduleMutation.mutate({
-      projectId,
-      eventType: "allocation",
-      label: supplyForm.label.trim(),
-      amount: Number(supplyForm.amount) || 0,
-      date: supplyForm.unlockDate || null,
-      recurringIntervalMonths: Number(supplyForm.vestingMonths) || null,
-      notes: supplyForm.percentOfTotal ? `${supplyForm.percentOfTotal}% of total` : null,
-      sortOrder: (schedules?.length || 0),
-    });
+    if (!supplyForm.label.trim()) { toast({ title: "Label is required", variant: "destructive" }); return; }
+    createScheduleMutation.mutate({ projectId, eventType: "allocation", label: supplyForm.label.trim(), amount: Number(supplyForm.amount) || 0, date: supplyForm.unlockDate || null, recurringIntervalMonths: Number(supplyForm.vestingMonths) || null, notes: supplyForm.percentOfTotal ? `${supplyForm.percentOfTotal}% of total` : null, sortOrder: (schedules?.length || 0) });
   }
 
   function handleSaveIncentive() {
-    if (!incentiveForm.role.trim() || !incentiveForm.contribution.trim()) {
-      toast({ title: "Role and Contribution are required", variant: "destructive" });
-      return;
-    }
-    const payload = {
-      projectId,
-      role: incentiveForm.role.trim(),
-      contribution: incentiveForm.contribution.trim(),
-      rewardType: incentiveForm.rewardType.trim(),
-      rewardSource: incentiveForm.rewardSource.trim(),
-      allocationPercent: Number(incentiveForm.allocationPercent) || 0,
-      estimatedApy: Number(incentiveForm.estimatedApy) || null,
-      vestingMonths: Number(incentiveForm.vestingMonths) || null,
-      isSustainable: incentiveForm.isSustainable,
-      sustainabilityNotes: incentiveForm.sustainabilityNotes.trim() || null,
-      sortOrder: (incentives?.length || 0),
-    };
-    if (editingIncentiveId) {
-      updateIncentiveMutation.mutate({ id: editingIncentiveId, data: payload });
-    } else {
-      createIncentiveMutation.mutate(payload);
-    }
+    if (!incentiveForm.role.trim() || !incentiveForm.contribution.trim()) { toast({ title: "Role and Contribution are required", variant: "destructive" }); return; }
+    const payload = { projectId, role: incentiveForm.role.trim(), contribution: incentiveForm.contribution.trim(), rewardType: incentiveForm.rewardType.trim(), rewardSource: incentiveForm.rewardSource.trim(), allocationPercent: Number(incentiveForm.allocationPercent) || 0, estimatedApy: Number(incentiveForm.estimatedApy) || null, vestingMonths: Number(incentiveForm.vestingMonths) || null, isSustainable: incentiveForm.isSustainable, sustainabilityNotes: incentiveForm.sustainabilityNotes.trim() || null, sortOrder: (incentives?.length || 0) };
+    if (editingIncentiveId) { updateIncentiveMutation.mutate({ id: editingIncentiveId, data: payload }); } else { createIncentiveMutation.mutate(payload); }
+  }
+
+  function handleSaveAllocation() {
+    if (!allocationForm.category.trim()) { toast({ title: "Category is required", variant: "destructive" }); return; }
+    const pct = Number(allocationForm.percentage) || 0;
+    const computedAmount = allocationForm.amount > 0 ? allocationForm.amount : (projectedSupply2035 > 0 ? projectedSupply2035 * (pct / 100) : 0);
+    const payload = { projectId, category: allocationForm.category.trim(), percentage: pct, amount: computedAmount, vestingMonths: Number(allocationForm.vestingMonths) || null, cliffMonths: Number(allocationForm.cliffMonths) || null, tgePercent: Number(allocationForm.tgePercent) || null, notes: allocationForm.notes.trim() || null, sortOrder: (allocations?.length || 0) };
+    if (editingAllocationId) { updateAllocationMutation.mutate({ id: editingAllocationId, data: payload }); } else { createAllocationMutation.mutate(payload); }
+  }
+
+  function handleSaveFundraising() {
+    if (!fundraisingForm.roundType.trim()) { toast({ title: "Round type is required", variant: "destructive" }); return; }
+    const payload = { projectId, roundType: fundraisingForm.roundType.trim(), amount: Number(fundraisingForm.amount) || null, valuation: Number(fundraisingForm.valuation) || null, date: fundraisingForm.date || null, leadInvestors: fundraisingForm.leadInvestors.trim() || null, tokenPrice: Number(fundraisingForm.tokenPrice) || null, notes: fundraisingForm.notes.trim() || null, sortOrder: (fundraisingRounds?.length || 0) };
+    if (editingFundraisingId) { updateFundraisingMutation.mutate({ id: editingFundraisingId, data: payload }); } else { createFundraisingMutation.mutate(payload); }
   }
 
   function openEditIncentive(inc: TokenIncentive) {
     setEditingIncentiveId(inc.id);
-    setIncentiveForm({
-      role: inc.role || "",
-      contribution: inc.contribution || "",
-      rewardType: inc.rewardType || "",
-      rewardSource: inc.rewardSource || "",
-      allocationPercent: inc.allocationPercent || 0,
-      estimatedApy: inc.estimatedApy || 0,
-      vestingMonths: inc.vestingMonths || 0,
-      isSustainable: inc.isSustainable ?? true,
-      sustainabilityNotes: inc.sustainabilityNotes || "",
-    });
+    setIncentiveForm({ role: inc.role || "", contribution: inc.contribution || "", rewardType: inc.rewardType || "", rewardSource: inc.rewardSource || "", allocationPercent: inc.allocationPercent || 0, estimatedApy: inc.estimatedApy || 0, vestingMonths: inc.vestingMonths || 0, isSustainable: inc.isSustainable ?? true, sustainabilityNotes: inc.sustainabilityNotes || "" });
     setIncentiveFormOpen(true);
   }
 
-  function openAddIncentive() {
-    setEditingIncentiveId(null);
-    setIncentiveForm({ ...emptyIncentiveForm });
-    setIncentiveFormOpen(true);
+  function openEditAllocation(alloc: TokenAllocation) {
+    setEditingAllocationId(alloc.id);
+    setAllocationForm({ category: alloc.category, percentage: alloc.percentage || 0, amount: alloc.amount || 0, vestingMonths: alloc.vestingMonths || 0, cliffMonths: alloc.cliffMonths || 0, tgePercent: alloc.tgePercent || 0, notes: alloc.notes || "" });
+    setAllocationFormOpen(true);
   }
 
-  const circulatingRatio = project?.circulatingSupply && project?.totalSupply
-    ? (project.circulatingSupply / project.totalSupply) * 100
-    : 0;
+  function openEditFundraising(round: FundraisingRound) {
+    setEditingFundraisingId(round.id);
+    setFundraisingForm({ roundType: round.roundType, amount: round.amount || 0, valuation: round.valuation || 0, date: round.date || "", leadInvestors: round.leadInvestors || "", tokenPrice: round.tokenPrice || 0, notes: round.notes || "" });
+    setFundraisingFormOpen(true);
+  }
 
-  const fdvMcapRatio = project?.fullyDilutedValuation && project?.marketCap && project.marketCap > 0
-    ? project.fullyDilutedValuation / project.marketCap
-    : 0;
+  function openEditGovernance() {
+    setGovForm({ governanceType: project?.governanceType || "", votingMechanism: project?.votingMechanism || "", treasurySize: project?.treasurySize || 0, treasuryCurrency: project?.treasuryCurrency || "USD", governanceNotes: project?.governanceNotes || "" });
+    setGovernanceEditing(true);
+  }
 
-  const inflationEstimate = project?.maxSupply && project?.circulatingSupply && project.circulatingSupply > 0
-    ? ((project.maxSupply - project.circulatingSupply) / project.circulatingSupply) * 100
-    : null;
+  function handleSaveGovernance() {
+    updateGovernanceMutation.mutate({ governanceType: govForm.governanceType || null, votingMechanism: govForm.votingMechanism || null, treasurySize: Number(govForm.treasurySize) || null, treasuryCurrency: govForm.treasuryCurrency || null, governanceNotes: govForm.governanceNotes || null });
+  }
 
-  const pieData = (schedules || [])
-    .filter(s => s.amount > 0)
-    .map(s => ({
-      name: s.label,
-      value: s.amount,
-    }));
+  const circulatingRatio = project?.circulatingSupply && project?.totalSupply ? (project.circulatingSupply / project.totalSupply) * 100 : 0;
+  const fdvMcapRatio = project?.fullyDilutedValuation && project?.marketCap && project.marketCap > 0 ? project.fullyDilutedValuation / project.marketCap : 0;
+  const inflationEstimate = project?.maxSupply && project?.circulatingSupply && project.circulatingSupply > 0 ? ((project.maxSupply - project.circulatingSupply) / project.circulatingSupply) * 100 : null;
 
-  const totalAllocation = pieData.reduce((sum, d) => sum + d.value, 0);
+  const supplyPieData = (schedules || []).filter(s => s.amount > 0).map(s => ({ name: s.label, value: s.amount }));
+  const totalSupplyAllocation = supplyPieData.reduce((sum, d) => sum + d.value, 0);
+
+  const totalAllocPct = (allocations || []).reduce((s, a) => s + (a.percentage || 0), 0);
+  const untrackedPct = Math.max(0, 100 - totalAllocPct);
+  const allocationPieData = (allocations || []).filter(a => a.percentage > 0).map(a => ({ name: a.category, value: a.percentage }));
+  if (untrackedPct > 0.5 && allocationPieData.length > 0) {
+    allocationPieData.push({ name: "Untracked", value: untrackedPct });
+  }
+
+  const totalRaised = (fundraisingRounds || []).reduce((s, r) => s + (r.amount || 0), 0);
+
+  const supplyTimelineData = (() => {
+    if (!schedules || schedules.length === 0) return [];
+    const sorted = [...schedules].filter(s => s.date).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+    let cumulative = 0;
+    return sorted.map(s => { cumulative += s.amount; return { date: s.date, amount: s.amount, cumulative, label: s.label }; });
+  })();
 
   if (projectLoading) {
     return (
@@ -340,12 +252,7 @@ export default function CryptoTokenomics() {
     return (
       <div className="p-4" data-testid="project-not-found">
         <p className="text-muted-foreground">Project not found.</p>
-        <Link href="/crypto">
-          <Button variant="outline" className="mt-2" data-testid="link-back-crypto">
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to Crypto
-          </Button>
-        </Link>
+        <Link href="/crypto"><Button variant="outline" className="mt-2" data-testid="link-back-crypto"><ArrowLeft className="h-4 w-4 mr-1" />Back to Crypto</Button></Link>
       </div>
     );
   }
@@ -353,125 +260,224 @@ export default function CryptoTokenomics() {
   return (
     <div className="p-4 space-y-4" data-testid="page-crypto-tokenomics">
       <div className="flex items-center gap-3 flex-wrap">
-        <Link href="/crypto">
-          <Button variant="ghost" size="icon" data-testid="button-back">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
+        <Link href="/crypto"><Button variant="ghost" size="icon" data-testid="button-back"><ArrowLeft className="h-4 w-4" /></Button></Link>
         <div className="flex items-center gap-2 flex-wrap">
-          {project.image && (
-            <img
-              src={project.image}
-              alt={project.name}
-              className="h-8 w-8 rounded-full"
-              data-testid="img-project"
-            />
-          )}
+          {project.image && <img src={project.image} alt={project.name} className="h-8 w-8 rounded-full" data-testid="img-project" />}
           <div>
-            <h1 className="text-2xl font-bold" data-testid="text-project-name">
-              {project.name}
-            </h1>
-            <span className="text-sm text-muted-foreground uppercase" data-testid="text-project-symbol">
-              {project.symbol}
-            </span>
+            <h1 className="text-2xl font-bold" data-testid="text-project-name">{project.name}</h1>
+            <span className="text-sm text-muted-foreground uppercase" data-testid="text-project-symbol">{project.symbol}</span>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card data-testid="card-price">
-          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium">Price</CardTitle>
-            <Coins className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg font-bold" data-testid="text-price">{formatPrice(project.currentPrice)}</div>
-          </CardContent>
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2"><CardTitle className="text-xs font-medium">Price</CardTitle><Coins className="h-4 w-4 text-muted-foreground" /></CardHeader>
+          <CardContent><div className="text-lg font-bold" data-testid="text-price">{formatPrice(project.currentPrice)}</div></CardContent>
         </Card>
         <Card data-testid="card-market-cap">
-          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium">Market Cap</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg font-bold" data-testid="text-market-cap">{formatCompact(project.marketCap)}</div>
-          </CardContent>
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2"><CardTitle className="text-xs font-medium">Market Cap</CardTitle></CardHeader>
+          <CardContent><div className="text-lg font-bold" data-testid="text-market-cap">{formatCompact(project.marketCap)}</div></CardContent>
         </Card>
         <Card data-testid="card-circulating-supply">
-          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium">Circulating Supply</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg font-bold" data-testid="text-circulating-supply">{formatSupply(project.circulatingSupply)}</div>
-          </CardContent>
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2"><CardTitle className="text-xs font-medium">Circulating Supply</CardTitle></CardHeader>
+          <CardContent><div className="text-lg font-bold" data-testid="text-circulating-supply">{formatSupply(project.circulatingSupply)}</div></CardContent>
         </Card>
         <Card data-testid="card-total-supply">
-          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium">Total Supply</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg font-bold" data-testid="text-total-supply">{formatSupply(project.totalSupply)}</div>
-          </CardContent>
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2"><CardTitle className="text-xs font-medium">Total Supply</CardTitle></CardHeader>
+          <CardContent><div className="text-lg font-bold" data-testid="text-total-supply">{formatSupply(project.totalSupply)}</div></CardContent>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Card data-testid="card-circulating-ratio">
-          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium">Circulating / Total Ratio</CardTitle>
-            <Lock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2"><CardTitle className="text-xs font-medium">Circulating / Total Ratio</CardTitle><Lock className="h-4 w-4 text-muted-foreground" /></CardHeader>
           <CardContent className="space-y-2">
-            <div className="text-lg font-bold" data-testid="text-circulating-ratio">
-              {circulatingRatio.toFixed(1)}%
-            </div>
+            <div className="text-lg font-bold" data-testid="text-circulating-ratio">{circulatingRatio.toFixed(1)}%</div>
             <Progress value={circulatingRatio} className="h-2" data-testid="progress-circulating-ratio" />
           </CardContent>
         </Card>
-
         <Card data-testid="card-inflation">
-          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium">Inflation Estimate</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2"><CardTitle className="text-xs font-medium">Inflation Estimate</CardTitle><AlertTriangle className="h-4 w-4 text-muted-foreground" /></CardHeader>
           <CardContent>
-            <div className="text-lg font-bold" data-testid="text-inflation">
-              {inflationEstimate != null ? `${inflationEstimate.toFixed(1)}%` : "N/A"}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {project.maxSupply ? `Max Supply: ${formatSupply(project.maxSupply)}` : "No max supply defined"}
-            </p>
+            <div className="text-lg font-bold" data-testid="text-inflation">{inflationEstimate != null ? `${inflationEstimate.toFixed(1)}%` : "N/A"}</div>
+            <p className="text-xs text-muted-foreground">{project.maxSupply ? `Max Supply: ${formatSupply(project.maxSupply)}` : "No max supply defined"}</p>
           </CardContent>
         </Card>
-
         <Card data-testid="card-fdv-mcap">
-          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium">FDV / Market Cap</CardTitle>
-            <Shield className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2"><CardTitle className="text-xs font-medium">FDV / Market Cap</CardTitle><Shield className="h-4 w-4 text-muted-foreground" /></CardHeader>
           <CardContent>
-            <div className="text-lg font-bold" data-testid="text-fdv-mcap">
-              {fdvMcapRatio > 0 ? `${fdvMcapRatio.toFixed(2)}x` : "--"}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              FDV: {formatCompact(project.fullyDilutedValuation)}
-            </p>
+            <div className="text-lg font-bold" data-testid="text-fdv-mcap">{fdvMcapRatio > 0 ? `${fdvMcapRatio.toFixed(2)}x` : "--"}</div>
+            <p className="text-xs text-muted-foreground">FDV: {formatCompact(project.fullyDilutedValuation)}</p>
           </CardContent>
         </Card>
       </div>
 
-      <Tabs defaultValue="supply" data-testid="tabs-tokenomics">
-        <TabsList>
+      {/* Governance / DAO Section */}
+      <Card data-testid="card-governance">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-1.5"><Landmark className="h-4 w-4 text-muted-foreground" />Governance & DAO</CardTitle>
+          <Button variant="outline" size="sm" onClick={openEditGovernance} data-testid="button-edit-governance"><Edit2 className="h-3 w-3 mr-1" />Edit</Button>
+        </CardHeader>
+        <CardContent>
+          {project?.governanceType || project?.votingMechanism || project?.treasurySize ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <span className="text-xs text-muted-foreground">Governance Type</span>
+                <p className="font-medium" data-testid="text-governance-type">{project.governanceType || "--"}</p>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground">Voting Mechanism</span>
+                <p className="font-medium" data-testid="text-voting-mechanism">{project.votingMechanism || "--"}</p>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground">Treasury Size</span>
+                <p className="font-medium" data-testid="text-treasury-size">{project.treasurySize ? formatCompact(project.treasurySize) : "--"}</p>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground">Treasury Currency</span>
+                <p className="font-medium" data-testid="text-treasury-currency">{project.treasuryCurrency || "--"}</p>
+              </div>
+              {project.governanceNotes && (
+                <div className="col-span-full">
+                  <span className="text-xs text-muted-foreground">Notes</span>
+                  <p className="text-sm text-muted-foreground italic" data-testid="text-governance-notes">{project.governanceNotes}</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground" data-testid="text-no-governance">No governance info set. Click Edit to add DAO type, voting mechanism, and treasury details.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Tabs defaultValue="allocations" data-testid="tabs-tokenomics">
+        <TabsList className="flex-wrap">
+          <TabsTrigger value="allocations" data-testid="tab-allocations">Allocations</TabsTrigger>
           <TabsTrigger value="supply" data-testid="tab-supply">Supply Schedule</TabsTrigger>
-          <TabsTrigger value="incentives" data-testid="tab-incentives">Incentive Mapping</TabsTrigger>
+          <TabsTrigger value="fundraising" data-testid="tab-fundraising">Fundraising</TabsTrigger>
+          <TabsTrigger value="incentives" data-testid="tab-incentives">Incentives</TabsTrigger>
         </TabsList>
 
+        {/* =================== ALLOCATIONS TAB =================== */}
+        <TabsContent value="allocations" className="mt-4 space-y-4">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <h2 className="text-lg font-semibold" data-testid="text-allocations-title">Token Allocations</h2>
+              {projectedSupply2035 > 0 && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1" data-testid="text-projected-supply">
+                  <Info className="h-3 w-3" />
+                  Projected Supply (2035): {formatSupply(projectedSupply2035)} &middot; Tracked: {totalAllocPct.toFixed(1)}% &middot; Untracked: {untrackedPct.toFixed(1)}%
+                </p>
+              )}
+            </div>
+            <Button onClick={() => { setEditingAllocationId(null); setAllocationForm({ ...emptyAllocationForm }); setAllocationFormOpen(true); }} data-testid="button-add-allocation">
+              <Plus className="h-4 w-4 mr-1" />Add Allocation
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2">
+              <Card>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table data-testid="table-allocations">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="font-semibold">Category</TableHead>
+                          <TableHead className="text-right font-semibold">%</TableHead>
+                          <TableHead className="text-right font-semibold">Tokens</TableHead>
+                          <TableHead className="text-right font-semibold">Vesting</TableHead>
+                          <TableHead className="text-right font-semibold">Cliff</TableHead>
+                          <TableHead className="text-right font-semibold">TGE %</TableHead>
+                          <TableHead className="text-center font-semibold">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {allocationsLoading && (
+                          <TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
+                        )}
+                        {!allocationsLoading && (!allocations || allocations.length === 0) && (
+                          <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground" data-testid="text-no-allocations">No allocations defined yet.</TableCell></TableRow>
+                        )}
+                        {(allocations || []).map((a) => {
+                          const computedTokens = a.amount || (projectedSupply2035 > 0 ? projectedSupply2035 * ((a.percentage || 0) / 100) : 0);
+                          return (
+                            <TableRow key={a.id} data-testid={`row-allocation-${a.id}`}>
+                              <TableCell className="font-medium" data-testid={`text-alloc-category-${a.id}`}>{a.category}</TableCell>
+                              <TableCell className="text-right" data-testid={`text-alloc-pct-${a.id}`}>{(a.percentage || 0).toFixed(1)}%</TableCell>
+                              <TableCell className="text-right" data-testid={`text-alloc-tokens-${a.id}`}>{formatSupply(computedTokens)}</TableCell>
+                              <TableCell className="text-right">{a.vestingMonths ? `${a.vestingMonths}mo` : "--"}</TableCell>
+                              <TableCell className="text-right">{a.cliffMonths ? `${a.cliffMonths}mo` : "--"}</TableCell>
+                              <TableCell className="text-right">{a.tgePercent != null ? `${a.tgePercent}%` : "--"}</TableCell>
+                              <TableCell className="text-center">
+                                <div className="flex items-center justify-center gap-0.5">
+                                  <Button size="icon" variant="ghost" onClick={() => openEditAllocation(a)} data-testid={`button-edit-alloc-${a.id}`}><Edit2 className="h-3.5 w-3.5" /></Button>
+                                  <Button size="icon" variant="ghost" onClick={() => deleteAllocationMutation.mutate(a.id)} disabled={deleteAllocationMutation.isPending} data-testid={`button-delete-alloc-${a.id}`}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                        {(allocations || []).length > 0 && (
+                          <TableRow className="border-t-2">
+                            <TableCell className="font-bold">Total Tracked</TableCell>
+                            <TableCell className="text-right font-bold" data-testid="text-alloc-total-pct">{totalAllocPct.toFixed(1)}%</TableCell>
+                            <TableCell className="text-right font-bold">{formatSupply(projectedSupply2035 * (totalAllocPct / 100))}</TableCell>
+                            <TableCell colSpan={4} />
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+              {(allocations || []).length > 0 && untrackedPct > 0.5 && (
+                <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1" data-testid="text-untracked-notice">
+                  <Info className="h-3 w-3 shrink-0" />
+                  Calculated from projected 2035 supply and excluding untracked allocations ({untrackedPct.toFixed(1)}%)
+                </p>
+              )}
+            </div>
+
+            {allocationPieData.length > 0 && (
+              <Card data-testid="card-allocation-pie">
+                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Allocation Breakdown</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={allocationPieData} cx="50%" cy="50%" outerRadius={80} innerRadius={40} dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                          {allocationPieData.map((_, i) => (
+                            <Cell key={i} fill={i === allocationPieData.length - 1 && allocationPieData[i].name === "Untracked" ? "hsl(var(--muted))" : COLORS[i % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="space-y-1.5 mt-2">
+                    {allocationPieData.map((d, i) => (
+                      <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: d.name === "Untracked" ? "hsl(var(--muted))" : COLORS[i % COLORS.length] }} />
+                          <span className="truncate">{d.name}</span>
+                        </div>
+                        <span className="text-muted-foreground">{d.value.toFixed(1)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* =================== SUPPLY SCHEDULE TAB =================== */}
         <TabsContent value="supply" className="mt-4 space-y-4">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <h2 className="text-lg font-semibold" data-testid="text-supply-title">Supply Schedule</h2>
-            <Button onClick={() => { setSupplyForm({ ...emptySupplyForm }); setSupplyFormOpen(true); }} data-testid="button-add-supply">
-              <Plus className="h-4 w-4 mr-1" />
-              Add Entry
-            </Button>
+            <Button onClick={() => { setSupplyForm({ ...emptySupplyForm }); setSupplyFormOpen(true); }} data-testid="button-add-supply"><Plus className="h-4 w-4 mr-1" />Add Entry</Button>
           </div>
 
           <Card>
@@ -489,22 +495,10 @@ export default function CryptoTokenomics() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {schedulesLoading && (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8">
-                          <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
-                        </TableCell>
-                      </TableRow>
-                    )}
-                    {!schedulesLoading && (!schedules || schedules.length === 0) && (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground" data-testid="text-no-schedules">
-                          No supply schedule entries yet.
-                        </TableCell>
-                      </TableRow>
-                    )}
+                    {schedulesLoading && (<TableRow><TableCell colSpan={6} className="text-center py-8"><Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>)}
+                    {!schedulesLoading && (!schedules || schedules.length === 0) && (<TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground" data-testid="text-no-schedules">No supply schedule entries yet.</TableCell></TableRow>)}
                     {(schedules || []).map((s) => {
-                      const pct = totalAllocation > 0 ? ((s.amount / totalAllocation) * 100) : 0;
+                      const pct = totalSupplyAllocation > 0 ? ((s.amount / totalSupplyAllocation) * 100) : 0;
                       return (
                         <TableRow key={s.id} data-testid={`row-supply-${s.id}`}>
                           <TableCell className="font-medium" data-testid={`text-supply-label-${s.id}`}>{s.label}</TableCell>
@@ -512,17 +506,7 @@ export default function CryptoTokenomics() {
                           <TableCell className="text-right" data-testid={`text-supply-pct-${s.id}`}>{pct.toFixed(1)}%</TableCell>
                           <TableCell data-testid={`text-supply-date-${s.id}`}>{s.date || "--"}</TableCell>
                           <TableCell className="text-right" data-testid={`text-supply-vesting-${s.id}`}>{s.recurringIntervalMonths || "--"}</TableCell>
-                          <TableCell className="text-center">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => deleteScheduleMutation.mutate(s.id)}
-                              disabled={deleteScheduleMutation.isPending}
-                              data-testid={`button-delete-supply-${s.id}`}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </TableCell>
+                          <TableCell className="text-center"><Button size="icon" variant="ghost" onClick={() => deleteScheduleMutation.mutate(s.id)} disabled={deleteScheduleMutation.isPending} data-testid={`button-delete-supply-${s.id}`}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
                         </TableRow>
                       );
                     })}
@@ -532,184 +516,170 @@ export default function CryptoTokenomics() {
             </CardContent>
           </Card>
 
-          {pieData.length > 0 && (
+          {supplyPieData.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card data-testid="card-pie-chart">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Allocation Breakdown</CardTitle>
-                </CardHeader>
+              <Card data-testid="card-supply-pie">
+                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Supply Breakdown</CardTitle></CardHeader>
                 <CardContent>
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie
-                          data={pieData}
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={80}
-                          dataKey="value"
-                          nameKey="name"
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        >
-                          {pieData.map((_, i) => (
-                            <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                          ))}
+                        <Pie data={supplyPieData} cx="50%" cy="50%" outerRadius={80} dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                          {supplyPieData.map((_, i) => (<Cell key={i} fill={COLORS[i % COLORS.length]} />))}
                         </Pie>
-                        <Tooltip
-                          formatter={(value: number) => formatSupply(value)}
-                          contentStyle={{
-                            backgroundColor: "hsl(var(--card))",
-                            border: "1px solid hsl(var(--border))",
-                            borderRadius: "6px",
-                            color: "hsl(var(--card-foreground))",
-                          }}
-                        />
+                        <Tooltip formatter={(value: number) => formatSupply(value)} contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card data-testid="card-timeline">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Allocation Timeline</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {pieData.map((d, i) => {
-                    const pct = totalAllocation > 0 ? (d.value / totalAllocation) * 100 : 0;
-                    return (
-                      <div key={i} className="space-y-1" data-testid={`timeline-segment-${i}`}>
-                        <div className="flex items-center justify-between gap-2 text-xs">
-                          <span className="font-medium truncate">{d.name}</span>
-                          <span className="text-muted-foreground">{pct.toFixed(1)}%</span>
+              {supplyTimelineData.length > 1 && (
+                <Card data-testid="card-supply-timeline-chart">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Cumulative Unlock Timeline</CardTitle></CardHeader>
+                  <CardContent>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={supplyTimelineData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                          <YAxis tickFormatter={(v: number) => formatSupply(v)} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                          <Tooltip formatter={(value: number) => formatSupply(value)} contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} />
+                          <Area type="stepAfter" dataKey="cumulative" stroke="hsl(var(--chart-1))" fill="hsl(var(--chart-1))" fillOpacity={0.2} name="Cumulative Supply" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {supplyTimelineData.length <= 1 && (
+                <Card data-testid="card-timeline">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Allocation Timeline</CardTitle></CardHeader>
+                  <CardContent className="space-y-2">
+                    {supplyPieData.map((d, i) => {
+                      const pct = totalSupplyAllocation > 0 ? (d.value / totalSupplyAllocation) * 100 : 0;
+                      return (
+                        <div key={i} className="space-y-1" data-testid={`timeline-segment-${i}`}>
+                          <div className="flex items-center justify-between gap-2 text-xs">
+                            <span className="font-medium truncate">{d.name}</span>
+                            <span className="text-muted-foreground">{pct.toFixed(1)}%</span>
+                          </div>
+                          <div className="h-3 rounded-md overflow-hidden bg-muted"><div className="h-full rounded-md transition-all" style={{ width: `${pct}%`, backgroundColor: COLORS[i % COLORS.length] }} /></div>
                         </div>
-                        <div className="h-3 rounded-md overflow-hidden bg-muted">
-                          <div
-                            className="h-full rounded-md transition-all"
-                            style={{ width: `${pct}%`, backgroundColor: COLORS[i % COLORS.length] }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
         </TabsContent>
 
+        {/* =================== FUNDRAISING TAB =================== */}
+        <TabsContent value="fundraising" className="mt-4 space-y-4">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <h2 className="text-lg font-semibold" data-testid="text-fundraising-title">Fundraising Rounds</h2>
+              {totalRaised > 0 && <p className="text-xs text-muted-foreground">Total Raised: {formatCompact(totalRaised)}</p>}
+            </div>
+            <Button onClick={() => { setEditingFundraisingId(null); setFundraisingForm({ ...emptyFundraisingForm }); setFundraisingFormOpen(true); }} data-testid="button-add-fundraising">
+              <Plus className="h-4 w-4 mr-1" />Add Round
+            </Button>
+          </div>
+
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table data-testid="table-fundraising">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="font-semibold">Round</TableHead>
+                      <TableHead className="text-right font-semibold">Amount Raised</TableHead>
+                      <TableHead className="text-right font-semibold">Valuation</TableHead>
+                      <TableHead className="font-semibold">Date</TableHead>
+                      <TableHead className="text-right font-semibold">Token Price</TableHead>
+                      <TableHead className="font-semibold">Lead Investors</TableHead>
+                      <TableHead className="text-center font-semibold">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {fundraisingLoading && (<TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>)}
+                    {!fundraisingLoading && (!fundraisingRounds || fundraisingRounds.length === 0) && (<TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground" data-testid="text-no-fundraising">No fundraising rounds recorded yet.</TableCell></TableRow>)}
+                    {(fundraisingRounds || []).map((r) => (
+                      <TableRow key={r.id} data-testid={`row-fundraising-${r.id}`}>
+                        <TableCell className="font-medium">
+                          <Badge variant="outline" data-testid={`badge-round-type-${r.id}`}>{r.roundType}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right" data-testid={`text-round-amount-${r.id}`}>{r.amount ? formatCompact(r.amount) : "--"}</TableCell>
+                        <TableCell className="text-right" data-testid={`text-round-valuation-${r.id}`}>{r.valuation ? formatCompact(r.valuation) : "--"}</TableCell>
+                        <TableCell data-testid={`text-round-date-${r.id}`}>{r.date || "--"}</TableCell>
+                        <TableCell className="text-right" data-testid={`text-round-token-price-${r.id}`}>{r.tokenPrice ? formatPrice(r.tokenPrice) : "--"}</TableCell>
+                        <TableCell className="max-w-[200px] truncate" data-testid={`text-round-investors-${r.id}`}>{r.leadInvestors || "--"}</TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-0.5">
+                            <Button size="icon" variant="ghost" onClick={() => openEditFundraising(r)} data-testid={`button-edit-round-${r.id}`}><Edit2 className="h-3.5 w-3.5" /></Button>
+                            <Button size="icon" variant="ghost" onClick={() => deleteFundraisingMutation.mutate(r.id)} disabled={deleteFundraisingMutation.isPending} data-testid={`button-delete-round-${r.id}`}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(fundraisingRounds || []).length > 0 && (
+                      <TableRow className="border-t-2">
+                        <TableCell className="font-bold">Total</TableCell>
+                        <TableCell className="text-right font-bold" data-testid="text-total-raised">{formatCompact(totalRaised)}</TableCell>
+                        <TableCell colSpan={5} />
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* =================== INCENTIVES TAB =================== */}
         <TabsContent value="incentives" className="mt-4 space-y-4">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <h2 className="text-lg font-semibold" data-testid="text-incentives-title">Incentive Mapping</h2>
             <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                variant="outline"
-                onClick={() => loadTemplateMutation.mutate()}
-                disabled={loadTemplateMutation.isPending}
-                data-testid="button-load-template"
-              >
-                {loadTemplateMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                ) : (
-                  <Download className="h-4 w-4 mr-1" />
-                )}
-                Load Template
+              <Button variant="outline" onClick={() => loadTemplateMutation.mutate()} disabled={loadTemplateMutation.isPending} data-testid="button-load-template">
+                {loadTemplateMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}Load Template
               </Button>
-              <Button onClick={openAddIncentive} data-testid="button-add-incentive">
-                <Plus className="h-4 w-4 mr-1" />
-                Add Incentive
-              </Button>
+              <Button onClick={() => { setEditingIncentiveId(null); setIncentiveForm({ ...emptyIncentiveForm }); setIncentiveFormOpen(true); }} data-testid="button-add-incentive"><Plus className="h-4 w-4 mr-1" />Add Incentive</Button>
             </div>
           </div>
 
-          {incentivesLoading && (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          )}
-
-          {!incentivesLoading && (!incentives || incentives.length === 0) && (
-            <Card>
-              <CardContent className="py-8 text-center text-muted-foreground" data-testid="text-no-incentives">
-                No incentives defined yet. Add one or load a template.
-              </CardContent>
-            </Card>
-          )}
-
+          {incentivesLoading && (<div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>)}
+          {!incentivesLoading && (!incentives || incentives.length === 0) && (<Card><CardContent className="py-8 text-center text-muted-foreground" data-testid="text-no-incentives">No incentives defined yet. Add one or load a template.</CardContent></Card>)}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {(incentives || []).map((inc) => (
               <Card key={inc.id} data-testid={`card-incentive-${inc.id}`}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <CardTitle className="text-sm font-medium flex items-center gap-1">
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                      <span data-testid={`text-incentive-role-${inc.id}`}>{inc.role}</span>
-                    </CardTitle>
+                    <CardTitle className="text-sm font-medium flex items-center gap-1"><Users className="h-4 w-4 text-muted-foreground" /><span data-testid={`text-incentive-role-${inc.id}`}>{inc.role}</span></CardTitle>
                     <div className="flex items-center gap-1">
                       {inc.isSustainable ? (
-                        <Badge variant="outline" className="text-green-500 border-green-500/30" data-testid={`badge-sustainable-${inc.id}`}>
-                          <Shield className="h-3 w-3 mr-0.5" />
-                          Sustainable
-                        </Badge>
+                        <Badge variant="outline" className="text-green-500 border-green-500/30" data-testid={`badge-sustainable-${inc.id}`}><Shield className="h-3 w-3 mr-0.5" />Sustainable</Badge>
                       ) : (
-                        <Badge variant="outline" className="text-red-500 border-red-500/30" data-testid={`badge-unsustainable-${inc.id}`}>
-                          <AlertTriangle className="h-3 w-3 mr-0.5" />
-                          Unsustainable
-                        </Badge>
+                        <Badge variant="outline" className="text-red-500 border-red-500/30" data-testid={`badge-unsustainable-${inc.id}`}><AlertTriangle className="h-3 w-3 mr-0.5" />Unsustainable</Badge>
                       )}
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <span className="text-xs text-muted-foreground">Contribution</span>
-                      <p className="font-medium" data-testid={`text-incentive-contribution-${inc.id}`}>{inc.contribution}</p>
-                    </div>
-                    <div>
-                      <span className="text-xs text-muted-foreground">Reward Type</span>
-                      <p className="font-medium" data-testid={`text-incentive-rewardType-${inc.id}`}>{inc.rewardType}</p>
-                    </div>
-                    <div>
-                      <span className="text-xs text-muted-foreground">Reward Source</span>
-                      <p className="font-medium" data-testid={`text-incentive-rewardSource-${inc.id}`}>{inc.rewardSource}</p>
-                    </div>
-                    <div>
-                      <span className="text-xs text-muted-foreground">Allocation %</span>
-                      <p className="font-medium" data-testid={`text-incentive-allocation-${inc.id}`}>{inc.allocationPercent || 0}%</p>
-                    </div>
-                    <div>
-                      <span className="text-xs text-muted-foreground">Est. APY</span>
-                      <p className="font-medium" data-testid={`text-incentive-apy-${inc.id}`}>{inc.estimatedApy != null ? `${inc.estimatedApy}%` : "--"}</p>
-                    </div>
-                    <div>
-                      <span className="text-xs text-muted-foreground">Vesting (Months)</span>
-                      <p className="font-medium" data-testid={`text-incentive-vesting-${inc.id}`}>{inc.vestingMonths ?? "--"}</p>
-                    </div>
+                    <div><span className="text-xs text-muted-foreground">Contribution</span><p className="font-medium" data-testid={`text-incentive-contribution-${inc.id}`}>{inc.contribution}</p></div>
+                    <div><span className="text-xs text-muted-foreground">Reward Type</span><p className="font-medium" data-testid={`text-incentive-rewardType-${inc.id}`}>{inc.rewardType}</p></div>
+                    <div><span className="text-xs text-muted-foreground">Reward Source</span><p className="font-medium" data-testid={`text-incentive-rewardSource-${inc.id}`}>{inc.rewardSource}</p></div>
+                    <div><span className="text-xs text-muted-foreground">Allocation %</span><p className="font-medium" data-testid={`text-incentive-allocation-${inc.id}`}>{inc.allocationPercent || 0}%</p></div>
+                    <div><span className="text-xs text-muted-foreground">Est. APY</span><p className="font-medium" data-testid={`text-incentive-apy-${inc.id}`}>{inc.estimatedApy != null ? `${inc.estimatedApy}%` : "--"}</p></div>
+                    <div><span className="text-xs text-muted-foreground">Vesting (Months)</span><p className="font-medium" data-testid={`text-incentive-vesting-${inc.id}`}>{inc.vestingMonths ?? "--"}</p></div>
                   </div>
-                  {inc.sustainabilityNotes && (
-                    <p className="text-xs text-muted-foreground italic" data-testid={`text-incentive-notes-${inc.id}`}>
-                      {inc.sustainabilityNotes}
-                    </p>
-                  )}
+                  {inc.sustainabilityNotes && <p className="text-xs text-muted-foreground italic" data-testid={`text-incentive-notes-${inc.id}`}>{inc.sustainabilityNotes}</p>}
                   <div className="flex items-center gap-1 pt-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openEditIncentive(inc)}
-                      data-testid={`button-edit-incentive-${inc.id}`}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteIncentiveMutation.mutate(inc.id)}
-                      disabled={deleteIncentiveMutation.isPending}
-                      data-testid={`button-delete-incentive-${inc.id}`}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => openEditIncentive(inc)} data-testid={`button-edit-incentive-${inc.id}`}>Edit</Button>
+                    <Button variant="ghost" size="icon" onClick={() => deleteIncentiveMutation.mutate(inc.id)} disabled={deleteIncentiveMutation.isPending} data-testid={`button-delete-incentive-${inc.id}`}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                   </div>
                 </CardContent>
               </Card>
@@ -718,205 +688,159 @@ export default function CryptoTokenomics() {
         </TabsContent>
       </Tabs>
 
+      {/* =================== DIALOGS =================== */}
+
+      {/* Supply Schedule Dialog */}
       <Dialog open={supplyFormOpen} onOpenChange={setSupplyFormOpen}>
         <DialogContent data-testid="dialog-supply-form">
-          <DialogHeader>
-            <DialogTitle>Add Supply Schedule Entry</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Add Supply Schedule Entry</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div className="space-y-1">
-              <Label htmlFor="supply-label">Label</Label>
-              <Input
-                id="supply-label"
-                value={supplyForm.label}
-                onChange={(e) => setSupplyForm(f => ({ ...f, label: e.target.value }))}
-                placeholder="e.g. Team, Investors, Community"
-                data-testid="input-supply-label"
-              />
+            <div className="space-y-1"><Label htmlFor="supply-label">Label</Label><Input id="supply-label" value={supplyForm.label} onChange={(e) => setSupplyForm(f => ({ ...f, label: e.target.value }))} placeholder="e.g. Team, Investors, Community" data-testid="input-supply-label" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1"><Label htmlFor="supply-amount">Amount</Label><Input id="supply-amount" type="number" value={supplyForm.amount || ""} onChange={(e) => setSupplyForm(f => ({ ...f, amount: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-supply-amount" /></div>
+              <div className="space-y-1"><Label htmlFor="supply-pct">% of Total</Label><Input id="supply-pct" type="number" value={supplyForm.percentOfTotal || ""} onChange={(e) => setSupplyForm(f => ({ ...f, percentOfTotal: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-supply-percentOfTotal" /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="supply-amount">Amount</Label>
-                <Input
-                  id="supply-amount"
-                  type="number"
-                  value={supplyForm.amount || ""}
-                  onChange={(e) => setSupplyForm(f => ({ ...f, amount: Number(e.target.value) || 0 }))}
-                  placeholder="0"
-                  data-testid="input-supply-amount"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="supply-pct">% of Total</Label>
-                <Input
-                  id="supply-pct"
-                  type="number"
-                  value={supplyForm.percentOfTotal || ""}
-                  onChange={(e) => setSupplyForm(f => ({ ...f, percentOfTotal: Number(e.target.value) || 0 }))}
-                  placeholder="0"
-                  data-testid="input-supply-percentOfTotal"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="supply-unlock">Unlock Date</Label>
-                <Input
-                  id="supply-unlock"
-                  value={supplyForm.unlockDate}
-                  onChange={(e) => setSupplyForm(f => ({ ...f, unlockDate: e.target.value }))}
-                  placeholder="e.g. 2025-Q2"
-                  data-testid="input-supply-unlockDate"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="supply-vesting">Vesting (Months)</Label>
-                <Input
-                  id="supply-vesting"
-                  type="number"
-                  value={supplyForm.vestingMonths || ""}
-                  onChange={(e) => setSupplyForm(f => ({ ...f, vestingMonths: Number(e.target.value) || 0 }))}
-                  placeholder="0"
-                  data-testid="input-supply-vestingMonths"
-                />
-              </div>
+              <div className="space-y-1"><Label htmlFor="supply-unlock">Unlock Date</Label><Input id="supply-unlock" value={supplyForm.unlockDate} onChange={(e) => setSupplyForm(f => ({ ...f, unlockDate: e.target.value }))} placeholder="e.g. 2025-Q2" data-testid="input-supply-unlockDate" /></div>
+              <div className="space-y-1"><Label htmlFor="supply-vesting">Vesting (Months)</Label><Input id="supply-vesting" type="number" value={supplyForm.vestingMonths || ""} onChange={(e) => setSupplyForm(f => ({ ...f, vestingMonths: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-supply-vestingMonths" /></div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSupplyFormOpen(false)} data-testid="button-cancel-supply">
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveSupply}
-              disabled={createScheduleMutation.isPending}
-              data-testid="button-save-supply"
-            >
-              {createScheduleMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-              Add
-            </Button>
+            <Button variant="outline" onClick={() => setSupplyFormOpen(false)} data-testid="button-cancel-supply">Cancel</Button>
+            <Button onClick={handleSaveSupply} disabled={createScheduleMutation.isPending} data-testid="button-save-supply">{createScheduleMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}Add</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Incentive Dialog */}
       <Dialog open={incentiveFormOpen} onOpenChange={(open) => { setIncentiveFormOpen(open); if (!open) setEditingIncentiveId(null); }}>
         <DialogContent data-testid="dialog-incentive-form">
-          <DialogHeader>
-            <DialogTitle>{editingIncentiveId ? "Edit Incentive" : "Add Incentive"}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>{editingIncentiveId ? "Edit Incentive" : "Add Incentive"}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="inc-role">Role</Label>
-                <Input
-                  id="inc-role"
-                  value={incentiveForm.role}
-                  onChange={(e) => setIncentiveForm(f => ({ ...f, role: e.target.value }))}
-                  placeholder="e.g. Liquidity Provider"
-                  data-testid="input-incentive-role"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="inc-contribution">Contribution</Label>
-                <Input
-                  id="inc-contribution"
-                  value={incentiveForm.contribution}
-                  onChange={(e) => setIncentiveForm(f => ({ ...f, contribution: e.target.value }))}
-                  placeholder="e.g. Provide liquidity"
-                  data-testid="input-incentive-contribution"
-                />
-              </div>
+              <div className="space-y-1"><Label>Role</Label><Input value={incentiveForm.role} onChange={(e) => setIncentiveForm(f => ({ ...f, role: e.target.value }))} placeholder="e.g. Liquidity Provider" data-testid="input-incentive-role" /></div>
+              <div className="space-y-1"><Label>Contribution</Label><Input value={incentiveForm.contribution} onChange={(e) => setIncentiveForm(f => ({ ...f, contribution: e.target.value }))} placeholder="e.g. Provide liquidity" data-testid="input-incentive-contribution" /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="inc-rewardType">Reward Type</Label>
-                <Input
-                  id="inc-rewardType"
-                  value={incentiveForm.rewardType}
-                  onChange={(e) => setIncentiveForm(f => ({ ...f, rewardType: e.target.value }))}
-                  placeholder="e.g. Token emission"
-                  data-testid="input-incentive-rewardType"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="inc-rewardSource">Reward Source</Label>
-                <Input
-                  id="inc-rewardSource"
-                  value={incentiveForm.rewardSource}
-                  onChange={(e) => setIncentiveForm(f => ({ ...f, rewardSource: e.target.value }))}
-                  placeholder="e.g. Protocol treasury"
-                  data-testid="input-incentive-rewardSource"
-                />
-              </div>
+              <div className="space-y-1"><Label>Reward Type</Label><Input value={incentiveForm.rewardType} onChange={(e) => setIncentiveForm(f => ({ ...f, rewardType: e.target.value }))} placeholder="e.g. Token emission" data-testid="input-incentive-rewardType" /></div>
+              <div className="space-y-1"><Label>Reward Source</Label><Input value={incentiveForm.rewardSource} onChange={(e) => setIncentiveForm(f => ({ ...f, rewardSource: e.target.value }))} placeholder="e.g. Protocol treasury" data-testid="input-incentive-rewardSource" /></div>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="inc-allocation">Allocation %</Label>
-                <Input
-                  id="inc-allocation"
-                  type="number"
-                  value={incentiveForm.allocationPercent || ""}
-                  onChange={(e) => setIncentiveForm(f => ({ ...f, allocationPercent: Number(e.target.value) || 0 }))}
-                  placeholder="0"
-                  data-testid="input-incentive-allocationPercent"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="inc-apy">Est. APY %</Label>
-                <Input
-                  id="inc-apy"
-                  type="number"
-                  value={incentiveForm.estimatedApy || ""}
-                  onChange={(e) => setIncentiveForm(f => ({ ...f, estimatedApy: Number(e.target.value) || 0 }))}
-                  placeholder="0"
-                  data-testid="input-incentive-estimatedApy"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="inc-vesting">Vesting (Mo)</Label>
-                <Input
-                  id="inc-vesting"
-                  type="number"
-                  value={incentiveForm.vestingMonths || ""}
-                  onChange={(e) => setIncentiveForm(f => ({ ...f, vestingMonths: Number(e.target.value) || 0 }))}
-                  placeholder="0"
-                  data-testid="input-incentive-vestingMonths"
-                />
-              </div>
+              <div className="space-y-1"><Label>Allocation %</Label><Input type="number" value={incentiveForm.allocationPercent || ""} onChange={(e) => setIncentiveForm(f => ({ ...f, allocationPercent: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-incentive-allocationPercent" /></div>
+              <div className="space-y-1"><Label>Est. APY %</Label><Input type="number" value={incentiveForm.estimatedApy || ""} onChange={(e) => setIncentiveForm(f => ({ ...f, estimatedApy: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-incentive-estimatedApy" /></div>
+              <div className="space-y-1"><Label>Vesting (Mo)</Label><Input type="number" value={incentiveForm.vestingMonths || ""} onChange={(e) => setIncentiveForm(f => ({ ...f, vestingMonths: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-incentive-vestingMonths" /></div>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="inc-notes">Sustainability Notes</Label>
-              <Input
-                id="inc-notes"
-                value={incentiveForm.sustainabilityNotes}
-                onChange={(e) => setIncentiveForm(f => ({ ...f, sustainabilityNotes: e.target.value }))}
-                placeholder="Notes on sustainability..."
-                data-testid="input-incentive-sustainabilityNotes"
-              />
-            </div>
+            <div className="space-y-1"><Label>Sustainability Notes</Label><Input value={incentiveForm.sustainabilityNotes} onChange={(e) => setIncentiveForm(f => ({ ...f, sustainabilityNotes: e.target.value }))} placeholder="Notes on sustainability..." data-testid="input-incentive-sustainabilityNotes" /></div>
             <div className="flex items-center gap-2">
-              <Label htmlFor="inc-sustainable" className="text-sm">Sustainable</Label>
-              <Button
-                variant={incentiveForm.isSustainable ? "default" : "outline"}
-                size="sm"
-                onClick={() => setIncentiveForm(f => ({ ...f, isSustainable: !f.isSustainable }))}
-                data-testid="button-toggle-sustainable"
-              >
-                {incentiveForm.isSustainable ? "Yes" : "No"}
-              </Button>
+              <Label className="text-sm">Sustainable</Label>
+              <Button variant={incentiveForm.isSustainable ? "default" : "outline"} size="sm" onClick={() => setIncentiveForm(f => ({ ...f, isSustainable: !f.isSustainable }))} data-testid="button-toggle-sustainable">{incentiveForm.isSustainable ? "Yes" : "No"}</Button>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setIncentiveFormOpen(false); setEditingIncentiveId(null); }} data-testid="button-cancel-incentive">
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveIncentive}
-              disabled={createIncentiveMutation.isPending || updateIncentiveMutation.isPending}
-              data-testid="button-save-incentive"
-            >
-              {(createIncentiveMutation.isPending || updateIncentiveMutation.isPending) && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-              {editingIncentiveId ? "Update" : "Add"}
-            </Button>
+            <Button variant="outline" onClick={() => { setIncentiveFormOpen(false); setEditingIncentiveId(null); }} data-testid="button-cancel-incentive">Cancel</Button>
+            <Button onClick={handleSaveIncentive} disabled={createIncentiveMutation.isPending || updateIncentiveMutation.isPending} data-testid="button-save-incentive">{(createIncentiveMutation.isPending || updateIncentiveMutation.isPending) && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}{editingIncentiveId ? "Update" : "Add"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Allocation Dialog */}
+      <Dialog open={allocationFormOpen} onOpenChange={(open) => { setAllocationFormOpen(open); if (!open) setEditingAllocationId(null); }}>
+        <DialogContent data-testid="dialog-allocation-form">
+          <DialogHeader><DialogTitle>{editingAllocationId ? "Edit Allocation" : "Add Allocation"}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Category</Label>
+              <Select value={allocationForm.category} onValueChange={(v) => setAllocationForm(f => ({ ...f, category: v }))}>
+                <SelectTrigger data-testid="select-alloc-category"><SelectValue placeholder="Select category" /></SelectTrigger>
+                <SelectContent>
+                  {ALLOCATION_CATEGORIES.map(c => (<SelectItem key={c} value={c}>{c}</SelectItem>))}
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Percentage (%)</Label>
+                <Input type="number" value={allocationForm.percentage || ""} onChange={(e) => setAllocationForm(f => ({ ...f, percentage: Number(e.target.value) || 0 }))} placeholder="e.g. 15" data-testid="input-alloc-percentage" />
+              </div>
+              <div className="space-y-1">
+                <Label>Token Amount (optional)</Label>
+                <Input type="number" value={allocationForm.amount || ""} onChange={(e) => setAllocationForm(f => ({ ...f, amount: Number(e.target.value) || 0 }))} placeholder="Auto-calculated if blank" data-testid="input-alloc-amount" />
+                {projectedSupply2035 > 0 && allocationForm.percentage > 0 && !allocationForm.amount && (
+                  <p className="text-xs text-muted-foreground">{formatSupply(projectedSupply2035 * (allocationForm.percentage / 100))} tokens (auto)</p>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1"><Label>Vesting (Mo)</Label><Input type="number" value={allocationForm.vestingMonths || ""} onChange={(e) => setAllocationForm(f => ({ ...f, vestingMonths: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-alloc-vesting" /></div>
+              <div className="space-y-1"><Label>Cliff (Mo)</Label><Input type="number" value={allocationForm.cliffMonths || ""} onChange={(e) => setAllocationForm(f => ({ ...f, cliffMonths: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-alloc-cliff" /></div>
+              <div className="space-y-1"><Label>TGE Unlock %</Label><Input type="number" value={allocationForm.tgePercent || ""} onChange={(e) => setAllocationForm(f => ({ ...f, tgePercent: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-alloc-tge" /></div>
+            </div>
+            <div className="space-y-1"><Label>Notes</Label><Input value={allocationForm.notes} onChange={(e) => setAllocationForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes..." data-testid="input-alloc-notes" /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAllocationFormOpen(false); setEditingAllocationId(null); }} data-testid="button-cancel-allocation">Cancel</Button>
+            <Button onClick={handleSaveAllocation} disabled={createAllocationMutation.isPending || updateAllocationMutation.isPending} data-testid="button-save-allocation">{(createAllocationMutation.isPending || updateAllocationMutation.isPending) && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}{editingAllocationId ? "Update" : "Add"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Fundraising Dialog */}
+      <Dialog open={fundraisingFormOpen} onOpenChange={(open) => { setFundraisingFormOpen(open); if (!open) setEditingFundraisingId(null); }}>
+        <DialogContent data-testid="dialog-fundraising-form">
+          <DialogHeader><DialogTitle>{editingFundraisingId ? "Edit Round" : "Add Fundraising Round"}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Round Type</Label>
+              <Select value={fundraisingForm.roundType} onValueChange={(v) => setFundraisingForm(f => ({ ...f, roundType: v }))}>
+                <SelectTrigger data-testid="select-round-type"><SelectValue placeholder="Select round type" /></SelectTrigger>
+                <SelectContent>
+                  {ROUND_TYPES.map(r => (<SelectItem key={r} value={r}>{r}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1"><Label>Amount Raised ($)</Label><Input type="number" value={fundraisingForm.amount || ""} onChange={(e) => setFundraisingForm(f => ({ ...f, amount: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-round-amount" /></div>
+              <div className="space-y-1"><Label>Valuation ($)</Label><Input type="number" value={fundraisingForm.valuation || ""} onChange={(e) => setFundraisingForm(f => ({ ...f, valuation: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-round-valuation" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1"><Label>Date</Label><Input value={fundraisingForm.date} onChange={(e) => setFundraisingForm(f => ({ ...f, date: e.target.value }))} placeholder="e.g. 2023-06" data-testid="input-round-date" /></div>
+              <div className="space-y-1"><Label>Token Price ($)</Label><Input type="number" value={fundraisingForm.tokenPrice || ""} onChange={(e) => setFundraisingForm(f => ({ ...f, tokenPrice: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-round-token-price" /></div>
+            </div>
+            <div className="space-y-1"><Label>Lead Investors</Label><Input value={fundraisingForm.leadInvestors} onChange={(e) => setFundraisingForm(f => ({ ...f, leadInvestors: e.target.value }))} placeholder="e.g. a16z, Paradigm" data-testid="input-round-investors" /></div>
+            <div className="space-y-1"><Label>Notes</Label><Input value={fundraisingForm.notes} onChange={(e) => setFundraisingForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes..." data-testid="input-round-notes" /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setFundraisingFormOpen(false); setEditingFundraisingId(null); }} data-testid="button-cancel-fundraising">Cancel</Button>
+            <Button onClick={handleSaveFundraising} disabled={createFundraisingMutation.isPending || updateFundraisingMutation.isPending} data-testid="button-save-fundraising">{(createFundraisingMutation.isPending || updateFundraisingMutation.isPending) && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}{editingFundraisingId ? "Update" : "Add"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Governance Dialog */}
+      <Dialog open={governanceEditing} onOpenChange={setGovernanceEditing}>
+        <DialogContent data-testid="dialog-governance-form">
+          <DialogHeader><DialogTitle>Edit Governance & DAO Info</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Governance Type</Label>
+              <Select value={govForm.governanceType} onValueChange={(v) => setGovForm(f => ({ ...f, governanceType: v }))}>
+                <SelectTrigger data-testid="select-governance-type"><SelectValue placeholder="Select type" /></SelectTrigger>
+                <SelectContent>
+                  {GOVERNANCE_TYPES.map(g => (<SelectItem key={g} value={g}>{g}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1"><Label>Voting Mechanism</Label><Input value={govForm.votingMechanism} onChange={(e) => setGovForm(f => ({ ...f, votingMechanism: e.target.value }))} placeholder="e.g. Token-weighted, Quadratic" data-testid="input-governance-voting" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1"><Label>Treasury Size ($)</Label><Input type="number" value={govForm.treasurySize || ""} onChange={(e) => setGovForm(f => ({ ...f, treasurySize: Number(e.target.value) || 0 }))} placeholder="0" data-testid="input-governance-treasury" /></div>
+              <div className="space-y-1"><Label>Treasury Currency</Label><Input value={govForm.treasuryCurrency} onChange={(e) => setGovForm(f => ({ ...f, treasuryCurrency: e.target.value }))} placeholder="USD" data-testid="input-governance-currency" /></div>
+            </div>
+            <div className="space-y-1"><Label>Notes</Label><Textarea value={govForm.governanceNotes} onChange={(e) => setGovForm(f => ({ ...f, governanceNotes: e.target.value }))} placeholder="Additional governance details..." className="resize-none" data-testid="input-governance-notes" /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGovernanceEditing(false)} data-testid="button-cancel-governance">Cancel</Button>
+            <Button onClick={handleSaveGovernance} disabled={updateGovernanceMutation.isPending} data-testid="button-save-governance">{updateGovernanceMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
