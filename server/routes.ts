@@ -1183,7 +1183,7 @@ export async function registerRoutes(server: Server, app: Express) {
         "maxSupply", "ath", "athDate", "sparklineData", "image",
         "governanceType", "votingMechanism", "treasurySize", "treasuryCurrency",
         "governanceNotes", "whitepaper", "discountRate", "feeGrowthRate", "terminalGrowthRate",
-        "projectionYears", "chainId", "contractAddress", "stakingContract", "notes"
+        "projectionYears", "chainId", "contractAddress", "stakingContract", "notes", "dataSources"
       ];
       const numericFields = ["currentPrice", "marketCap", "fullyDilutedValuation", "volume24h",
         "priceChange24h", "priceChange7d", "circulatingSupply", "totalSupply", "maxSupply", "ath",
@@ -1779,7 +1779,7 @@ export async function registerRoutes(server: Server, app: Express) {
         const tokenName = project.name || "";
         const tokenSymbol = project.symbol || "";
         const totalSupply = project.totalSupply || project.maxSupply || null;
-        const aiResult = await researchAllocationsWithAI(tokenName, tokenSymbol, totalSupply);
+        const aiResult = await researchAllocationsWithAI(tokenName, tokenSymbol, totalSupply, (project as any).dataSources);
         if (aiResult && aiResult.allocations.length > 0) {
           allocationsToCreate = mapAIToAllocations(aiResult, project.id, totalSupply);
           source = `ai-researched:${aiResult.confidence}`;

@@ -693,6 +693,7 @@ export async function researchAllocationsWithAI(
   tokenName: string,
   tokenSymbol: string,
   totalSupply: number | null,
+  dataSources?: string[] | null,
 ): Promise<AIAllocationResult | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -707,10 +708,14 @@ export async function researchAllocationsWithAI(
     ? `The token has a total/max supply of ${totalSupply.toLocaleString()} tokens.`
     : "Total supply is unknown.";
 
+  const sourcesContext = dataSources && dataSources.length > 0
+    ? `\nThe user has provided the following reference sources for this project. Use these as primary references when researching allocation data:\n${dataSources.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n`
+    : "";
+
   const prompt = `You are a cryptocurrency tokenomics analyst. Research and provide the known token allocation breakdown for the cryptocurrency "${tokenName}" (symbol: ${tokenSymbol}).
 
 ${supplyContext}
-
+${sourcesContext}
 Return a JSON object with this exact structure:
 {
   "allocations": [

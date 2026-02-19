@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import type { CryptoProject } from "@shared/schema";
-import { ArrowLeft, Save, Loader2, Search, X, Check, Clock } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Search, X, Check, Clock, Plus, Link2, Trash2 } from "lucide-react";
 import { CryptoProjectNav } from "@/components/crypto-project-nav";
 
 interface DefiLlamaSearchResult {
@@ -69,6 +69,9 @@ export default function CryptoSettings() {
     notes: "",
   });
 
+  const [dataSources, setDataSources] = useState<string[]>([]);
+  const [newSource, setNewSource] = useState("");
+
   const [defiSearch, setDefiSearch] = useState("");
   const [defiResults, setDefiResults] = useState<DefiLlamaSearchResult[]>([]);
   const [searchingDefi, setSearchingDefi] = useState(false);
@@ -95,6 +98,7 @@ export default function CryptoSettings() {
         governanceNotes: project.governanceNotes || "",
         notes: (project as any).notes || "",
       });
+      setDataSources((project as any).dataSources || []);
     }
   }, [project]);
 
@@ -132,6 +136,7 @@ export default function CryptoSettings() {
       treasuryCurrency: form.treasuryCurrency || null,
       governanceNotes: form.governanceNotes || null,
       notes: form.notes || null,
+      dataSources: dataSources.length > 0 ? dataSources : null,
     });
   };
 
@@ -238,6 +243,68 @@ export default function CryptoSettings() {
                 data-testid="input-notes"
               />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-data-sources">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium flex items-center gap-1.5">
+              <Link2 className="h-4 w-4" />
+              Data Sources
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">Add URLs or references for this project (whitepapers, docs, blog posts). These are passed to the AI when researching token allocations.</p>
+            <div className="flex items-center gap-2">
+              <Input
+                value={newSource}
+                onChange={e => setNewSource(e.target.value)}
+                placeholder="https://docs.example.com/tokenomics"
+                onKeyDown={e => {
+                  if (e.key === "Enter" && newSource.trim()) {
+                    setDataSources(prev => [...prev, newSource.trim()]);
+                    setNewSource("");
+                  }
+                }}
+                data-testid="input-new-data-source"
+              />
+              <Button
+                size="icon"
+                variant="outline"
+                disabled={!newSource.trim()}
+                onClick={() => {
+                  if (newSource.trim()) {
+                    setDataSources(prev => [...prev, newSource.trim()]);
+                    setNewSource("");
+                  }
+                }}
+                data-testid="button-add-data-source"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+            {dataSources.length > 0 && (
+              <div className="space-y-1.5">
+                {dataSources.map((src, i) => (
+                  <div key={i} className="flex items-center gap-2 group">
+                    <div className="flex-1 min-w-0 text-xs text-muted-foreground truncate border rounded-md px-2.5 py-1.5" data-testid={`text-data-source-${i}`}>
+                      {src}
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => setDataSources(prev => prev.filter((_, idx) => idx !== i))}
+                      data-testid={`button-remove-source-${i}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {dataSources.length === 0 && (
+              <p className="text-xs text-muted-foreground italic">No data sources added yet.</p>
+            )}
           </CardContent>
         </Card>
 
