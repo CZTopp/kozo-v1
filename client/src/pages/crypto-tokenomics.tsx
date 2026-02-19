@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import type { CryptoProject, TokenSupplySchedule, TokenIncentive, TokenAllocation, FundraisingRound } from "@shared/schema";
-import { ArrowLeft, Plus, Trash2, Shield, AlertTriangle, Download, Loader2, Users, Lock, Coins, Edit2, Landmark, Vote, Wallet, Info } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Shield, AlertTriangle, Download, Loader2, Users, Lock, Coins, Edit2, Landmark, Vote, Wallet, Info, FileText, Upload, X } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -72,6 +72,9 @@ export default function CryptoTokenomics() {
   const [fundraisingForm, setFundraisingForm] = useState({ ...emptyFundraisingForm });
   const [governanceEditing, setGovernanceEditing] = useState(false);
   const [govForm, setGovForm] = useState({ governanceType: "", votingMechanism: "", treasurySize: 0, treasuryCurrency: "USD", governanceNotes: "" });
+  const [whitepaperText, setWhitepaperText] = useState("");
+  const [whitepaperMode, setWhitepaperMode] = useState<"view" | "paste">("view");
+  const [uploadingPdf, setUploadingPdf] = useState(false);
 
   const { data: project, isLoading: projectLoading } = useQuery<CryptoProject>({ queryKey: ["/api/crypto/projects", projectId], enabled: !!projectId });
   const { data: schedules, isLoading: schedulesLoading } = useQuery<TokenSupplySchedule[]>({ queryKey: ["/api/crypto/projects", projectId, "supply-schedules"], enabled: !!projectId });
@@ -217,6 +220,55 @@ export default function CryptoTokenomics() {
     updateGovernanceMutation.mutate({ governanceType: govForm.governanceType || null, votingMechanism: govForm.votingMechanism || null, treasurySize: Number(govForm.treasurySize) || null, treasuryCurrency: govForm.treasuryCurrency || null, governanceNotes: govForm.governanceNotes || null });
   }
 
+  const saveWhitepaperMutation = useMutation({
+    mutationFn: async (text: string) => {
+      const res = await apiRequest("PATCH", `/api/crypto/projects/${projectId}`, { whitepaper: text || null });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId] });
+      setWhitepaperMode("view");
+      toast({ title: "Whitepaper saved" });
+    },
+    onError: (err: Error) => { toast({ title: "Error saving whitepaper", description: err.message, variant: "destructive" }); },
+  });
+
+  async function handlePdfUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      toast({ title: "Only PDF files are supported", variant: "destructive" });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: "File too large (max 10MB)", variant: "destructive" });
+      return;
+    }
+    setUploadingPdf(true);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64 = btoa(binary);
+      const res = await apiRequest("POST", `/api/crypto/projects/${projectId}/parse-pdf`, { pdfBase64: base64 });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to parse PDF");
+      }
+      const data = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId] });
+      toast({ title: "Whitepaper uploaded", description: `Extracted ${(data.length || 0).toLocaleString()} characters` });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUploadingPdf(false);
+      e.target.value = "";
+    }
+  }
+
   const circulatingRatio = project?.circulatingSupply && project?.totalSupply ? (project.circulatingSupply / project.totalSupply) * 100 : 0;
   const fdvMcapRatio = project?.fullyDilutedValuation && project?.marketCap && project.marketCap > 0 ? project.fullyDilutedValuation / project.marketCap : 0;
   const inflationEstimate = project?.maxSupply && project?.circulatingSupply && project.circulatingSupply > 0 ? ((project.maxSupply - project.circulatingSupply) / project.circulatingSupply) * 100 : null;
@@ -357,6 +409,7 @@ export default function CryptoTokenomics() {
           <TabsTrigger value="supply" data-testid="tab-supply">Supply Schedule</TabsTrigger>
           <TabsTrigger value="fundraising" data-testid="tab-fundraising">Fundraising</TabsTrigger>
           <TabsTrigger value="incentives" data-testid="tab-incentives">Incentives</TabsTrigger>
+          <TabsTrigger value="whitepaper" data-testid="tab-whitepaper">Whitepaper</TabsTrigger>
         </TabsList>
 
         {/* =================== ALLOCATIONS TAB =================== */}
@@ -685,6 +738,128 @@ export default function CryptoTokenomics() {
               </Card>
             ))}
           </div>
+        </TabsContent>
+
+        {/* =================== WHITEPAPER TAB =================== */}
+        <TabsContent value="whitepaper" className="mt-4 space-y-4">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <h2 className="text-lg font-semibold" data-testid="text-whitepaper-title">Whitepaper</h2>
+              <p className="text-xs text-muted-foreground">Upload or paste the project whitepaper to use with Copilot for analysis</p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {project?.whitepaper ? (
+                <>
+                  {whitepaperMode === "view" ? (
+                    <Button variant="outline" size="sm" onClick={() => { setWhitepaperText(project.whitepaper || ""); setWhitepaperMode("paste"); }} data-testid="button-edit-whitepaper">
+                      <Edit2 className="h-4 w-4 mr-1" />Edit
+                    </Button>
+                  ) : (
+                    <>
+                      <Button variant="outline" size="sm" onClick={() => setWhitepaperMode("view")} data-testid="button-cancel-whitepaper">Cancel</Button>
+                      <Button size="sm" onClick={() => saveWhitepaperMutation.mutate(whitepaperText)} disabled={saveWhitepaperMutation.isPending} data-testid="button-save-whitepaper">
+                        {saveWhitepaperMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}Save
+                      </Button>
+                    </>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={() => { if (confirm("Remove whitepaper?")) saveWhitepaperMutation.mutate(""); }} data-testid="button-remove-whitepaper">
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          {project?.whitepaper && whitepaperMode === "view" ? (
+            <Card data-testid="card-whitepaper-content">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-1.5">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  Document ({(project.whitepaper.length).toLocaleString()} characters)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <pre className="text-xs whitespace-pre-wrap font-mono max-h-96 overflow-y-auto text-muted-foreground leading-relaxed" data-testid="text-whitepaper-preview">
+                  {project.whitepaper.slice(0, 5000)}
+                  {project.whitepaper.length > 5000 && "\n\n... (truncated for display — full content available to Copilot)"}
+                </pre>
+              </CardContent>
+            </Card>
+          ) : project?.whitepaper && whitepaperMode === "paste" ? (
+            <Card>
+              <CardContent className="pt-4">
+                <Textarea
+                  value={whitepaperText}
+                  onChange={(e) => setWhitepaperText(e.target.value)}
+                  className="min-h-[300px] font-mono text-xs resize-y"
+                  placeholder="Paste whitepaper text here..."
+                  data-testid="textarea-whitepaper-edit"
+                />
+              </CardContent>
+            </Card>
+          ) : !project?.whitepaper && whitepaperMode === "view" ? (
+            <Card data-testid="card-whitepaper-empty">
+              <CardContent className="pt-6">
+                <div className="flex flex-col items-center gap-4 py-8 text-center">
+                  <div className="rounded-full bg-muted p-4">
+                    <FileText className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium mb-1">No whitepaper added</h3>
+                    <p className="text-sm text-muted-foreground max-w-md">Upload a PDF or paste the whitepaper text. The Copilot will be able to reference it when analyzing this project.</p>
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <label>
+                      <input type="file" accept=".pdf" className="hidden" onChange={handlePdfUpload} disabled={uploadingPdf} data-testid="input-pdf-upload" />
+                      <Button variant="outline" asChild disabled={uploadingPdf}>
+                        <span>
+                          {uploadingPdf ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                          Upload PDF
+                        </span>
+                      </Button>
+                    </label>
+                    <Button variant="outline" onClick={() => { setWhitepaperText(""); setWhitepaperMode("paste"); }} data-testid="button-paste-whitepaper">
+                      <FileText className="h-4 w-4 mr-1" />Paste Text
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {!project?.whitepaper && whitepaperMode === "paste" && (
+            <Card>
+              <CardContent className="pt-4 space-y-3">
+                <Textarea
+                  value={whitepaperText}
+                  onChange={(e) => setWhitepaperText(e.target.value)}
+                  className="min-h-[300px] font-mono text-xs resize-y"
+                  placeholder="Paste whitepaper text here..."
+                  data-testid="textarea-whitepaper-paste"
+                />
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setWhitepaperMode("view")} data-testid="button-cancel-paste">Cancel</Button>
+                  <Button size="sm" onClick={() => saveWhitepaperMutation.mutate(whitepaperText)} disabled={saveWhitepaperMutation.isPending || !whitepaperText.trim()} data-testid="button-save-pasted">
+                    {saveWhitepaperMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}Save Whitepaper
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {project?.whitepaper && whitepaperMode === "view" && (
+            <div className="flex items-center gap-3 flex-wrap">
+              <label>
+                <input type="file" accept=".pdf" className="hidden" onChange={handlePdfUpload} disabled={uploadingPdf} data-testid="input-pdf-replace" />
+                <Button variant="outline" size="sm" asChild disabled={uploadingPdf}>
+                  <span>
+                    {uploadingPdf ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                    Replace with PDF
+                  </span>
+                </Button>
+              </label>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 

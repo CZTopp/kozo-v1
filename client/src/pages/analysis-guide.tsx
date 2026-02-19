@@ -279,7 +279,7 @@ const sections = [
     title: "Tokenomics Modeler",
     icon: PieChart,
     path: "/crypto/tokenomics",
-    purpose: "Comprehensive tokenomics analysis similar to Tokenomist.ai. Four tabs cover token allocations, supply schedule, fundraising rounds, and incentive mapping. Includes governance/DAO info and projected 2035 supply calculations.",
+    purpose: "Comprehensive tokenomics analysis similar to Tokenomist.ai. Five tabs cover token allocations, supply schedule, fundraising rounds, incentive mapping, and whitepaper upload. Includes governance/DAO info and projected 2035 supply calculations.",
     keyMetrics: ["Token Allocations (%)", "Projected 2035 Supply", "Circulating/Total Ratio", "FDV/MCap Ratio", "Inflation Estimate", "Total Raised", "Governance Type"],
     howToUse: [
       "Allocations Tab: Define how tokens are distributed (Team, Investors, Community, Treasury, etc.). Each allocation has percentage, token amount, vesting period, cliff, and TGE unlock. The donut chart updates in real-time.",
@@ -288,6 +288,7 @@ const sections = [
       "Supply Schedule Tab: Track token unlock events over time. Each entry has a label, amount, unlock date, and vesting period. A cumulative unlock area chart shows the token release timeline.",
       "Fundraising Tab: Record funding rounds with type (Seed, Private, Public/IDO, etc.), amount raised, valuation, date, token price, and lead investors. Total raised is auto-summed.",
       "Incentives Tab: Map stakeholder incentives (Liquidity Providers, Stakers, Validators, etc.) with reward type, source, APY estimates, and sustainability flags. Load pre-built templates for major protocols (BTC, ETH, SOL, UNI, AAVE).",
+      "Whitepaper Tab: Upload a PDF or paste the project whitepaper text. The full document is stored and made available to the AI Copilot for context-aware analysis. Max PDF size 10MB, text truncated at 200K characters. The Copilot can cross-reference whitepaper claims against actual market and on-chain data.",
       "Governance Card: Edit DAO type (DAO, Multi-sig, Foundation, Council), voting mechanism, treasury size, and notes. This provides context for how the protocol is governed.",
       "Review the supply metrics cards at the top: circulating/total ratio, inflation estimate, and FDV/MCap ratio to assess dilution risk.",
     ],

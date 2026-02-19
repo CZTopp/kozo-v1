@@ -1173,7 +1173,7 @@ export async function registerRoutes(server: Server, app: Express) {
         "priceChange24h", "priceChange7d", "circulatingSupply", "totalSupply",
         "maxSupply", "ath", "athDate", "sparklineData", "image",
         "governanceType", "votingMechanism", "treasurySize", "treasuryCurrency",
-        "governanceNotes", "discountRate", "feeGrowthRate", "terminalGrowthRate",
+        "governanceNotes", "whitepaper", "discountRate", "feeGrowthRate", "terminalGrowthRate",
         "projectionYears"
       ];
       const numericFields = ["currentPrice", "marketCap", "fullyDilutedValuation", "volume24h",
@@ -1187,6 +1187,8 @@ export async function registerRoutes(server: Server, app: Express) {
             filtered[key] = val != null ? Number(val) : null;
           } else if (key === "projectionYears") {
             filtered[key] = val != null ? Math.max(1, Math.min(20, Number(val) || 5)) : 5;
+          } else if (key === "whitepaper") {
+            filtered[key] = typeof val === "string" && val.length > 0 ? val.slice(0, 200000) : val;
           } else {
             filtered[key] = val;
           }
@@ -1208,6 +1210,39 @@ export async function registerRoutes(server: Server, app: Express) {
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     await storage.deleteCryptoProject(req.params.id, userId);
     res.json({ success: true });
+  });
+
+  app.post("/api/crypto/projects/:id/parse-pdf", async (req: Request<Params>, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const project = await storage.getCryptoProject(req.params.id, userId);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const { pdfBase64 } = req.body;
+      if (!pdfBase64) return res.status(400).json({ message: "pdfBase64 is required" });
+
+      const buffer = Buffer.from(pdfBase64, "base64");
+      if (buffer.length > 10 * 1024 * 1024) {
+        return res.status(400).json({ message: "File too large (max 10MB)" });
+      }
+
+      const pdfParseModule = await import("pdf-parse");
+      const pdfParse = (pdfParseModule as any).default || pdfParseModule;
+      const parsed = await pdfParse(buffer);
+      const text = parsed.text?.trim() || "";
+
+      if (!text) {
+        return res.status(400).json({ message: "Could not extract text from PDF" });
+      }
+
+      const truncated = text.slice(0, 200000);
+      await storage.updateCryptoProject(req.params.id, userId, { whitepaper: truncated });
+
+      res.json({ text: truncated, length: truncated.length });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to parse PDF" });
+    }
   });
 
   app.post("/api/crypto/projects/refresh", async (req: Request, res: Response) => {

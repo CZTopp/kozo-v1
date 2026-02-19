@@ -345,6 +345,7 @@ export const cryptoProjects = pgTable("crypto_projects", {
   treasurySize: real("treasury_size"),
   treasuryCurrency: text("treasury_currency"),
   governanceNotes: text("governance_notes"),
+  whitepaper: text("whitepaper"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

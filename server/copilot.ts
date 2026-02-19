@@ -194,6 +194,7 @@ async function gatherCryptoProjectContext(projectId: string, userId: string) {
       netFlow: f.netFlow,
       cumulativeSupply: f.cumulativeSupply,
     })),
+    whitepaper: project.whitepaper ? project.whitepaper.slice(0, 15000) : null,
   };
 }
 
@@ -250,6 +251,7 @@ const CRYPTO_SYSTEM_PROMPT = `You are Foresight Copilot, an expert crypto and De
 - Token allocation analysis (team, investor, community, treasury distributions)
 - On-chain metrics and supply concentration
 - Market microstructure and liquidity analysis
+- Whitepaper analysis (technical architecture, tokenomics design, roadmap evaluation)
 
 Your role is to:
 1. Analyze token economics, supply schedules, and unlock impacts on price
@@ -258,9 +260,11 @@ Your role is to:
 4. Compare fundraising terms and valuations against market benchmarks
 5. Identify risks including emission dilution, concentration, and sustainability concerns
 6. Provide actionable insights for the specific project being analyzed
+7. When a whitepaper is available, reference it to assess the project's technical vision, tokenomics design, and claimed mechanisms against actual on-chain/market data
 
 Guidelines:
 - Always reference specific data from the project when available
+- When whitepaper text is provided, cite relevant sections and cross-reference claims against market data
 - Be honest about speculative tokens - note when fundamentals don't support valuation
 - Quantify dilution impacts from upcoming unlocks
 - Use markdown formatting for readability
@@ -298,7 +302,8 @@ export async function streamCopilotToResponse(
       return;
     }
     systemPrompt = CRYPTO_SYSTEM_PROMPT;
-    contextMessage = `Here is the current data for ${context.project.name} (${context.project.symbol}):\n\n${JSON.stringify(context, null, 2)}`;
+    const wpNote = context.whitepaper ? `\n\nThe project has a whitepaper attached (${context.whitepaper.length} chars). You can reference it for technical and tokenomics analysis.` : "";
+    contextMessage = `Here is the current data for ${context.project.name} (${context.project.symbol}):${wpNote}\n\n${JSON.stringify(context, null, 2)}`;
   } else if (params.contextType === "crypto-dashboard") {
     const context = await gatherCryptoDashboardContext(userId);
     systemPrompt = CRYPTO_DASHBOARD_SYSTEM_PROMPT;
