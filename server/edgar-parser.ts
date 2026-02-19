@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
 
-const SEC_USER_AGENT = "Foresight Financial App admin@foresight-app.com";
+const SEC_USER_AGENT = "Kozo Financial App admin@kozo-app.com";
 
 interface ContextPeriod {
   startDate: string;

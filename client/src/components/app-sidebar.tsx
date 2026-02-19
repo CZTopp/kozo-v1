@@ -248,7 +248,7 @@ export function AppSidebar() {
             <TrendingUp className="h-4 w-4 text-primary-foreground" />
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-semibold" data-testid="text-app-name">Foresight</span>
+            <span className="text-sm font-semibold" data-testid="text-app-name">Kozo</span>
             <span className="text-xs text-muted-foreground">Financial Modeling</span>
           </div>
         </Link>

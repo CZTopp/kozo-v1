@@ -1,6 +1,6 @@
 import { fetchAndParseEdgar, type EdgarParsedData } from "./edgar-parser";
 
-const SEC_USER_AGENT = "Foresight Financial App admin@foresight-app.com";
+const SEC_USER_AGENT = "Kozo Financial App admin@kozo-app.com";
 
 export interface CompanySearchResult {
   cik: string;

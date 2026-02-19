@@ -1,7 +1,7 @@
-# Foresight - Wall Street-Grade Financial Modeling & Valuation Platform
+# Kozo - Wall Street-Grade Financial Modeling & Valuation Platform
 
 ## Overview
-Foresight is a comprehensive financial modeling and valuation platform designed to provide Wall Street-grade analysis. It encompasses 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, a portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. The platform's key capabilities include live data integration for market indices (Yahoo Finance) and macro indicators (FRED API), along with advanced SEC EDGAR filing import functionalities for financial statements. The business vision is to empower financial analysts and investors with sophisticated tools for accurate forecasting, valuation, and portfolio management, enabling better investment decisions and deeper market insights.
+Kozo is a comprehensive financial modeling and valuation platform designed to provide Wall Street-grade analysis. It encompasses 10 core modules: revenue forecasting, income statement (P&L), balance sheet, cash flow statement, DCF valuation with WACC, multi-method valuation comparison, a portfolio management dashboard with 15+ stocks and technical indicators, macro data, and global market indices. The platform's key capabilities include live data integration for market indices (Yahoo Finance) and macro indicators (FRED API), along with advanced SEC EDGAR filing import functionalities for financial statements. The business vision is to empower financial analysts and investors with sophisticated tools for accurate forecasting, valuation, and portfolio management, enabling better investment decisions and deeper market insights.
 
 ## User Preferences
 - Dark mode preferred
