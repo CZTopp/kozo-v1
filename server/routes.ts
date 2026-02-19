@@ -1239,7 +1239,7 @@ export async function registerRoutes(server: Server, app: Express) {
       const pdfParseModule = await import("pdf-parse");
       const pdfParse = (pdfParseModule as any).default || pdfParseModule;
       const parsed = await pdfParse(buffer);
-      const text = parsed.text?.trim() || "";
+      const text = (parsed.text || "").trim();
 
       if (!text) {
         return res.status(400).json({ message: "Could not extract text from PDF" });
