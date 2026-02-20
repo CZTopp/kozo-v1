@@ -12,7 +12,15 @@ import { ModelProvider } from "@/lib/model-context";
 import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { LogOut, Loader2 } from "lucide-react";
+import { LogOut, Loader2, CreditCard, Zap, ChevronDown } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Link } from "wouter";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import RevenueForecast from "@/pages/revenue-forecast";
@@ -97,26 +105,47 @@ function AuthenticatedApp() {
                 <div className="flex items-center gap-2">
                   <CopilotTrigger />
                   <ThemeToggle />
-                  <div className="flex items-center gap-2 pl-2 border-l">
-                    <Avatar className="h-7 w-7">
-                      <AvatarImage src={user?.profileImageUrl || undefined} alt={displayName} />
-                      <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-                    </Avatar>
-                    <span className="text-sm text-muted-foreground hidden sm:inline" data-testid="text-user-name">
-                      {displayName}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      asChild
-                      aria-label="Log out"
-                      data-testid="button-logout"
-                    >
-                      <a href="/api/logout" title="Log out">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="flex items-center gap-2 pl-2 border-l"
+                        data-testid="button-user-profile"
+                      >
+                        <Avatar className="h-7 w-7">
+                          <AvatarImage src={user?.profileImageUrl || undefined} alt={displayName} />
+                          <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                        </Avatar>
+                        <span className="text-sm text-muted-foreground hidden sm:inline" data-testid="text-user-name">
+                          {displayName}
+                        </span>
+                        <ChevronDown className="h-3 w-3 text-muted-foreground hidden sm:inline" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem asChild>
+                        <Link href="/subscription" className="flex items-center gap-2 cursor-pointer" data-testid="link-dropdown-subscription">
+                          <CreditCard className="h-4 w-4" />
+                          <span>Subscription</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/pricing" className="flex items-center gap-2 cursor-pointer" data-testid="link-dropdown-pricing">
+                          <Zap className="h-4 w-4" />
+                          <span>Pricing</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => { window.location.href = "/api/logout"; }}
+                        className="flex items-center gap-2 cursor-pointer text-destructive focus:text-destructive"
+                        data-testid="button-logout"
+                      >
                         <LogOut className="h-4 w-4" />
-                      </a>
-                    </Button>
-                  </div>
+                        <span>Log Out</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </header>
               <main className="flex-1 overflow-auto">
