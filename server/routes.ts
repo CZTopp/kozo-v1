@@ -29,6 +29,7 @@ import {
 } from "./crypto-data";
 import { getOnChainTokenData } from "./thirdweb-data";
 import { getTokenEmissions, getBatchTokenEmissions, TOKEN_CATEGORIES, getTokenCategory } from "./emissions-service";
+import { getUserPlanInfo, checkLimit, incrementAiCalls, incrementPdfParses, type LimitCheckResult } from "./plan-limits";
 
 type Params = Record<string, string>;
 
@@ -2129,6 +2130,32 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.get("/api/crypto/emissions-categories", isAuthenticated as any, (_req: Request, res: Response) => {
     res.json(TOKEN_CATEGORIES);
+  });
+
+  app.get("/api/subscription", isAuthenticated as any, async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const info = await getUserPlanInfo(userId);
+      res.json(info);
+    } catch (err: any) {
+      console.error("Get subscription error:", err);
+      res.status(500).json({ message: err.message || "Internal error" });
+    }
+  });
+
+  app.post("/api/subscription/check", isAuthenticated as any, async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const { resource } = req.body as { resource: string };
+      if (!resource) return res.status(400).json({ message: "Missing resource" });
+      const result = await checkLimit(userId, resource);
+      res.json(result);
+    } catch (err: any) {
+      console.error("Check limit error:", err);
+      res.status(500).json({ message: err.message || "Internal error" });
+    }
   });
 
 }

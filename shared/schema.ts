@@ -494,6 +494,24 @@ export const insertTokenFlowEntrySchema = createInsertSchema(tokenFlowEntries).o
 export const insertTokenAllocationSchema = createInsertSchema(tokenAllocations).omit({ id: true });
 export const insertFundraisingRoundSchema = createInsertSchema(fundraisingRounds).omit({ id: true });
 
+export const subscriptions = pgTable("subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: text("user_id").notNull().unique(),
+  plan: text("plan").notNull().default("free"),
+  billingCycle: text("billing_cycle"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  aiCallsUsed: integer("ai_calls_used").notNull().default(0),
+  pdfParsesUsed: integer("pdf_parses_used").notNull().default(0),
+  currentPeriodStart: timestamp("current_period_start"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, updatedAt: true });
+
 export const emissionsCache = pgTable("emissions_cache", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   coingeckoId: text("coingecko_id").notNull().unique(),
@@ -556,3 +574,5 @@ export type FundraisingRound = typeof fundraisingRounds.$inferSelect;
 export type InsertFundraisingRound = z.infer<typeof insertFundraisingRoundSchema>;
 export type EmissionsCache = typeof emissionsCache.$inferSelect;
 export type InsertEmissionsCache = z.infer<typeof insertEmissionsCacheSchema>;
+export type Subscription = typeof subscriptions.$inferSelect;
+export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
