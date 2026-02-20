@@ -522,6 +522,18 @@ export const emissionsCache = pgTable("emissions_cache", {
 
 export const insertEmissionsCacheSchema = createInsertSchema(emissionsCache).omit({ id: true, updatedAt: true });
 
+export const aiResearchCache = pgTable("ai_research_cache", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  coingeckoId: text("coingecko_id").notNull(),
+  researchType: text("research_type").notNull(),
+  data: jsonb("data").notNull(),
+  confidence: text("confidence"),
+  notes: text("notes"),
+  researchedAt: timestamp("researched_at").defaultNow().notNull(),
+});
+
+export const insertAiResearchCacheSchema = createInsertSchema(aiResearchCache).omit({ id: true, researchedAt: true });
+
 export type FinancialModel = typeof financialModels.$inferSelect;
 export type InsertFinancialModel = z.infer<typeof insertFinancialModelSchema>;
 export type RevenueLineItem = typeof revenueLineItems.$inferSelect;
@@ -576,3 +588,5 @@ export type EmissionsCache = typeof emissionsCache.$inferSelect;
 export type InsertEmissionsCache = z.infer<typeof insertEmissionsCacheSchema>;
 export type Subscription = typeof subscriptions.$inferSelect;
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+export type AiResearchCache = typeof aiResearchCache.$inferSelect;
+export type InsertAiResearchCache = z.infer<typeof insertAiResearchCacheSchema>;

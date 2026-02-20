@@ -1785,22 +1785,28 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/crypto/projects/:id/allocations/seed", async (req: Request, res: Response) => {
     const userId = (req as any).user?.claims?.sub as string;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
-    const aiLimit = await checkLimit(userId, "ai_call");
-    if (!aiLimit.allowed) return res.status(403).json({ message: aiLimit.reason, requiredPlan: aiLimit.requiredPlan, current: aiLimit.current, limit: aiLimit.limit });
     const project = await storage.getCryptoProject(req.params.id as string, userId);
     if (!project) return res.status(404).json({ message: "Project not found" });
     const existing = await storage.getTokenAllocations(project.id);
     if (existing.length > 0) return res.status(400).json({ message: "Allocations already exist. Clear them first to re-seed." });
-    await incrementAiCalls(userId);
 
     const { lookupCuratedAllocations, mapCuratedToAllocations, researchAllocationsWithAI, mapAIToAllocations } = await import("./crypto-data");
     let allocationsToCreate: Record<string, unknown>[] = [];
     let source = "fallback";
     const hasDataSources = Array.isArray((project as any).dataSources) && (project as any).dataSources.length > 0;
+    const coingeckoId = project.coingeckoId || "";
 
-    // If user provided data sources, skip curated and go straight to AI research
-    // so the actual page content is used as primary source of truth
-    if (hasDataSources) {
+    if (coingeckoId && !hasDataSources) {
+      const cached = await storage.getAiResearchCache(coingeckoId, "allocations");
+      if (cached) {
+        const cachedData = cached.data as any;
+        const totalSupply = project.totalSupply || project.maxSupply || null;
+        allocationsToCreate = mapAIToAllocations(cachedData, project.id, totalSupply);
+        source = `cached:${cached.confidence || "unknown"}`;
+      }
+    }
+
+    if (allocationsToCreate.length === 0 && hasDataSources) {
       try {
         const tokenName = project.name || "";
         const tokenSymbol = project.symbol || "";
@@ -1815,7 +1821,6 @@ export async function registerRoutes(server: Server, app: Express) {
       }
     }
 
-    // Priority 1: Curated verified data (skipped when dataSources present — user's sources take priority)
     if (allocationsToCreate.length === 0 && !hasDataSources) {
       const slugsToTry = [project.symbol, project.coingeckoId, project.name].filter(Boolean) as string[];
       for (const s of slugsToTry) {
@@ -1828,7 +1833,6 @@ export async function registerRoutes(server: Server, app: Express) {
       }
     }
 
-    // Priority 2: AI-powered research (skipped when dataSources present — already tried above with sources)
     if (allocationsToCreate.length === 0 && !hasDataSources) {
       try {
         const tokenName = project.name || "";
@@ -1838,13 +1842,15 @@ export async function registerRoutes(server: Server, app: Express) {
         if (aiResult && aiResult.allocations.length > 0) {
           allocationsToCreate = mapAIToAllocations(aiResult, project.id, totalSupply);
           source = `ai-researched:${aiResult.confidence}`;
+          if (coingeckoId) {
+            await storage.setAiResearchCache({ coingeckoId, researchType: "allocations", data: aiResult, confidence: aiResult.confidence, notes: aiResult.notes });
+          }
         }
       } catch (err) {
         console.error("AI allocation research failed, falling back to template:", err);
       }
     }
 
-    // Priority 3: Generic industry-average template
     if (allocationsToCreate.length === 0) {
       const totalSupply = project.totalSupply || project.maxSupply || 0;
       allocationsToCreate = [
@@ -1914,20 +1920,32 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/crypto/projects/:id/fundraising/seed", async (req: Request, res: Response) => {
     const userId = (req as any).user?.claims?.sub as string;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
-    const aiLimit = await checkLimit(userId, "ai_call");
-    if (!aiLimit.allowed) return res.status(403).json({ message: aiLimit.reason, requiredPlan: aiLimit.requiredPlan, current: aiLimit.current, limit: aiLimit.limit });
     const project = await storage.getCryptoProject(req.params.id as string, userId);
     if (!project) return res.status(404).json({ message: "Project not found" });
     const existing = await storage.getFundraisingRounds(project.id);
     if (existing.length > 0) return res.status(400).json({ message: "Fundraising rounds already exist. Clear them first to re-seed." });
-    await incrementAiCalls(userId);
 
     const { researchFundraisingWithAI, mapAIToFundraisingRounds } = await import("./crypto-data");
     const tokenName = project.name || "";
     const tokenSymbol = project.symbol || "";
+    const coingeckoId = project.coingeckoId || "";
     const hasDataSources = Array.isArray((project as any).dataSources) && (project as any).dataSources.length > 0;
 
     try {
+      if (coingeckoId && !hasDataSources) {
+        const cached = await storage.getAiResearchCache(coingeckoId, "fundraising");
+        if (cached) {
+          const cachedData = cached.data as any;
+          const roundsToCreate = mapAIToFundraisingRounds(cachedData, project.id);
+          const results = [];
+          for (const round of roundsToCreate) {
+            const created = await storage.createFundraisingRound(round as any);
+            results.push(created);
+          }
+          return res.json({ source: `cached:${cached.confidence || "unknown"}`, rounds: results, notes: cachedData.notes });
+        }
+      }
+
       const aiResult = await researchFundraisingWithAI(
         tokenName,
         tokenSymbol,
@@ -1935,6 +1953,9 @@ export async function registerRoutes(server: Server, app: Express) {
       );
       if (!aiResult || aiResult.rounds.length === 0) {
         return res.json({ source: "none", rounds: [], notes: "No fundraising data found for this token." });
+      }
+      if (coingeckoId && !hasDataSources) {
+        await storage.setAiResearchCache({ coingeckoId, researchType: "fundraising", data: aiResult, confidence: aiResult.confidence, notes: aiResult.notes });
       }
       const roundsToCreate = mapAIToFundraisingRounds(aiResult, project.id);
       const results = [];
@@ -1961,21 +1982,33 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/crypto/projects/:id/supply-schedule/seed", async (req: Request, res: Response) => {
     const userId = (req as any).user?.claims?.sub as string;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
-    const aiLimit = await checkLimit(userId, "ai_call");
-    if (!aiLimit.allowed) return res.status(403).json({ message: aiLimit.reason, requiredPlan: aiLimit.requiredPlan, current: aiLimit.current, limit: aiLimit.limit });
     const project = await storage.getCryptoProject(req.params.id as string, userId);
     if (!project) return res.status(404).json({ message: "Project not found" });
     const existing = await storage.getTokenSupplySchedules(project.id);
     if (existing.length > 0) return res.status(400).json({ message: "Supply schedule already exists. Clear it first to re-seed." });
-    await incrementAiCalls(userId);
 
     const { researchSupplyScheduleWithAI, mapAIToSupplySchedule } = await import("./crypto-data");
     const tokenName = project.name || "";
     const tokenSymbol = project.symbol || "";
     const totalSupply = project.totalSupply || project.maxSupply || null;
+    const coingeckoId = project.coingeckoId || "";
     const hasDataSources = Array.isArray((project as any).dataSources) && (project as any).dataSources.length > 0;
 
     try {
+      if (coingeckoId && !hasDataSources) {
+        const cached = await storage.getAiResearchCache(coingeckoId, "supply_schedule");
+        if (cached) {
+          const cachedData = cached.data as any;
+          const schedulesToCreate = mapAIToSupplySchedule(cachedData, project.id);
+          const results = [];
+          for (const schedule of schedulesToCreate) {
+            const created = await storage.createTokenSupplySchedule(schedule as any);
+            results.push(created);
+          }
+          return res.json({ source: `cached:${cached.confidence || "unknown"}`, schedules: results, notes: cachedData.notes });
+        }
+      }
+
       const aiResult = await researchSupplyScheduleWithAI(
         tokenName,
         tokenSymbol,
@@ -1984,6 +2017,9 @@ export async function registerRoutes(server: Server, app: Express) {
       );
       if (!aiResult || aiResult.events.length === 0) {
         return res.json({ source: "none", schedules: [], notes: "No supply schedule data found for this token." });
+      }
+      if (coingeckoId && !hasDataSources) {
+        await storage.setAiResearchCache({ coingeckoId, researchType: "supply_schedule", data: aiResult, confidence: aiResult.confidence, notes: aiResult.notes });
       }
       const schedulesToCreate = mapAIToSupplySchedule(aiResult, project.id);
       const results = [];

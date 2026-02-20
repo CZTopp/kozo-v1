@@ -8,6 +8,7 @@ import {
   scenarios, assumptions, actuals, reports,
   cryptoProjects, tokenSupplySchedules, tokenIncentives, protocolMetrics,
   protocolRevenueForecasts, tokenFlowEntries, tokenAllocations, fundraisingRounds,
+  aiResearchCache,
   type FinancialModel, type InsertFinancialModel,
   type RevenueLineItem, type InsertRevenueLineItem,
   type RevenuePeriod, type InsertRevenuePeriod,
@@ -33,6 +34,7 @@ import {
   type TokenFlowEntry, type InsertTokenFlowEntry,
   type TokenAllocation, type InsertTokenAllocation,
   type FundraisingRound, type InsertFundraisingRound,
+  type AiResearchCache, type InsertAiResearchCache,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -157,6 +159,9 @@ export interface IStorage {
   deleteFundraisingRound(id: string): Promise<void>;
   deleteAllFundraisingRounds(projectId: string): Promise<void>;
   deleteAllTokenSupplySchedules(projectId: string): Promise<void>;
+
+  getAiResearchCache(coingeckoId: string, researchType: string): Promise<AiResearchCache | undefined>;
+  setAiResearchCache(data: { coingeckoId: string; researchType: string; data: unknown; confidence?: string | null; notes?: string | null }): Promise<AiResearchCache>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -724,6 +729,31 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAllTokenSupplySchedules(projectId: string) {
     await db.delete(tokenSupplySchedules).where(eq(tokenSupplySchedules.projectId, projectId));
+  }
+
+  async getAiResearchCache(coingeckoId: string, researchType: string) {
+    const [row] = await db.select().from(aiResearchCache)
+      .where(and(eq(aiResearchCache.coingeckoId, coingeckoId), eq(aiResearchCache.researchType, researchType)));
+    return row;
+  }
+
+  async setAiResearchCache(data: { coingeckoId: string; researchType: string; data: unknown; confidence?: string | null; notes?: string | null }) {
+    const existing = await this.getAiResearchCache(data.coingeckoId, data.researchType);
+    if (existing) {
+      const [row] = await db.update(aiResearchCache)
+        .set({ data: data.data, confidence: data.confidence, notes: data.notes, researchedAt: new Date() })
+        .where(eq(aiResearchCache.id, existing.id))
+        .returning();
+      return row;
+    }
+    const [row] = await db.insert(aiResearchCache).values({
+      coingeckoId: data.coingeckoId,
+      researchType: data.researchType,
+      data: data.data,
+      confidence: data.confidence,
+      notes: data.notes,
+    }).returning();
+    return row;
   }
 }
 
