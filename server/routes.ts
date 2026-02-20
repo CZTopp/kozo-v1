@@ -2166,7 +2166,7 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.get("/api/subscription", isAuthenticated as any, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).user?.id;
+      const userId = (req as any).user?.claims?.sub as string;
       if (!userId) return res.status(401).json({ message: "Not authenticated" });
       const info = await getUserPlanInfo(userId);
       res.json(info);
@@ -2178,7 +2178,7 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.post("/api/subscription/check", isAuthenticated as any, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).user?.id;
+      const userId = (req as any).user?.claims?.sub as string;
       if (!userId) return res.status(401).json({ message: "Not authenticated" });
       const { resource } = req.body as { resource: string };
       if (!resource) return res.status(400).json({ message: "Missing resource" });
@@ -2201,7 +2201,7 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.post("/api/stripe/checkout", isAuthenticated as any, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).user?.id;
+      const userId = (req as any).user?.claims?.sub as string;
       if (!userId) return res.status(401).json({ message: "Not authenticated" });
 
       const { priceId } = req.body as { priceId: string };
@@ -2238,7 +2238,7 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.post("/api/stripe/portal", isAuthenticated as any, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).user?.id;
+      const userId = (req as any).user?.claims?.sub as string;
       if (!userId) return res.status(401).json({ message: "Not authenticated" });
 
       const sub = await getOrCreateSubscription(userId);
@@ -2262,7 +2262,7 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.post("/api/stripe/cancel", isAuthenticated as any, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).user?.id;
+      const userId = (req as any).user?.claims?.sub as string;
       if (!userId) return res.status(401).json({ message: "Not authenticated" });
 
       const sub = await getOrCreateSubscription(userId);

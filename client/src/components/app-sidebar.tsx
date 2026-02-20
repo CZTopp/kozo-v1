@@ -25,6 +25,9 @@ import {
   Shield,
   CreditCard,
   Zap,
+  LogOut,
+  ChevronUp,
+  User,
 } from "lucide-react";
 import {
   Sidebar,
@@ -36,6 +39,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarHeader,
+  SidebarFooter,
 } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -432,29 +436,6 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>Account</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={location === "/pricing"}>
-                  <Link href="/pricing" data-testid="link-nav-pricing">
-                    <Zap className="h-4 w-4" />
-                    <span>Pricing</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={location === "/subscription"}>
-                  <Link href="/subscription" data-testid="link-nav-subscription">
-                    <CreditCard className="h-4 w-4" />
-                    <span>Subscription</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
         {user?.isAdmin && (
           <SidebarGroup>
             <SidebarGroupLabel>Administration</SidebarGroupLabel>
@@ -473,6 +454,64 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
       </SidebarContent>
+
+      {user && (
+        <SidebarFooter className="border-t border-border p-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent transition-colors"
+                data-testid="button-user-profile"
+              >
+                {user.profileImageUrl ? (
+                  <img
+                    src={user.profileImageUrl}
+                    alt={user.firstName || "User"}
+                    className="h-8 w-8 rounded-full object-cover"
+                    data-testid="img-user-avatar"
+                  />
+                ) : (
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-medium" data-testid="img-user-avatar">
+                    {(user.firstName?.[0] || "").toUpperCase()}{(user.lastName?.[0] || "").toUpperCase()}
+                  </div>
+                )}
+                <div className="flex flex-col items-start min-w-0 flex-1">
+                  <span className="truncate font-medium text-foreground" data-testid="text-user-name">
+                    {user.firstName || ""} {user.lastName || ""}
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground" data-testid="text-user-email">
+                    {user.email}
+                  </span>
+                </div>
+                <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="start" className="w-[--radix-dropdown-menu-trigger-width]">
+              <DropdownMenuItem asChild>
+                <Link href="/subscription" className="flex items-center gap-2 cursor-pointer" data-testid="link-dropdown-subscription">
+                  <CreditCard className="h-4 w-4" />
+                  <span>Subscription</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/pricing" className="flex items-center gap-2 cursor-pointer" data-testid="link-dropdown-pricing">
+                  <Zap className="h-4 w-4" />
+                  <span>Pricing</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => { window.location.href = "/api/logout"; }}
+                className="flex items-center gap-2 cursor-pointer text-destructive focus:text-destructive"
+                data-testid="button-logout"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Log Out</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </SidebarFooter>
+      )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent data-testid="dialog-new-company">
