@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import type { CryptoProject, TokenSupplySchedule, TokenIncentive, TokenAllocation, FundraisingRound } from "@shared/schema";
-import { ArrowLeft, Plus, Trash2, Shield, AlertTriangle, Download, Loader2, Users, Lock, Coins, Edit2, Landmark, Vote, Wallet, Info, FileText, Upload, X } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Shield, AlertTriangle, Download, Loader2, Users, Lock, Coins, Edit2, Landmark, Vote, Wallet, Info, FileText, Upload, X, Sparkles } from "lucide-react";
 import { CryptoProjectNav } from "@/components/crypto-project-nav";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
@@ -100,27 +100,27 @@ export default function CryptoTokenomics() {
   const createScheduleMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => { const res = await apiRequest("POST", "/api/crypto/supply-schedules", data); return res.json(); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "supply-schedules"] }); setSupplyFormOpen(false); setSupplyForm({ ...emptySupplyForm }); toast({ title: "Supply schedule entry added" }); },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
   const deleteScheduleMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/crypto/supply-schedules/${id}`); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "supply-schedules"] }); toast({ title: "Entry deleted" }); },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
   const createIncentiveMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => { const res = await apiRequest("POST", "/api/crypto/incentives", data); return res.json(); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "incentives"] }); setIncentiveFormOpen(false); setEditingIncentiveId(null); setIncentiveForm({ ...emptyIncentiveForm }); toast({ title: editingIncentiveId ? "Incentive updated" : "Incentive added" }); },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
   const updateIncentiveMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => { const res = await apiRequest("PATCH", `/api/crypto/incentives/${id}`, data); return res.json(); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "incentives"] }); setIncentiveFormOpen(false); setEditingIncentiveId(null); setIncentiveForm({ ...emptyIncentiveForm }); toast({ title: "Incentive updated" }); },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
   const deleteIncentiveMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/crypto/incentives/${id}`); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "incentives"] }); toast({ title: "Incentive deleted" }); },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
   const loadTemplateMutation = useMutation({
     mutationFn: async () => {
@@ -137,7 +137,7 @@ export default function CryptoTokenomics() {
       queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "incentives"] });
       toast({ title: "Template loaded", description: `${templateItems.length} entries added.` });
     },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
 
   const seedAllocationsMutation = useMutation({
@@ -148,7 +148,7 @@ export default function CryptoTokenomics() {
       else if (data.source.startsWith("ai-researched")) toast({ title: "AI-researched allocation data loaded", description: "Data researched from public sources. Review for accuracy." });
       else toast({ title: "Template allocations seeded", description: "Industry-average estimates. Edit to match actual data." });
     },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
 
   const clearAndReseedMutation = useMutation({
@@ -163,39 +163,39 @@ export default function CryptoTokenomics() {
       else if (data.source?.startsWith("ai-researched")) toast({ title: "AI-researched allocation data re-seeded", description: "Data researched from public sources. Review for accuracy." });
       else toast({ title: "Template allocations re-seeded", description: "Industry-average estimates. Edit to match actual data." });
     },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
 
   const createAllocationMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => { const res = await apiRequest("POST", `/api/crypto/projects/${projectId}/allocations`, data); return res.json(); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "allocations"] }); setAllocationFormOpen(false); setEditingAllocationId(null); setAllocationForm({ ...emptyAllocationForm }); toast({ title: "Allocation added" }); },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
   const updateAllocationMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => { const res = await apiRequest("PATCH", `/api/crypto/allocations/${id}`, data); return res.json(); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "allocations"] }); setAllocationFormOpen(false); setEditingAllocationId(null); setAllocationForm({ ...emptyAllocationForm }); toast({ title: "Allocation updated" }); },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
   const deleteAllocationMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/crypto/allocations/${id}`); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "allocations"] }); toast({ title: "Allocation deleted" }); },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
 
   const createFundraisingMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => { const res = await apiRequest("POST", `/api/crypto/projects/${projectId}/fundraising`, data); return res.json(); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "fundraising"] }); setFundraisingFormOpen(false); setEditingFundraisingId(null); setFundraisingForm({ ...emptyFundraisingForm }); toast({ title: "Round added" }); },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
   const updateFundraisingMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => { const res = await apiRequest("PATCH", `/api/crypto/fundraising/${id}`, data); return res.json(); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "fundraising"] }); setFundraisingFormOpen(false); setEditingFundraisingId(null); setFundraisingForm({ ...emptyFundraisingForm }); toast({ title: "Round updated" }); },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
   const deleteFundraisingMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/crypto/fundraising/${id}`); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId, "fundraising"] }); toast({ title: "Round deleted" }); },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
 
   const seedFundraisingMutation = useMutation({
@@ -205,7 +205,7 @@ export default function CryptoTokenomics() {
       if (data.source === "none") toast({ title: "No fundraising data found", description: data.notes || "This token may not have traditional fundraising rounds." });
       else toast({ title: "AI-researched fundraising data loaded", description: "Data researched from public sources. Review for accuracy." });
     },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
 
   const clearAndReseedFundraisingMutation = useMutation({
@@ -219,7 +219,7 @@ export default function CryptoTokenomics() {
       if (data.source === "none") toast({ title: "No fundraising data found", description: data.notes || "This token may not have traditional fundraising rounds." });
       else toast({ title: "Fundraising data re-seeded", description: "AI-researched data refreshed from public sources." });
     },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
 
   const seedSupplyScheduleMutation = useMutation({
@@ -229,7 +229,7 @@ export default function CryptoTokenomics() {
       if (data.source === "none") toast({ title: "No supply schedule data found", description: data.notes || "Could not find vesting/unlock schedule for this token." });
       else toast({ title: "AI-researched supply schedule loaded", description: "Vesting and unlock data researched from public sources. Review for accuracy." });
     },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
 
   const clearAndReseedSupplyMutation = useMutation({
@@ -243,13 +243,13 @@ export default function CryptoTokenomics() {
       if (data.source === "none") toast({ title: "No supply schedule data found", description: data.notes || "Could not find vesting/unlock schedule for this token." });
       else toast({ title: "Supply schedule re-seeded", description: "AI-researched vesting/unlock data refreshed." });
     },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
 
   const updateGovernanceMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => { const res = await apiRequest("PATCH", `/api/crypto/projects/${projectId}`, data); return res.json(); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId] }); setGovernanceEditing(false); toast({ title: "Governance info updated" }); },
-    onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" }); },
   });
 
   function handleSaveSupply() {
@@ -316,7 +316,7 @@ export default function CryptoTokenomics() {
       setWhitepaperMode("view");
       toast({ title: "Whitepaper saved" });
     },
-    onError: (err: Error) => { toast({ title: "Error saving whitepaper", description: err.message, variant: "destructive" }); },
+    onError: () => { toast({ title: "Could not save whitepaper", description: "Please try again.", variant: "destructive" }); },
   });
 
   async function handlePdfUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -348,7 +348,7 @@ export default function CryptoTokenomics() {
       queryClient.invalidateQueries({ queryKey: ["/api/crypto/projects", projectId] });
       toast({ title: "Whitepaper uploaded", description: `Extracted ${(data.length || 0).toLocaleString()} characters` });
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: "Upload failed", description: "Please try again with a different file.", variant: "destructive" });
     } finally {
       setUploadingPdf(false);
       e.target.value = "";
@@ -519,7 +519,7 @@ export default function CryptoTokenomics() {
             <div className="flex items-center gap-2 flex-wrap">
               {(!allocations || allocations.length === 0) ? (
                 <Button variant="outline" onClick={() => seedAllocationsMutation.mutate()} disabled={seedAllocationsMutation.isPending} data-testid="button-seed-allocations">
-                  {seedAllocationsMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+                  {seedAllocationsMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <><Sparkles className="h-4 w-4 mr-1 text-yellow-400" /><Download className="h-4 w-4 mr-1" /></>}
                   {seedAllocationsMutation.isPending ? "Researching..." : "Seed Allocations"}
                 </Button>
               ) : (
@@ -564,7 +564,7 @@ export default function CryptoTokenomics() {
                           <TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
                         )}
                         {!allocationsLoading && (!allocations || allocations.length === 0) && (
-                          <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground" data-testid="text-no-allocations">No allocations defined yet. Use "Seed Allocations" to load real project data.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground" data-testid="text-no-allocations"><div className="space-y-1"><p>No allocations defined yet.</p><p className="text-xs">Click <span className="font-medium text-yellow-400">Seed Allocations</span> to auto-populate from AI research, or manually add allocations.</p></div></TableCell></TableRow>
                         )}
                         {(allocations || []).map((a) => {
                           const computedTokens = a.amount || (projectedSupply2035 > 0 ? projectedSupply2035 * ((a.percentage || 0) / 100) : 0);
@@ -732,7 +732,7 @@ export default function CryptoTokenomics() {
             <div className="flex items-center gap-2 flex-wrap">
               {(!schedules || schedules.length === 0) ? (
                 <Button variant="outline" onClick={() => seedSupplyScheduleMutation.mutate()} disabled={seedSupplyScheduleMutation.isPending} data-testid="button-seed-supply">
-                  {seedSupplyScheduleMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+                  {seedSupplyScheduleMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <><Sparkles className="h-4 w-4 mr-1 text-yellow-400" /><Download className="h-4 w-4 mr-1" /></>}
                   {seedSupplyScheduleMutation.isPending ? "Researching..." : "Seed Schedule"}
                 </Button>
               ) : (
@@ -761,7 +761,7 @@ export default function CryptoTokenomics() {
                   </TableHeader>
                   <TableBody>
                     {schedulesLoading && (<TableRow><TableCell colSpan={6} className="text-center py-8"><Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>)}
-                    {!schedulesLoading && (!schedules || schedules.length === 0) && (<TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground" data-testid="text-no-schedules">No supply schedule entries yet.</TableCell></TableRow>)}
+                    {!schedulesLoading && (!schedules || schedules.length === 0) && (<TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground" data-testid="text-no-schedules"><div className="space-y-1"><p>No supply schedule entries yet.</p><p className="text-xs">Click <span className="font-medium text-yellow-400">Seed Schedule</span> to auto-populate from AI research, or manually add entries.</p></div></TableCell></TableRow>)}
                     {(schedules || []).map((s) => {
                       const pct = totalSupplyAllocation > 0 ? ((s.amount / totalSupplyAllocation) * 100) : 0;
                       return (
@@ -789,7 +789,7 @@ export default function CryptoTokenomics() {
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie data={supplyPieData} cx="50%" cy="50%" outerRadius={80} dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                        <Pie data={supplyPieData} cx="50%" cy="50%" outerRadius={80} dataKey="value" nameKey="name" label={({ name, percent }) => `${(name as string).length > 12 ? (name as string).slice(0, 12) + "…" : name} ${(percent * 100).toFixed(0)}%`}>
                           {supplyPieData.map((_, i) => (<Cell key={i} fill={COLORS[i % COLORS.length]} />))}
                         </Pie>
                         <Tooltip formatter={(value: number) => formatSupply(value)} contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", color: "hsl(var(--card-foreground))" }} itemStyle={{ color: "hsl(var(--card-foreground))" }} labelStyle={{ color: "hsl(var(--card-foreground))" }} />
@@ -851,7 +851,7 @@ export default function CryptoTokenomics() {
             <div className="flex items-center gap-2 flex-wrap">
               {(!fundraisingRounds || fundraisingRounds.length === 0) ? (
                 <Button variant="outline" onClick={() => seedFundraisingMutation.mutate()} disabled={seedFundraisingMutation.isPending} data-testid="button-seed-fundraising">
-                  {seedFundraisingMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+                  {seedFundraisingMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <><Sparkles className="h-4 w-4 mr-1 text-yellow-400" /><Download className="h-4 w-4 mr-1" /></>}
                   {seedFundraisingMutation.isPending ? "Researching..." : "Seed Rounds"}
                 </Button>
               ) : (
@@ -883,7 +883,7 @@ export default function CryptoTokenomics() {
                   </TableHeader>
                   <TableBody>
                     {fundraisingLoading && (<TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>)}
-                    {!fundraisingLoading && (!fundraisingRounds || fundraisingRounds.length === 0) && (<TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground" data-testid="text-no-fundraising">No fundraising rounds recorded yet.</TableCell></TableRow>)}
+                    {!fundraisingLoading && (!fundraisingRounds || fundraisingRounds.length === 0) && (<TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground" data-testid="text-no-fundraising"><div className="space-y-1"><p>No fundraising rounds recorded yet.</p><p className="text-xs">Click <span className="font-medium text-yellow-400">Seed Rounds</span> to auto-populate from AI research, or manually add rounds.</p></div></TableCell></TableRow>)}
                     {(fundraisingRounds || []).map((r) => (
                       <TableRow key={r.id} data-testid={`row-fundraising-${r.id}`}>
                         <TableCell className="font-medium">
@@ -929,7 +929,7 @@ export default function CryptoTokenomics() {
           </div>
 
           {incentivesLoading && (<div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>)}
-          {!incentivesLoading && (!incentives || incentives.length === 0) && (<Card><CardContent className="py-8 text-center text-muted-foreground" data-testid="text-no-incentives">No incentives defined yet. Add one or load a template.</CardContent></Card>)}
+          {!incentivesLoading && (!incentives || incentives.length === 0) && (<Card><CardContent className="py-8 text-center text-muted-foreground" data-testid="text-no-incentives"><div className="space-y-1"><p>No incentives defined yet.</p><p className="text-xs">Click <span className="font-medium">Load Template</span> to auto-populate from industry templates, or manually add incentive mappings.</p></div></CardContent></Card>)}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {(incentives || []).map((inc) => (
               <Card key={inc.id} data-testid={`card-incentive-${inc.id}`}>

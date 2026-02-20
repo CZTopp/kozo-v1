@@ -15,8 +15,10 @@ import {
 } from "recharts";
 import {
   Search, Loader2, TrendingUp, X, Plus, AlertTriangle,
-  Lock, Unlock, Clock, BarChart3, ArrowUpDown, Filter,
+  Lock, Unlock, Clock, BarChart3, ArrowUpDown, Filter, Crown, Zap,
 } from "lucide-react";
+import { useSubscription } from "@/hooks/use-subscription";
+import { useLocation } from "wouter";
 
 const TOKEN_COLORS = [
   "#3b82f6", "#22c55e", "#f97316", "#a855f7", "#ef4444",
@@ -1026,13 +1028,18 @@ export default function CryptoEmissions() {
 
       const seenIds = new Set(watchlistTokens.map((t) => t.id));
       const defaults = DEFAULT_EMITTERS.filter((t) => !seenIds.has(t.id));
-      setSelectedTokens([...watchlistTokens, ...defaults]);
+      const combined = [...watchlistTokens, ...defaults];
+      const limit = subInfo?.limits?.emissionsTokens ?? 5;
+      const plan = subInfo?.plan ?? "free";
+      setSelectedTokens(plan === "free" ? combined.slice(0, limit) : combined);
       setInitialized(true);
     } else if (watchlistQuery.isError) {
-      setSelectedTokens([...DEFAULT_EMITTERS]);
+      const limit = subInfo?.limits?.emissionsTokens ?? 5;
+      const plan = subInfo?.plan ?? "free";
+      setSelectedTokens(plan === "free" ? DEFAULT_EMITTERS.slice(0, limit) : [...DEFAULT_EMITTERS]);
       setInitialized(true);
     }
-  }, [initialized, watchlistQuery.data, watchlistQuery.isError]);
+  }, [initialized, watchlistQuery.data, watchlistQuery.isError, subInfo]);
 
   const batchIdsKey = useMemo(() => {
     return selectedTokens.map(t => t.id).slice().sort().join(",");
@@ -1072,10 +1079,16 @@ export default function CryptoEmissions() {
     return selectedTokens.filter(t => !emissionsMap.has(t.id)).map(t => t.id);
   }, [selectedTokens, emissionsMap, batchQuery.isLoading]);
 
+  const { data: subInfo } = useSubscription();
+  const [, setLocation] = useLocation();
+  const emissionsLimit = subInfo?.limits?.emissionsTokens ?? 5;
+  const isFreePlan = !subInfo || subInfo.plan === "free";
+
   const handleAddToken = useCallback((result: SearchResult) => {
     if (selectedTokens.find((t) => t.id === result.id)) return;
+    if (isFreePlan && selectedTokens.length >= emissionsLimit) return;
     setSelectedTokens((prev) => [...prev, { id: result.id, name: result.name, symbol: result.symbol, thumb: result.thumb }]);
-  }, [selectedTokens]);
+  }, [selectedTokens, isFreePlan, emissionsLimit]);
 
   const handleRemoveToken = useCallback((id: string) => {
     setSelectedTokens((prev) => prev.filter((t) => t.id !== id));
@@ -1108,7 +1121,15 @@ export default function CryptoEmissions() {
               <UnlockModeTabs mode={unlockMode} onChange={setUnlockMode} />
             )}
             <div className="flex-1 min-w-[200px]">
-              <TokenSearch onSelect={handleAddToken} excludeIds={selectedTokens.map((t) => t.id)} />
+              {isFreePlan && selectedTokens.length >= emissionsLimit ? (
+                <div className="flex items-center gap-2 px-3 py-1.5 border rounded-md bg-amber-500/5 border-amber-500/30">
+                  <Crown className="h-4 w-4 text-amber-500 shrink-0" />
+                  <span className="text-xs text-amber-500">Free plan allows {emissionsLimit} tokens.</span>
+                  <button onClick={() => setLocation("/subscription")} className="text-xs font-medium text-amber-500 underline underline-offset-2" data-testid="link-upgrade-emissions">Upgrade</button>
+                </div>
+              ) : (
+                <TokenSearch onSelect={handleAddToken} excludeIds={selectedTokens.map((t) => t.id)} />
+              )}
             </div>
           </div>
 

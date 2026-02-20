@@ -1,5 +1,6 @@
 import { useSubscription, useCreateCheckout, type LimitCheckResult } from "@/hooks/use-subscription";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Lock, Zap, Crown } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -133,5 +134,31 @@ export function UpgradeBadge() {
       <Zap className="h-3 w-3" />
       Upgrade
     </Button>
+  );
+}
+
+export function ProCrown({ feature }: { feature: string }) {
+  const [, setLocation] = useLocation();
+  const { data: sub } = useSubscription();
+
+  if (!sub || sub.plan !== "free") return null;
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setLocation("/subscription"); }}
+            className="inline-flex items-center"
+            data-testid={`crown-${feature}`}
+          >
+            <Crown className="h-3.5 w-3.5 text-amber-500" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          <p>Pro feature — click to upgrade</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }

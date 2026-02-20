@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useSearch } from "wouter";
+import { useSearch, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   useSubscription,
@@ -124,9 +124,13 @@ export default function SubscriptionPage() {
 
   const planBadgeVariant = plan === "pro" ? "default" : plan === "enterprise" ? "default" : "secondary";
 
+  const [, setLocation] = useLocation();
+
   const handleUpgrade = () => {
     if (proMonthlyPrice?.price_id) {
       checkout.mutate(proMonthlyPrice.price_id);
+    } else {
+      setLocation("/pricing");
     }
   };
 

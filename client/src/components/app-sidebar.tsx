@@ -73,7 +73,7 @@ import { useModel } from "@/lib/model-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { UpgradeGate } from "@/components/upgrade-gate";
+import { UpgradeGate, ProCrown } from "@/components/upgrade-gate";
 
 const portfolioItems = [
   { title: "Portfolio", url: "/portfolio", icon: Briefcase },
@@ -81,13 +81,13 @@ const portfolioItems = [
 ];
 
 const modelingItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Revenue Forecast", url: "/revenue", icon: DollarSign },
-  { title: "Income Statement", url: "/income-statement", icon: FileSpreadsheet },
-  { title: "Balance Sheet", url: "/balance-sheet", icon: BarChart3 },
-  { title: "Cash Flow", url: "/cash-flow", icon: Wallet },
-  { title: "DCF Valuation", url: "/dcf", icon: Calculator },
-  { title: "Valuation Compare", url: "/valuation", icon: Scale },
+  { title: "Dashboard", url: "/", icon: LayoutDashboard, proFeature: "" },
+  { title: "Revenue Forecast", url: "/revenue", icon: DollarSign, proFeature: "" },
+  { title: "Income Statement", url: "/income-statement", icon: FileSpreadsheet, proFeature: "" },
+  { title: "Balance Sheet", url: "/balance-sheet", icon: BarChart3, proFeature: "" },
+  { title: "Cash Flow", url: "/cash-flow", icon: Wallet, proFeature: "" },
+  { title: "DCF Valuation", url: "/dcf", icon: Calculator, proFeature: "sensitivity_table" },
+  { title: "Valuation Compare", url: "/valuation", icon: Scale, proFeature: "valuation_comparison" },
 ];
 
 const cryptoItems = [
@@ -366,7 +366,8 @@ export function AppSidebar() {
                     <SidebarMenuButton asChild isActive={isActive}>
                       <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s/g, "-")}`}>
                         <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
+                        <span className="flex-1">{item.title}</span>
+                        {item.proFeature && <ProCrown feature={item.proFeature} />}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

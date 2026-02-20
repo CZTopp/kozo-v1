@@ -2,7 +2,7 @@ import { useState, useCallback, createContext, useContext, useRef, useEffect } f
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sparkles, Send, Square, Trash2, Loader2 } from "lucide-react";
+import { Sparkles, Send, Square, Trash2, Loader2, X } from "lucide-react";
 import { useModel } from "@/lib/model-context";
 import { useLocation } from "wouter";
 import ReactMarkdown from "react-markdown";
@@ -357,7 +357,7 @@ function ChatInner({ mode, cryptoProjectId, modelId }: { mode: CopilotMode; cryp
 
 export function CopilotPanel() {
   const { selectedModel: model } = useModel();
-  const { open } = useCopilot();
+  const { open, setOpen } = useCopilot();
   const { mode, cryptoProjectId } = useCopilotMode();
 
   const contextLabel = mode === "crypto-project"
@@ -383,6 +383,9 @@ export function CopilotPanel() {
           <Badge variant="outline" className="text-xs max-w-[120px] truncate" data-testid="badge-copilot-context">
             {contextLabel}
           </Badge>
+          <Button variant="ghost" size="icon" onClick={() => setOpen(false)} className="h-7 w-7 shrink-0" data-testid="button-copilot-close" aria-label="Close copilot">
+            <X className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
