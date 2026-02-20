@@ -8,7 +8,7 @@ import { searchCompanyByTicker, getCompanyFilings, fetchAndParseAllStatements } 
 import { streamCopilotToResponse } from "./copilot";
 import { db } from "./db";
 import { eq, and, sql, count } from "drizzle-orm";
-import { revenuePeriods, users, financialModels, portfolioPositions, cryptoProjects } from "@shared/schema";
+import { revenuePeriods, users, financialModels, portfolioPositions, cryptoProjects, subscriptions, macroIndicators, marketIndices } from "@shared/schema";
 import { isAuthenticated } from "./replit_integrations/auth";
 import {
   insertFinancialModelSchema, insertRevenueLineItemSchema,
@@ -2087,6 +2087,7 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.get("/api/admin/users", isAdmin as any, async (_req: Request, res: Response) => {
     const allUsers = await db.select().from(users);
+    const allSubs = await db.select().from(subscriptions);
     const modelsPerUser = await db
       .select({ userId: financialModels.userId, value: count() })
       .from(financialModels)
@@ -2095,12 +2096,38 @@ export async function registerRoutes(server: Server, app: Express) {
       .select({ userId: portfolioPositions.userId, value: count() })
       .from(portfolioPositions)
       .groupBy(portfolioPositions.userId);
+    const cryptoPerUser = await db
+      .select({ userId: cryptoProjects.userId, value: count() })
+      .from(cryptoProjects)
+      .groupBy(cryptoProjects.userId);
+    const indicesPerUser = await db
+      .select({ userId: marketIndices.userId, value: count() })
+      .from(marketIndices)
+      .groupBy(marketIndices.userId);
+    const macroPerUser = await db
+      .select({ userId: macroIndicators.userId, value: count() })
+      .from(macroIndicators)
+      .groupBy(macroIndicators.userId);
 
-    const enriched = allUsers.map((u) => ({
-      ...u,
-      modelCount: modelsPerUser.find((m) => m.userId === u.id)?.value ?? 0,
-      positionCount: positionsPerUser.find((p) => p.userId === u.id)?.value ?? 0,
-    }));
+    const enriched = allUsers.map((u) => {
+      const sub = allSubs.find((s) => s.userId === u.id);
+      return {
+        ...u,
+        modelCount: modelsPerUser.find((m) => m.userId === u.id)?.value ?? 0,
+        positionCount: positionsPerUser.find((p) => p.userId === u.id)?.value ?? 0,
+        cryptoProjectCount: cryptoPerUser.find((c) => c.userId === u.id)?.value ?? 0,
+        indexCount: indicesPerUser.find((i) => i.userId === u.id)?.value ?? 0,
+        macroCount: macroPerUser.find((m) => m.userId === u.id)?.value ?? 0,
+        plan: sub?.plan ?? "free",
+        billingCycle: sub?.billingCycle ?? null,
+        aiCallsUsed: sub?.aiCallsUsed ?? 0,
+        pdfParsesUsed: sub?.pdfParsesUsed ?? 0,
+        stripeCustomerId: sub?.stripeCustomerId ?? null,
+        stripeSubscriptionId: sub?.stripeSubscriptionId ?? null,
+        currentPeriodEnd: sub?.currentPeriodEnd ?? null,
+        cancelAtPeriodEnd: sub?.cancelAtPeriodEnd ?? false,
+      };
+    });
     res.json(enriched);
   });
 
@@ -2112,6 +2139,35 @@ export async function registerRoutes(server: Server, app: Express) {
     const [updated] = await db.update(users).set({ isAdmin: makeAdmin }).where(eq(users.id, req.params.id)).returning();
     if (!updated) return res.status(404).json({ message: "User not found" });
     res.json(updated);
+  });
+
+  app.patch("/api/admin/users/:id/plan", isAdmin as any, async (req: Request<Params>, res: Response) => {
+    const { plan } = req.body;
+    if (!["free", "pro", "enterprise"].includes(plan)) {
+      return res.status(400).json({ message: "plan must be free, pro, or enterprise" });
+    }
+    const targetUserId = req.params.id;
+    const [existingSub] = await db.select().from(subscriptions).where(eq(subscriptions.userId, targetUserId));
+    if (existingSub) {
+      const [updated] = await db.update(subscriptions).set({
+        plan,
+        aiCallsUsed: 0,
+        pdfParsesUsed: 0,
+        updatedAt: new Date(),
+      }).where(eq(subscriptions.userId, targetUserId)).returning();
+      return res.json(updated);
+    }
+    const now = new Date();
+    const [created] = await db.insert(subscriptions).values({
+      userId: targetUserId,
+      plan,
+      aiCallsUsed: 0,
+      pdfParsesUsed: 0,
+      currentPeriodStart: now,
+      currentPeriodEnd: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+      cancelAtPeriodEnd: false,
+    }).returning();
+    res.json(created);
   });
 
   app.get("/api/crypto/emissions/:coingeckoId", isAuthenticated as any, async (req: Request<Params>, res: Response) => {
