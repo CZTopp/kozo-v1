@@ -1,7 +1,7 @@
-import { useState, useCallback, createContext, useContext } from "react";
+import { useState, useCallback, createContext, useContext, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, AlertCircle, Loader2 } from "lucide-react";
+import { Sparkles, AlertCircle } from "lucide-react";
 import { useModel } from "@/lib/model-context";
 import { useLocation } from "wouter";
 import { ChatKit, useChatKit } from "@openai/chatkit-react";
@@ -82,45 +82,28 @@ const STARTER_PROMPTS: Record<CopilotMode, { label: string; prompt: string }[]> 
 
 function ChatKitInner({ mode, cryptoProjectId, modelId }: { mode: CopilotMode; cryptoProjectId: string | null; modelId: string | undefined }) {
   const prompts = STARTER_PROMPTS[mode];
-  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [initError, setInitError] = useState<string | null>(null);
+
+  const contextHeader = useMemo(() => {
+    const ctx: Record<string, any> = { mode };
+    if (cryptoProjectId) ctx.cryptoProjectId = cryptoProjectId;
+    if (modelId) ctx.modelId = modelId;
+    return JSON.stringify(ctx);
+  }, [mode, cryptoProjectId, modelId]);
+
+  const domainKey = (typeof window !== "undefined" && (window as any).__CHATKIT_DOMAIN_KEY__) || "kozo-self-hosted";
 
   const { control } = useChatKit({
     api: {
-      async getClientSecret(existing) {
-        if (existing) {
-          setSessionError(null);
-          return existing;
-        }
-
+      url: "/api/chatkit",
+      domainKey,
+      async fetch(url, init) {
+        const headers = new Headers(init?.headers);
+        headers.set("X-ChatKit-Context", contextHeader);
         try {
-          const body: Record<string, any> = {};
-          if (mode === "crypto-project" && cryptoProjectId) {
-            body.cryptoProjectId = cryptoProjectId;
-          } else if (mode === "crypto-dashboard") {
-            body.contextType = "crypto-dashboard";
-          } else if (modelId) {
-            body.modelId = modelId;
-          }
-
-          const res = await fetch("/api/chatkit/session", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          });
-
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            const msg = err.message || "Failed to create session";
-            setSessionError(msg);
-            throw new Error(msg);
-          }
-
-          const { client_secret } = await res.json();
-          setSessionError(null);
-          return client_secret;
+          return await window.fetch(url, { ...init, headers, credentials: "same-origin" });
         } catch (err: any) {
-          const msg = err.message || "Connection error";
-          setSessionError(msg);
+          setInitError(err.message || "Connection failed");
           throw err;
         }
       },
@@ -137,16 +120,16 @@ function ChatKitInner({ mode, cryptoProjectId, modelId }: { mode: CopilotMode; c
     header: { enabled: false },
   });
 
-  if (sessionError) {
+  if (initError) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-4 gap-3 text-sm" data-testid="chatkit-error">
         <AlertCircle className="h-8 w-8 text-destructive" />
-        <p className="text-center text-muted-foreground">{sessionError}</p>
+        <p className="text-center text-muted-foreground">{initError}</p>
         <Button
           variant="outline"
           size="sm"
           onClick={() => {
-            setSessionError(null);
+            setInitError(null);
             window.location.reload();
           }}
           data-testid="button-chatkit-retry"
