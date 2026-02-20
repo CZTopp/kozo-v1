@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -605,9 +605,55 @@ function EmissionScreenerTab({ tokenIds, emissionsMap }: { tokenIds: string[]; e
   );
 }
 
+const DEFAULT_EMITTERS = [
+  { id: "solana", name: "Solana", symbol: "SOL", thumb: "" },
+  { id: "arbitrum", name: "Arbitrum", symbol: "ARB", thumb: "" },
+  { id: "optimism", name: "Optimism", symbol: "OP", thumb: "" },
+  { id: "aptos", name: "Aptos", symbol: "APT", thumb: "" },
+  { id: "sui", name: "Sui", symbol: "SUI", thumb: "" },
+  { id: "celestia", name: "Celestia", symbol: "TIA", thumb: "" },
+  { id: "starknet", name: "Starknet", symbol: "STRK", thumb: "" },
+  { id: "worldcoin-wld", name: "Worldcoin", symbol: "WLD", thumb: "" },
+];
+
+interface CryptoProject {
+  id: string;
+  coingeckoId: string;
+  name: string;
+  symbol: string;
+  image: string | null;
+}
+
 export default function CryptoEmissions() {
   const [selectedTokens, setSelectedTokens] = useState<{ id: string; name: string; symbol: string; thumb: string }[]>([]);
   const [activeTab, setActiveTab] = useState("emission");
+  const [initialized, setInitialized] = useState(false);
+
+  const watchlistQuery = useQuery<CryptoProject[]>({
+    queryKey: ["/api/crypto/projects"],
+  });
+
+  useEffect(() => {
+    if (initialized) return;
+    if (watchlistQuery.data) {
+      const watchlistTokens = watchlistQuery.data
+        .filter((p) => p.coingeckoId)
+        .map((p) => ({
+          id: p.coingeckoId,
+          name: p.name,
+          symbol: p.symbol,
+          thumb: p.image || "",
+        }));
+
+      const seenIds = new Set(watchlistTokens.map((t) => t.id));
+      const defaults = DEFAULT_EMITTERS.filter((t) => !seenIds.has(t.id));
+      setSelectedTokens([...watchlistTokens, ...defaults]);
+      setInitialized(true);
+    } else if (watchlistQuery.isError) {
+      setSelectedTokens([...DEFAULT_EMITTERS]);
+      setInitialized(true);
+    }
+  }, [initialized, watchlistQuery.data, watchlistQuery.isError]);
 
   const tokenQueries = useQueries({
     queries: selectedTokens.map((t) => ({
