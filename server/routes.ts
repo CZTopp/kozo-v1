@@ -2011,8 +2011,8 @@ export async function registerRoutes(server: Server, app: Express) {
     try {
       const userId = (req as any).user?.claims?.sub as string;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
-      const copilotLimit = await checkLimit(userId, "copilot");
-      if (!copilotLimit.allowed) return res.status(403).json({ message: copilotLimit.reason, requiredPlan: copilotLimit.requiredPlan });
+      const aiLimit = await checkLimit(userId, "ai_call");
+      if (!aiLimit.allowed) return res.status(403).json({ message: aiLimit.reason, requiredPlan: aiLimit.requiredPlan });
       const { modelId, cryptoProjectId, message, history, context: contextType } = req.body;
       if (!message) {
         return res.status(400).json({ message: "message is required" });

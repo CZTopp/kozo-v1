@@ -43,7 +43,6 @@ export function UpgradeGate({ resource, children, fallback }: UpgradeGateProps) 
       blocked = usage.pdfParsesUsed >= limits.pdfParsesPerMonth;
       break;
     case "sec_edgar":
-    case "copilot":
     case "csv_export":
     case "valuation_comparison":
     case "sensitivity_table":

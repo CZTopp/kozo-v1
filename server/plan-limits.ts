@@ -38,7 +38,7 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
     secEdgarImport: false,
     valuationComparison: false,
     sensitivityTables: false,
-    copilotAccess: false,
+    copilotAccess: true,
     csvExport: false,
     unlimitedPdfParsing: false,
   },

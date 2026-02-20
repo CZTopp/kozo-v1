@@ -36,12 +36,13 @@ export function CopilotTrigger() {
   return (
     <Button
       variant="ghost"
-      size="icon"
       onClick={toggle}
       aria-label="Toggle copilot"
       data-testid="button-copilot-toggle"
+      className="gap-1.5"
     >
-      <Sparkles className="h-4 w-4" />
+      <Sparkles className="h-4 w-4 text-yellow-400" />
+      <span className="text-sm hidden sm:inline">Copilot</span>
     </Button>
   );
 }
@@ -243,7 +244,7 @@ function ChatInner({ mode, cryptoProjectId, modelId }: { mode: CopilotMode; cryp
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-2">
-            <div className="flex items-center gap-2 text-primary">
+            <div className="flex items-center gap-2 text-yellow-400">
               <Sparkles className="h-5 w-5" />
             </div>
             <p className="text-sm text-muted-foreground max-w-[240px]" data-testid="text-copilot-greeting">
@@ -375,7 +376,7 @@ export function CopilotPanel() {
     >
       <div className="flex items-center justify-between gap-2 flex-wrap p-3 border-b min-h-[calc(theme(spacing.2)*2+theme(spacing.9))]">
         <div className="flex items-center gap-2 min-w-0">
-          <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+          <Sparkles className="h-4 w-4 shrink-0 text-yellow-400" />
           <span className="font-semibold text-sm truncate">Copilot</span>
         </div>
         <div className="flex items-center gap-1">
