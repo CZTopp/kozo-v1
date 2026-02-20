@@ -1,34 +1,24 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, CartesianGrid, Legend, ReferenceLine,
+  AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
 import {
-  Search, Loader2, TrendingUp, AlertTriangle, Info, Coins,
-  Lock, Unlock, Clock, BarChart3,
+  Search, Loader2, TrendingUp, X, Plus, AlertTriangle,
+  Lock, Unlock, Clock, BarChart3, ArrowUpDown,
 } from "lucide-react";
-import {
-  Tooltip as UITooltip, TooltipContent, TooltipTrigger,
-} from "@/components/ui/tooltip";
 
-const ALLOC_COLORS: Record<string, string> = {
-  team: "#ef4444",
-  investors: "#f97316",
-  public: "#22c55e",
-  treasury: "#3b82f6",
-  community: "#a855f7",
-};
-
-const CATEGORY_COLORS = [
-  "#22c55e", "#3b82f6", "#a855f7", "#f97316", "#ef4444",
+const TOKEN_COLORS = [
+  "#3b82f6", "#22c55e", "#f97316", "#a855f7", "#ef4444",
   "#06b6d4", "#eab308", "#ec4899", "#14b8a6", "#f43f5e",
 ];
 
@@ -93,441 +83,607 @@ interface EmissionsData {
   notes: string;
 }
 
-export default function CryptoEmissions() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedToken, setSelectedToken] = useState<string | null>(null);
-  const [selectedTokenInfo, setSelectedTokenInfo] = useState<SearchResult | null>(null);
-  const [searchOpen, setSearchOpen] = useState(false);
+function TokenSearch({ onSelect, excludeIds }: { onSelect: (r: SearchResult) => void; excludeIds: string[] }) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
 
   const searchResults = useQuery<SearchResult[]>({
-    queryKey: ["/api/crypto/search", searchQuery],
-    enabled: searchQuery.length >= 2 && searchOpen,
+    queryKey: ["/api/crypto/search", query],
+    queryFn: async () => {
+      const res = await fetch(`/api/crypto/search?q=${encodeURIComponent(query)}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Search failed");
+      return res.json();
+    },
+    enabled: query.length >= 2 && open,
   });
 
-  const emissionsQuery = useQuery<EmissionsData>({
-    queryKey: ["/api/crypto/emissions", selectedToken],
-    enabled: !!selectedToken,
-  });
+  return (
+    <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setTimeout(() => setOpen(false), 200); }}>
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <Input
+        placeholder="Search tokens to add (e.g. Bitcoin, Ethereum, Solana)..."
+        value={query}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        className="pl-10"
+        data-testid="input-emissions-search"
+      />
+      {open && query.length >= 2 && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 border rounded-md bg-popover shadow-lg max-h-64 overflow-auto">
+          {searchResults.isLoading ? (
+            <div className="flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Searching...
+            </div>
+          ) : searchResults.data && searchResults.data.length > 0 ? (
+            searchResults.data
+              .filter((r) => !excludeIds.includes(r.id))
+              .map((result) => (
+                <button
+                  key={result.id}
+                  className="w-full flex items-center gap-3 p-3 text-left hover-elevate"
+                  onClick={() => {
+                    onSelect(result);
+                    setQuery("");
+                    setOpen(false);
+                  }}
+                  data-testid={`button-search-result-${result.id}`}
+                >
+                  {result.thumb && <img src={result.thumb} alt="" className="h-6 w-6 rounded-full" />}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{result.name}</div>
+                    <div className="text-xs text-muted-foreground">{result.symbol.toUpperCase()}</div>
+                  </div>
+                  {result.market_cap_rank && <Badge variant="secondary">#{result.market_cap_rank}</Badge>}
+                  <Plus className="h-4 w-4 text-muted-foreground" />
+                </button>
+              ))
+          ) : (
+            <div className="p-4 text-sm text-muted-foreground text-center">No results found</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
+
+function SelectedTokenChips({
+  tokens,
+  loadingIds,
+  onRemove,
+}: {
+  tokens: { id: string; name: string; symbol: string; thumb: string }[];
+  loadingIds: string[];
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {tokens.map((t, i) => (
+        <Badge key={t.id} variant="outline" className="flex items-center gap-1.5 py-1 px-2">
+          <div className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: TOKEN_COLORS[i % TOKEN_COLORS.length] }} />
+          {t.thumb && <img src={t.thumb} alt="" className="h-4 w-4 rounded-full" />}
+          <span className="text-xs">{t.symbol.toUpperCase()}</span>
+          {loadingIds.includes(t.id) && <Loader2 className="h-3 w-3 animate-spin" />}
+          <button onClick={() => onRemove(t.id)} className="ml-1">
+            <X className="h-3 w-3" />
+          </button>
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+function CompareEmissionTab({ tokenIds, emissionsMap }: { tokenIds: string[]; emissionsMap: Map<string, EmissionsData> }) {
   const chartData = useMemo(() => {
-    if (!emissionsQuery.data) return [];
-    const { months, allocations, totalSupplyTimeSeries, inflationRate } = emissionsQuery.data;
-    return months.map((month, i) => {
-      const row: Record<string, any> = { month, total: totalSupplyTimeSeries[i], inflationRate: inflationRate[i] };
-      for (const alloc of allocations) {
-        row[alloc.category] = alloc.monthlyValues[i];
+    const allData = tokenIds.map((id) => emissionsMap.get(id)).filter(Boolean) as EmissionsData[];
+    if (allData.length === 0) return [];
+
+    const maxMonths = Math.max(...allData.map((d) => d.months.length));
+    const refData = allData.reduce((best, d) => d.months.length > best.months.length ? d : best, allData[0]);
+
+    return refData.months.map((month, i) => {
+      const row: Record<string, any> = { month };
+      for (const d of allData) {
+        const total = d.totalSupplyTimeSeries[i] || 0;
+        const supply = d.token.totalSupply || 1;
+        row[`${d.token.symbol}_pct`] = (total / supply) * 100;
+        row[`${d.token.symbol}_abs`] = total;
       }
       return row;
     });
-  }, [emissionsQuery.data]);
+  }, [tokenIds, emissionsMap]);
 
-  const handleSelectToken = (result: SearchResult) => {
-    setSelectedToken(result.id);
-    setSelectedTokenInfo(result);
-    setSearchQuery(result.name);
-    setSearchOpen(false);
-  };
+  const allData = tokenIds.map((id) => emissionsMap.get(id)).filter(Boolean) as EmissionsData[];
 
-  const data = emissionsQuery.data;
-  const supplyUnlockPct = data ? ((data.token.circulatingSupply / data.token.totalSupply) * 100) : 0;
-  const lockedPct = data ? (100 - supplyUnlockPct) : 0;
+  if (allData.length === 0) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center gap-3 p-12 text-center">
+          <TrendingUp className="h-8 w-8 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Add tokens above to compare their emission schedules</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
-    <div className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-emissions-title">Token Emission Analysis</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Projected token supply and emission schedules with allocation breakdown
-          </p>
-        </div>
-      </div>
-
+    <div className="space-y-4">
       <Card>
-        <CardContent className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search for a token (e.g. Bitcoin, Ethereum, Solana)..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setSearchOpen(true);
-              }}
-              onFocus={() => setSearchOpen(true)}
-              className="pl-10"
-              data-testid="input-emissions-search"
-            />
-            {searchOpen && searchQuery.length >= 2 && (
-              <div className="absolute z-50 top-full left-0 right-0 mt-1 border rounded-md bg-popover shadow-lg max-h-64 overflow-auto">
-                {searchResults.isLoading ? (
-                  <div className="flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Searching...
-                  </div>
-                ) : searchResults.data && searchResults.data.length > 0 ? (
-                  searchResults.data.map((result) => (
-                    <button
-                      key={result.id}
-                      className="w-full flex items-center gap-3 p-3 text-left hover-elevate"
-                      onClick={() => handleSelectToken(result)}
-                      data-testid={`button-search-result-${result.id}`}
-                    >
-                      {result.thumb && (
-                        <img src={result.thumb} alt="" className="h-6 w-6 rounded-full" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{result.name}</div>
-                        <div className="text-xs text-muted-foreground">{result.symbol.toUpperCase()}</div>
-                      </div>
-                      {result.market_cap_rank && (
-                        <Badge variant="secondary">#{result.market_cap_rank}</Badge>
-                      )}
-                    </button>
-                  ))
-                ) : (
-                  <div className="p-4 text-sm text-muted-foreground text-center">No results found</div>
-                )}
-              </div>
-            )}
+        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+          <CardTitle className="text-base">Emission Schedule Comparison (% of Total Supply Unlocked)</CardTitle>
+          <Badge variant="outline"><Clock className="h-3 w-3 mr-1" />60-month</Badge>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[400px]" data-testid="chart-compare-emission">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis
+                  dataKey="month" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))"
+                  tickFormatter={(v) => { const [y, m] = v.split("-"); return m === "01" || m === "07" ? `${y}-${m}` : ""; }}
+                />
+                <YAxis
+                  tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))"
+                  tickFormatter={(v) => `${v.toFixed(0)}%`}
+                  domain={[0, 100]}
+                />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
+                  formatter={(value: number, name: string) => [`${value.toFixed(1)}%`, name.replace("_pct", "")]}
+                  labelFormatter={(label) => `Month: ${label}`}
+                />
+                <Legend formatter={(v) => v.replace("_pct", "")} />
+                {allData.map((d, i) => (
+                  <Line
+                    key={d.token.coingeckoId}
+                    type="monotone"
+                    dataKey={`${d.token.symbol}_pct`}
+                    stroke={TOKEN_COLORS[i % TOKEN_COLORS.length]}
+                    strokeWidth={2}
+                    dot={false}
+                    name={`${d.token.symbol}_pct`}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </CardContent>
       </Card>
 
-      {emissionsQuery.isLoading && (
-        <Card>
-          <CardContent className="flex items-center justify-center gap-3 p-12">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            <div>
-              <p className="font-medium">Analyzing token emissions...</p>
-              <p className="text-sm text-muted-foreground mt-1">Fetching supply data and researching allocation schedules</p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {emissionsQuery.error && (
-        <Card>
-          <CardContent className="flex items-center gap-3 p-6">
-            <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
-            <div>
-              <p className="font-medium text-destructive">Failed to load emission data</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {(emissionsQuery.error as any)?.message || "Please try again"}
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => emissionsQuery.refetch()} className="ml-auto shrink-0" data-testid="button-retry">
-              Retry
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {data && (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  {data.token.image && (
-                    <img src={data.token.image} alt="" className="h-8 w-8 rounded-full" />
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-sm text-muted-foreground">Token</p>
-                    <p className="text-lg font-bold truncate" data-testid="text-token-name">
-                      {data.token.name} ({data.token.symbol})
-                    </p>
-                  </div>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Allocation Breakdown Comparison</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {allData.map((d, i) => (
+              <div key={d.token.coingeckoId}>
+                <div className="flex items-center gap-2 mb-3">
+                  {d.token.image && <img src={d.token.image} alt="" className="h-5 w-5 rounded-full" />}
+                  <span className="font-medium text-sm">{d.token.name} ({d.token.symbol})</span>
+                  <Badge variant={d.confidence === "high" ? "default" : "secondary"} className="text-xs">{d.confidence}</Badge>
                 </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <Coins className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Total / Max Supply</p>
-                </div>
-                <p className="text-lg font-bold mt-1" data-testid="text-total-supply">
-                  {formatSupply(data.token.totalSupply)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Circulating: {formatSupply(data.token.circulatingSupply)}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <Unlock className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Supply Unlocked</p>
-                </div>
-                <p className="text-lg font-bold mt-1" data-testid="text-unlock-pct">
-                  {supplyUnlockPct.toFixed(1)}%
-                </p>
-                <div className="flex items-center gap-2 mt-1">
-                  <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-green-500"
-                      style={{ width: `${Math.min(supplyUnlockPct, 100)}%` }}
-                    />
-                  </div>
-                  <span className="text-xs text-muted-foreground">{lockedPct.toFixed(1)}% locked</span>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Market Cap</p>
-                </div>
-                <p className="text-lg font-bold mt-1" data-testid="text-market-cap">
-                  {formatCompact(data.token.marketCap)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Price: ${data.token.currentPrice?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {data.confidence && (
-            <div className="flex items-center gap-2">
-              <Badge variant={data.confidence === "high" ? "default" : data.confidence === "medium" ? "secondary" : "outline"} data-testid="badge-confidence">
-                {data.confidence} confidence
-              </Badge>
-              {data.notes && (
-                <UITooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon">
-                      <Info className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="text-sm">{data.notes}</p>
-                  </TooltipContent>
-                </UITooltip>
-              )}
-            </div>
-          )}
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-              <CardTitle className="text-base">Projected Token Supply by Allocation</CardTitle>
-              <Badge variant="outline">
-                <Clock className="h-3 w-3 mr-1" />
-                60-month projection
-              </Badge>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[400px]" data-testid="chart-supply-area">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis
-                      dataKey="month"
-                      tick={{ fontSize: 11 }}
-                      stroke="hsl(var(--muted-foreground))"
-                      tickFormatter={(v) => {
-                        const [y, m] = v.split("-");
-                        return m === "01" || m === "07" ? `${y}-${m}` : "";
-                      }}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 11 }}
-                      stroke="hsl(var(--muted-foreground))"
-                      tickFormatter={(v) => formatSupply(v)}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                        fontSize: "12px",
-                      }}
-                      formatter={(value: number, name: string) => [formatSupply(value), name]}
-                      labelFormatter={(label) => `Month: ${label}`}
-                    />
-                    <Legend />
-                    {data.allocations.map((alloc, i) => (
-                      <Area
-                        key={alloc.category}
-                        type="monotone"
-                        dataKey={alloc.category}
-                        stackId="1"
-                        fill={ALLOC_COLORS[alloc.standardGroup] || CATEGORY_COLORS[i % CATEGORY_COLORS.length]}
-                        stroke={ALLOC_COLORS[alloc.standardGroup] || CATEGORY_COLORS[i % CATEGORY_COLORS.length]}
-                        fillOpacity={0.7}
-                      />
-                    ))}
-                    {data.cliffEvents.map((evt, i) => (
-                      <ReferenceLine
-                        key={i}
-                        x={evt.month}
-                        stroke="#ef4444"
-                        strokeDasharray="3 3"
-                        label={{ value: "", position: "top" }}
-                      />
-                    ))}
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Monthly Inflation Rate</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[250px]" data-testid="chart-inflation">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis
-                      dataKey="month"
-                      tick={{ fontSize: 11 }}
-                      stroke="hsl(var(--muted-foreground))"
-                      tickFormatter={(v) => {
-                        const [y, m] = v.split("-");
-                        return m === "01" || m === "07" ? `${y}-${m}` : "";
-                      }}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 11 }}
-                      stroke="hsl(var(--muted-foreground))"
-                      tickFormatter={(v) => `${v.toFixed(1)}%`}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                        fontSize: "12px",
-                      }}
-                      formatter={(value: number) => [`${value.toFixed(2)}%`, "Inflation Rate"]}
-                      labelFormatter={(label) => `Month: ${label}`}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="inflationRate"
-                      stroke="#f97316"
-                      strokeWidth={2}
-                      dot={false}
-                      name="Monthly Inflation %"
-                    />
-                    {data.cliffEvents.map((evt, i) => (
-                      <ReferenceLine
-                        key={i}
-                        x={evt.month}
-                        stroke="#ef4444"
-                        strokeDasharray="3 3"
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          {data.cliffEvents.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Lock className="h-4 w-4" />
-                  Cliff Unlock Events
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {data.cliffEvents.map((evt, i) => (
-                    <div key={i} className="flex items-center gap-3 p-2 rounded-md bg-muted/50" data-testid={`cliff-event-${i}`}>
-                      <Unlock className="h-4 w-4 text-destructive shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">{evt.label}</p>
-                        <p className="text-xs text-muted-foreground">Month: {evt.month}</p>
+                <div className="space-y-1.5">
+                  {d.allocations.map((a) => (
+                    <div key={a.category} className="flex items-center gap-2 text-sm">
+                      <div className="w-24 truncate text-muted-foreground">{a.category}</div>
+                      <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${a.percentage}%`, backgroundColor: TOKEN_COLORS[i % TOKEN_COLORS.length] }} />
                       </div>
-                      <Badge variant="outline">{formatSupply(evt.amount)} tokens</Badge>
+                      <div className="w-12 text-right font-medium">{a.percentage.toFixed(1)}%</div>
+                      <Badge variant="outline" className="text-xs">{a.vestingType}</Badge>
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Allocation Schedule Details</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Group</TableHead>
-                      <TableHead className="text-right">Allocation %</TableHead>
-                      <TableHead className="text-right">Total Tokens</TableHead>
-                      <TableHead>Vesting Type</TableHead>
-                      <TableHead className="text-right">Cliff</TableHead>
-                      <TableHead className="text-right">Vesting</TableHead>
-                      <TableHead className="text-right">TGE %</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.allocations.map((alloc, i) => (
-                      <TableRow key={alloc.category} data-testid={`row-allocation-${i}`}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="h-3 w-3 rounded-full shrink-0"
-                              style={{ backgroundColor: ALLOC_COLORS[alloc.standardGroup] || CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}
-                            />
-                            <span className="font-medium text-sm">{alloc.category}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs capitalize">{alloc.standardGroup}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-medium">{alloc.percentage.toFixed(1)}%</TableCell>
-                        <TableCell className="text-right">{formatSupply(alloc.totalTokens)}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="text-xs capitalize">{alloc.vestingType}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {alloc.cliffMonths > 0 ? `${alloc.cliffMonths}mo` : "--"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {alloc.vestingMonths > 0 ? `${alloc.vestingMonths}mo` : "--"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {alloc.tgePercent > 0 ? `${alloc.tgePercent}%` : "--"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
               </div>
-            </CardContent>
-          </Card>
-        </>
-      )}
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
-      {!selectedToken && !emissionsQuery.isLoading && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center gap-4 p-12 text-center">
-            <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
-              <TrendingUp className="h-8 w-8 text-muted-foreground" />
+function CompareInflationTab({ tokenIds, emissionsMap }: { tokenIds: string[]; emissionsMap: Map<string, EmissionsData> }) {
+  const chartData = useMemo(() => {
+    const allData = tokenIds.map((id) => emissionsMap.get(id)).filter(Boolean) as EmissionsData[];
+    if (allData.length === 0) return [];
+
+    const refData = allData.reduce((best, d) => d.months.length > best.months.length ? d : best, allData[0]);
+    return refData.months.map((month, i) => {
+      const row: Record<string, any> = { month };
+      for (const d of allData) {
+        row[d.token.symbol] = d.inflationRate[i] || 0;
+      }
+      return row;
+    });
+  }, [tokenIds, emissionsMap]);
+
+  const allData = tokenIds.map((id) => emissionsMap.get(id)).filter(Boolean) as EmissionsData[];
+
+  if (allData.length === 0) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center gap-3 p-12 text-center">
+          <TrendingUp className="h-8 w-8 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Add tokens above to compare their inflation rates</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+        <CardTitle className="text-base">Monthly Inflation Rate Comparison</CardTitle>
+        <Badge variant="outline"><Clock className="h-3 w-3 mr-1" />60-month</Badge>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[400px]" data-testid="chart-compare-inflation">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis
+                dataKey="month" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))"
+                tickFormatter={(v) => { const [y, m] = v.split("-"); return m === "01" || m === "07" ? `${y}-${m}` : ""; }}
+              />
+              <YAxis
+                tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))"
+                tickFormatter={(v) => `${v.toFixed(1)}%`}
+              />
+              <Tooltip
+                contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
+                formatter={(value: number, name: string) => [`${value.toFixed(2)}%`, name]}
+                labelFormatter={(label) => `Month: ${label}`}
+              />
+              <Legend />
+              {allData.map((d, i) => (
+                <Line
+                  key={d.token.coingeckoId}
+                  type="monotone"
+                  dataKey={d.token.symbol}
+                  stroke={TOKEN_COLORS[i % TOKEN_COLORS.length]}
+                  strokeWidth={2}
+                  dot={false}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+type ScreenerChartMode = "total" | "cliff" | "linear";
+type SortField = "name" | "circulationPct" | "totalUnlock" | "cliffUnlock" | "linearUnlock" | "marketCap";
+type SortDir = "asc" | "desc";
+
+function EmissionScreenerTab({ tokenIds, emissionsMap }: { tokenIds: string[]; emissionsMap: Map<string, EmissionsData> }) {
+  const [chartMode, setChartMode] = useState<ScreenerChartMode>("total");
+  const [sortField, setSortField] = useState<SortField>("circulationPct");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const allData = tokenIds.map((id) => emissionsMap.get(id)).filter(Boolean) as EmissionsData[];
+
+  const tokenMetrics = useMemo(() => {
+    return allData.map((d) => {
+      const totalSupply = d.token.totalSupply || 1;
+      const circSupply = d.token.circulatingSupply || 0;
+      const circulationPct = (circSupply / totalSupply) * 100;
+      const lockedPct = 100 - circulationPct;
+
+      let totalCliffUnlock = 0;
+      let totalLinearUnlock = 0;
+      for (const a of d.allocations) {
+        const tokens = a.totalTokens;
+        const tgeTokens = Math.round(tokens * (a.tgePercent || 0) / 100);
+        const remaining = tokens - tgeTokens;
+        if (a.vestingType === "cliff" || (a.cliffMonths > 0 && a.vestingType !== "linear")) {
+          totalCliffUnlock += remaining;
+        } else if (a.vestingType === "linear" || a.vestingMonths > 0) {
+          totalLinearUnlock += remaining;
+        }
+      }
+
+      const cliffUnlockPct = (totalCliffUnlock / totalSupply) * 100;
+      const linearUnlockPct = (totalLinearUnlock / totalSupply) * 100;
+      const totalUnlockPct = cliffUnlockPct + linearUnlockPct;
+
+      return {
+        ...d,
+        circulationPct,
+        lockedPct,
+        totalCliffUnlock,
+        totalLinearUnlock,
+        cliffUnlockPct,
+        linearUnlockPct,
+        totalUnlockPct,
+      };
+    });
+  }, [allData]);
+
+  const sortedMetrics = useMemo(() => {
+    return [...tokenMetrics].sort((a, b) => {
+      let va: number | string = 0, vb: number | string = 0;
+      switch (sortField) {
+        case "name": va = a.token.name; vb = b.token.name; break;
+        case "circulationPct": va = a.circulationPct; vb = b.circulationPct; break;
+        case "totalUnlock": va = a.totalUnlockPct; vb = b.totalUnlockPct; break;
+        case "cliffUnlock": va = a.cliffUnlockPct; vb = b.cliffUnlockPct; break;
+        case "linearUnlock": va = a.linearUnlockPct; vb = b.linearUnlockPct; break;
+        case "marketCap": va = a.token.marketCap; vb = b.token.marketCap; break;
+      }
+      if (typeof va === "string") return sortDir === "asc" ? va.localeCompare(vb as string) : (vb as string).localeCompare(va);
+      return sortDir === "asc" ? (va as number) - (vb as number) : (vb as number) - (va as number);
+    });
+  }, [tokenMetrics, sortField, sortDir]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir("desc");
+    }
+  };
+
+  const barData = useMemo(() => {
+    return sortedMetrics.map((m) => ({
+      name: m.token.symbol,
+      total: m.totalUnlockPct,
+      cliff: m.cliffUnlockPct,
+      linear: m.linearUnlockPct,
+      circulating: m.circulationPct,
+    }));
+  }, [sortedMetrics]);
+
+  if (allData.length === 0) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center gap-3 p-12 text-center">
+          <BarChart3 className="h-8 w-8 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Add tokens above to screen their emission profiles</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const SortHeader = ({ field, label }: { field: SortField; label: string }) => (
+    <TableHead
+      className="cursor-pointer select-none"
+      onClick={() => handleSort(field)}
+      data-testid={`sort-${field}`}
+    >
+      <div className="flex items-center gap-1">
+        {label}
+        <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+      </div>
+    </TableHead>
+  );
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <CardTitle className="text-base">Value Unlock Overview</CardTitle>
+            <div className="flex gap-1">
+              {(["total", "cliff", "linear"] as const).map((mode) => (
+                <Button
+                  key={mode}
+                  variant={chartMode === mode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setChartMode(mode)}
+                  data-testid={`button-chart-mode-${mode}`}
+                >
+                  {mode === "total" ? "Total Unlock" : mode === "cliff" ? "Cliff Unlock" : "Linear Unlock"}
+                </Button>
+              ))}
             </div>
-            <div>
-              <p className="text-lg font-medium">Search for a Token</p>
-              <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                Enter a token name above to see its projected emission schedule, allocation breakdown with cliff and linear unlock timelines, and monthly inflation rate.
-              </p>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px]" data-testid="chart-screener">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={barData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis
+                  type="number" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))"
+                  tickFormatter={(v) => `${v.toFixed(0)}%`}
+                  domain={[0, 100]}
+                />
+                <YAxis
+                  type="category" dataKey="name" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))"
+                  width={60}
+                />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
+                  formatter={(value: number, name: string) => [`${value.toFixed(1)}%`, name]}
+                />
+                <Legend />
+                {chartMode === "total" && (
+                  <>
+                    <Bar dataKey="circulating" stackId="a" fill="#22c55e" name="Circulating" />
+                    <Bar dataKey="cliff" stackId="a" fill="#ef4444" name="Cliff Unlock" />
+                    <Bar dataKey="linear" stackId="a" fill="#3b82f6" name="Linear Unlock" />
+                  </>
+                )}
+                {chartMode === "cliff" && (
+                  <Bar dataKey="cliff" fill="#ef4444" name="Cliff Unlock %" />
+                )}
+                {chartMode === "linear" && (
+                  <Bar dataKey="linear" fill="#3b82f6" name="Linear Unlock %" />
+                )}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Token Emission Screener</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <SortHeader field="name" label="Project" />
+                  <SortHeader field="marketCap" label="Market Cap" />
+                  <SortHeader field="circulationPct" label="% Circulating" />
+                  <TableHead className="text-right">Locked %</TableHead>
+                  <SortHeader field="cliffUnlock" label="Cliff Unlock %" />
+                  <SortHeader field="linearUnlock" label="Linear Unlock %" />
+                  <SortHeader field="totalUnlock" label="Total Pending %" />
+                  <TableHead>Confidence</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedMetrics.map((m, i) => (
+                  <TableRow key={m.token.coingeckoId} data-testid={`row-screener-${i}`}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {m.token.image && <img src={m.token.image} alt="" className="h-5 w-5 rounded-full" />}
+                        <div>
+                          <div className="font-medium text-sm">{m.token.name}</div>
+                          <div className="text-xs text-muted-foreground">{m.token.symbol}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">{formatCompact(m.token.marketCap)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="w-16 h-2 rounded-full bg-muted overflow-hidden">
+                          <div className="h-full rounded-full bg-green-500" style={{ width: `${Math.min(m.circulationPct, 100)}%` }} />
+                        </div>
+                        <span className="font-medium">{m.circulationPct.toFixed(1)}%</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={m.lockedPct > 50 ? "text-destructive font-medium" : ""}>{m.lockedPct.toFixed(1)}%</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {m.cliffUnlockPct > 0 ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <Lock className="h-3 w-3 text-destructive" />
+                          <span className="font-medium">{m.cliffUnlockPct.toFixed(1)}%</span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">--</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {m.linearUnlockPct > 0 ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <Unlock className="h-3 w-3 text-blue-500" />
+                          <span className="font-medium">{m.linearUnlockPct.toFixed(1)}%</span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">--</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={m.totalUnlockPct > 30 ? "text-destructive font-medium" : "font-medium"}>
+                        {m.totalUnlockPct.toFixed(1)}%
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={m.confidence === "high" ? "default" : m.confidence === "medium" ? "secondary" : "outline"} className="text-xs">
+                        {m.confidence}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export default function CryptoEmissions() {
+  const [selectedTokens, setSelectedTokens] = useState<{ id: string; name: string; symbol: string; thumb: string }[]>([]);
+  const [activeTab, setActiveTab] = useState("emission");
+
+  const tokenQueries = useQueries({
+    queries: selectedTokens.map((t) => ({
+      queryKey: ["/api/crypto/emissions", t.id],
+      enabled: true,
+      staleTime: 30 * 60 * 1000,
+      retry: 1,
+    })),
+  });
+
+  const emissionsMap = useMemo(() => {
+    const map = new Map<string, EmissionsData>();
+    selectedTokens.forEach((t, i) => {
+      const q = tokenQueries[i];
+      if (q?.data) map.set(t.id, q.data as EmissionsData);
+    });
+    return map;
+  }, [selectedTokens, tokenQueries]);
+
+  const loadingIds = useMemo(() => {
+    return selectedTokens.filter((_, i) => tokenQueries[i]?.isLoading).map((t) => t.id);
+  }, [selectedTokens, tokenQueries]);
+
+  const handleAddToken = (result: SearchResult) => {
+    if (selectedTokens.find((t) => t.id === result.id)) return;
+    setSelectedTokens((prev) => [...prev, { id: result.id, name: result.name, symbol: result.symbol, thumb: result.thumb }]);
+  };
+
+  const handleRemoveToken = (id: string) => {
+    setSelectedTokens((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  return (
+    <div className="flex-1 overflow-auto p-4 md:p-6 space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold" data-testid="text-emissions-title">Crypto Market Emissions</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Compare token emission schedules, inflation rates, and screen for unlock pressure across projects
+        </p>
+      </div>
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <TokenSearch onSelect={handleAddToken} excludeIds={selectedTokens.map((t) => t.id)} />
+          {selectedTokens.length > 0 && (
+            <SelectedTokenChips tokens={selectedTokens} loadingIds={loadingIds} onRemove={handleRemoveToken} />
+          )}
+          {loadingIds.length > 0 && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Analyzing emissions for {loadingIds.length} token{loadingIds.length > 1 ? "s" : ""}...
+              <span className="text-xs">(fetching supply data and researching allocations)</span>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList data-testid="tabs-emissions">
+          <TabsTrigger value="emission" data-testid="tab-compare-emission">Compare Emission</TabsTrigger>
+          <TabsTrigger value="inflation" data-testid="tab-compare-inflation">Compare Inflation</TabsTrigger>
+          <TabsTrigger value="screener" data-testid="tab-screener">Emission Screener</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="emission" className="mt-4">
+          <CompareEmissionTab tokenIds={selectedTokens.map((t) => t.id)} emissionsMap={emissionsMap} />
+        </TabsContent>
+
+        <TabsContent value="inflation" className="mt-4">
+          <CompareInflationTab tokenIds={selectedTokens.map((t) => t.id)} emissionsMap={emissionsMap} />
+        </TabsContent>
+
+        <TabsContent value="screener" className="mt-4">
+          <EmissionScreenerTab tokenIds={selectedTokens.map((t) => t.id)} emissionsMap={emissionsMap} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
