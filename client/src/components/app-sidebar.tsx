@@ -91,6 +91,7 @@ const modelingItems = [
 
 const cryptoItems = [
   { title: "Crypto Dashboard", url: "/crypto", icon: Coins },
+  { title: "Token Emissions", url: "/crypto/emissions", icon: TrendingUp },
 ];
 
 const chartingItems = [
