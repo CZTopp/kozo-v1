@@ -1,10 +1,11 @@
-import { useState, useCallback, createContext, useContext, useMemo } from "react";
+import { useState, useCallback, createContext, useContext, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, AlertCircle } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Sparkles, Send, Square, Trash2, Loader2 } from "lucide-react";
 import { useModel } from "@/lib/model-context";
 import { useLocation } from "wouter";
-import { ChatKit, useChatKit } from "@openai/chatkit-react";
+import ReactMarkdown from "react-markdown";
 
 interface CopilotContextProps {
   open: boolean;
@@ -62,6 +63,11 @@ function useCopilotMode(): { mode: CopilotMode; cryptoProjectId: string | null; 
   return { mode: "financial", cryptoProjectId: null, label: "Financial Model" };
 }
 
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 const STARTER_PROMPTS: Record<CopilotMode, { label: string; prompt: string }[]> = {
   "financial": [
     { label: "DCF Analysis", prompt: "What's driving DCF upside or downside?" },
@@ -80,69 +86,270 @@ const STARTER_PROMPTS: Record<CopilotMode, { label: string; prompt: string }[]> 
   ],
 };
 
-function ChatKitInner({ mode, cryptoProjectId, modelId }: { mode: CopilotMode; cryptoProjectId: string | null; modelId: string | undefined }) {
+function ChatInner({ mode, cryptoProjectId, modelId }: { mode: CopilotMode; cryptoProjectId: string | null; modelId: string | undefined }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const prompts = STARTER_PROMPTS[mode];
-  const [initError, setInitError] = useState<string | null>(null);
 
-  const contextHeader = useMemo(() => {
-    const ctx: Record<string, any> = { mode };
-    if (cryptoProjectId) ctx.cryptoProjectId = cryptoProjectId;
-    if (modelId) ctx.modelId = modelId;
-    return JSON.stringify(ctx);
-  }, [mode, cryptoProjectId, modelId]);
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
 
-  const domainKey = (typeof window !== "undefined" && (window as any).__CHATKIT_DOMAIN_KEY__) || "kozo-self-hosted";
+  const sendMessage = useCallback(async (text: string) => {
+    if (!text.trim() || isStreaming) return;
 
-  const { control } = useChatKit({
-    api: {
-      url: "/api/chatkit",
-      domainKey,
-      async fetch(url, init) {
-        const headers = new Headers(init?.headers);
-        headers.set("X-ChatKit-Context", contextHeader);
-        try {
-          return await window.fetch(url, { ...init, headers, credentials: "same-origin" });
-        } catch (err: any) {
-          setInitError(err.message || "Connection failed");
-          throw err;
+    const userMsg: ChatMessage = { role: "user", content: text.trim() };
+    setMessages(prev => [...prev, userMsg]);
+    setInput("");
+    setIsStreaming(true);
+
+    const history = messages.map(m => ({ role: m.role, content: m.content }));
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const body: Record<string, any> = {
+        message: text.trim(),
+        history,
+      };
+
+      if (cryptoProjectId) {
+        body.cryptoProjectId = cryptoProjectId;
+      } else if (mode === "crypto-dashboard") {
+        body.context = "crypto-dashboard";
+      } else if (modelId) {
+        body.modelId = modelId;
+      } else {
+        body.context = "general";
+      }
+
+      const response = await fetch("/api/copilot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        credentials: "same-origin",
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ message: "Request failed" }));
+        throw new Error(err.message || `HTTP ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response stream");
+
+      const decoder = new TextDecoder();
+      let assistantContent = "";
+      setMessages(prev => [...prev, { role: "assistant", content: "" }]);
+
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6).trim();
+          if (payload === "[DONE]") continue;
+
+          try {
+            const data = JSON.parse(payload);
+            if (data.error) {
+              assistantContent += `\n\n_Error: ${data.error}_`;
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: "assistant", content: assistantContent };
+                return updated;
+              });
+              continue;
+            }
+            if (data.content) {
+              assistantContent += data.content;
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: "assistant", content: assistantContent };
+                return updated;
+              });
+            }
+          } catch {}
         }
-      },
-    },
-    theme: "dark",
-    startScreen: {
-      greeting: mode === "crypto-project"
-        ? "Ask about this crypto project's tokenomics, valuation, or fundamentals."
-        : mode === "crypto-dashboard"
-        ? "Ask about your tracked crypto projects or general crypto topics."
-        : "Ask about your financial model, valuation, or key metrics.",
-      prompts,
-    },
-    header: { enabled: false },
-  });
+      }
 
-  if (initError) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center p-4 gap-3 text-sm" data-testid="chatkit-error">
-        <AlertCircle className="h-8 w-8 text-destructive" />
-        <p className="text-center text-muted-foreground">{initError}</p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setInitError(null);
-            window.location.reload();
-          }}
-          data-testid="button-chatkit-retry"
-        >
-          Retry
-        </Button>
-      </div>
-    );
-  }
+      if (!assistantContent) {
+        setMessages(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: "assistant", content: "_No response generated._" };
+          return updated;
+        });
+      }
+    } catch (err: any) {
+      if (err.name === "AbortError") return;
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.role === "assistant" && !last.content) {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: "assistant", content: `_Error: ${err.message}_` };
+          return updated;
+        }
+        return [...prev, { role: "assistant", content: `_Error: ${err.message}_` }];
+      });
+    } finally {
+      setIsStreaming(false);
+      abortRef.current = null;
+    }
+  }, [messages, isStreaming, mode, cryptoProjectId, modelId]);
+
+  const stopStreaming = useCallback(() => {
+    abortRef.current?.abort();
+    setIsStreaming(false);
+  }, []);
+
+  const clearChat = useCallback(() => {
+    if (isStreaming) {
+      abortRef.current?.abort();
+      setIsStreaming(false);
+    }
+    setMessages([]);
+  }, [isStreaming]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage(input);
+    }
+  }, [input, sendMessage]);
+
+  const greeting = mode === "crypto-project"
+    ? "Ask about this crypto project's tokenomics, valuation, or fundamentals."
+    : mode === "crypto-dashboard"
+    ? "Ask about your tracked crypto projects or general crypto topics."
+    : "Ask about your financial model, valuation, or key metrics.";
 
   return (
-    <div className="flex-1 overflow-hidden flex flex-col min-h-0" data-testid="chatkit-container">
-      <ChatKit control={control} className="h-full w-full" />
+    <div className="flex-1 flex flex-col min-h-0" data-testid="chatkit-container">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
+        {messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-2">
+            <div className="flex items-center gap-2 text-primary">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <p className="text-sm text-muted-foreground max-w-[240px]" data-testid="text-copilot-greeting">
+              {greeting}
+            </p>
+            <div className="flex flex-col gap-2 w-full max-w-[260px]">
+              {prompts.map((p) => (
+                <Button
+                  key={p.label}
+                  variant="outline"
+                  size="sm"
+                  className="justify-start text-left text-xs h-auto py-2 px-3"
+                  onClick={() => sendMessage(p.prompt)}
+                  disabled={isStreaming}
+                  data-testid={`button-starter-${p.label.toLowerCase().replace(/\s+/g, "-")}`}
+                >
+                  {p.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          messages.map((msg, i) => (
+            <div
+              key={i}
+              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+              data-testid={`message-${msg.role}-${i}`}
+            >
+              <div
+                className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                  msg.role === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-foreground"
+                }`}
+              >
+                {msg.role === "assistant" ? (
+                  <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-1">
+                    <ReactMarkdown>{msg.content || (isStreaming && i === messages.length - 1 ? "..." : "")}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <span>{msg.content}</span>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+        {isStreaming && messages[messages.length - 1]?.role === "assistant" && !messages[messages.length - 1]?.content && (
+          <div className="flex justify-start">
+            <div className="bg-muted rounded-lg px-3 py-2">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="border-t p-2">
+        <div className="flex items-end gap-1">
+          {messages.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={clearChat}
+              className="shrink-0"
+              data-testid="button-clear-chat"
+              title="Clear chat"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+          <div className="flex-1 relative">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask a question..."
+              rows={1}
+              className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[36px] max-h-[120px]"
+              disabled={isStreaming}
+              data-testid="input-copilot-message"
+            />
+          </div>
+          {isStreaming ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={stopStreaming}
+              className="shrink-0"
+              data-testid="button-stop-streaming"
+            >
+              <Square className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => sendMessage(input)}
+              disabled={!input.trim()}
+              className="shrink-0"
+              data-testid="button-send-message"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -179,7 +386,7 @@ export function CopilotPanel() {
       </div>
 
       {open && (
-        <ChatKitInner
+        <ChatInner
           key={`${mode}-${cryptoProjectId || model?.id || "general"}`}
           mode={mode}
           cryptoProjectId={cryptoProjectId}

@@ -1975,30 +1975,6 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json({ success: true });
   });
 
-  app.post("/api/chatkit", async (req: Request, res: Response) => {
-    try {
-      const userId = (req as any).user?.claims?.sub as string;
-      if (!userId) return res.status(401).json({ message: "Unauthorized" });
-
-      const contextHeader = req.headers["x-chatkit-context"];
-      let contextInfo = { mode: "financial" as string, modelId: undefined as string | undefined, cryptoProjectId: undefined as string | undefined };
-      if (contextHeader && typeof contextHeader === "string") {
-        try {
-          const parsed = JSON.parse(contextHeader);
-          contextInfo = { ...contextInfo, ...parsed };
-        } catch {}
-      }
-
-      const { handleChatKitRequest } = await import("./chatkit-server");
-      await handleChatKitRequest(req.body, userId, contextInfo, res);
-    } catch (err: any) {
-      console.error("ChatKit request error:", err);
-      if (!res.headersSent) {
-        res.status(500).json({ message: err.message || "Internal server error" });
-      }
-    }
-  });
-
   app.post("/api/copilot", async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user?.claims?.sub as string;
