@@ -87,7 +87,7 @@ export function UpgradePrompt({ resource, inline }: UpgradePromptProps) {
         variant="outline"
         size="sm"
         onClick={() => setLocation("/pricing")}
-        className="gap-1.5 text-amber-500 border-amber-500/30 hover:bg-amber-500/10"
+        className="gap-1.5 text-amber-500 border-amber-500/30"
         data-testid={`button-upgrade-${resource}`}
       >
         <Lock className="h-3.5 w-3.5" />
@@ -107,7 +107,7 @@ export function UpgradePrompt({ resource, inline }: UpgradePromptProps) {
       </p>
       <Button
         onClick={() => setLocation("/pricing")}
-        className="gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
+        className="gap-2 bg-amber-500 text-white"
         data-testid={`button-upgrade-cta-${resource}`}
       >
         <Zap className="h-4 w-4" />
@@ -128,7 +128,7 @@ export function UpgradeBadge() {
       variant="outline"
       size="sm"
       onClick={() => setLocation("/pricing")}
-      className="gap-1.5 text-amber-500 border-amber-500/30 hover:bg-amber-500/10 text-xs"
+      className="gap-1.5 text-amber-500 border-amber-500/30 text-xs"
       data-testid="button-upgrade-badge"
     >
       <Zap className="h-3 w-3" />
