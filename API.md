@@ -6,60 +6,15 @@ This document catalogs all persistent cached datasets stored in Kozo's PostgreSQ
 
 | Dataset | Table | Key | TTL | Source | Records |
 |---------|-------|-----|-----|--------|---------|
-| CoinGecko Market Data | `coingecko_market_cache` | `coingecko_id` | 15 min | CoinGecko API | Per-token |
 | DefiLlama Protocol Data | `defillama_cache` | `protocol_id` + `metric_type` | 1 hour | DefiLlama API | Per-protocol per-metric |
 | AI Token Research | `ai_research_cache` | `coingecko_id` + `research_type` | Permanent | OpenAI gpt-4o-mini | Per-token per-type |
 | Emissions Analysis | `emissions_cache` | `coingecko_id` | Permanent | Computed (AI + market data) | Per-token |
 
----
-
-## 1. CoinGecko Market Data Cache
-
-**Table**: `coingecko_market_cache`
-
-**Purpose**: Stores live market data for crypto tokens, reducing CoinGecko API calls across all users. When any user looks up a token, subsequent requests within 15 minutes are served from cache.
-
-**Schema**:
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | integer (PK) | Auto-increment |
-| `coingecko_id` | text (unique) | CoinGecko token identifier (e.g., `bitcoin`, `ethereum`) |
-| `data` | jsonb | Full market data object |
-| `fetched_at` | timestamp | When data was last fetched from CoinGecko |
-
-**Data Shape** (`data` column):
-```json
-{
-  "id": "bitcoin",
-  "symbol": "btc",
-  "name": "Bitcoin",
-  "image": "https://...",
-  "current_price": 97500.00,
-  "market_cap": 1930000000000,
-  "fully_diluted_valuation": 2050000000000,
-  "total_volume": 45000000000,
-  "price_change_percentage_24h": 2.45,
-  "price_change_percentage_7d_in_currency": -1.2,
-  "circulating_supply": 19800000,
-  "total_supply": 21000000,
-  "max_supply": 21000000,
-  "ath": 108000,
-  "ath_date": "2025-01-20T...",
-  "sparkline_in_7d": { "price": [96000, 97000, ...] }
-}
-```
-
-**Refresh Policy**: 15-minute TTL. Stale entries are refreshed on next request.
-
-**Future API Endpoint**:
-```
-GET /api/v1/market-data/:coingeckoId
-GET /api/v1/market-data?ids=bitcoin,ethereum,solana
-```
+> **Note**: CoinGecko market data (prices, volume, supply) is always fetched live to ensure real-time accuracy. It is not cached.
 
 ---
 
-## 2. DefiLlama Protocol Data Cache
+## 1. DefiLlama Protocol Data Cache (1-hour TTL)
 
 **Table**: `defillama_cache`
 
@@ -111,7 +66,7 @@ GET /api/v1/defi/:protocolSlug/revenue
 
 ---
 
-## 3. AI Token Research Cache
+## 2. AI Token Research Cache (Permanent)
 
 **Table**: `ai_research_cache`
 
@@ -220,7 +175,7 @@ GET /api/v1/research/:coingeckoId (all research types)
 
 ---
 
-## 4. Emissions Analysis Cache
+## 3. Emissions Analysis Cache (Permanent)
 
 **Table**: `emissions_cache`
 
@@ -273,7 +228,7 @@ GET /api/v1/research/:coingeckoId (all research types)
 }
 ```
 
-**Refresh Policy**: Permanent for allocation structure. Market data (price, market cap) is refreshed on read from CoinGecko cache.
+**Refresh Policy**: Permanent for allocation structure. Market data (price, market cap) is refreshed on read via live CoinGecko API calls.
 
 **Future API Endpoints**:
 ```

@@ -1,12 +1,11 @@
 import { db } from "./db";
-import { coingeckoMarketCache, defillamaCache } from "@shared/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { defillamaCache } from "@shared/schema";
+import { eq, and } from "drizzle-orm";
 
 const COINGECKO_BASE = "https://api.coingecko.com/api/v3";
 const DEFILLAMA_BASE = "https://api.llama.fi";
 const MESSARI_BASE = "https://api.messari.io";
 
-const CG_CACHE_TTL_MS = 15 * 60 * 1000;
 const DL_CACHE_TTL_MS = 60 * 60 * 1000;
 
 interface CoinGeckoSearchResult {
@@ -145,74 +144,17 @@ async function fetchCoinMarketDataFromApi(coingeckoId: string): Promise<CoinGeck
 }
 
 export async function getCoinMarketData(coingeckoId: string): Promise<CoinGeckoMarketData | null> {
-  try {
-    const [cached] = await db.select().from(coingeckoMarketCache)
-      .where(eq(coingeckoMarketCache.coingeckoId, coingeckoId)).limit(1);
-    if (cached && (Date.now() - new Date(cached.fetchedAt).getTime()) < CG_CACHE_TTL_MS) {
-      return cached.data as CoinGeckoMarketData;
-    }
-  } catch (e) {}
-
-  const fresh = await fetchCoinMarketDataFromApi(coingeckoId);
-  if (fresh) {
-    try {
-      await db.insert(coingeckoMarketCache)
-        .values({ coingeckoId, data: fresh as any })
-        .onConflictDoUpdate({
-          target: coingeckoMarketCache.coingeckoId,
-          set: { data: fresh as any, fetchedAt: new Date() },
-        });
-    } catch (e) {}
-  }
-  return fresh;
+  return fetchCoinMarketDataFromApi(coingeckoId);
 }
 
 export async function getMultipleCoinMarketData(ids: string[]): Promise<CoinGeckoMarketData[]> {
   if (ids.length === 0) return [];
-
-  const results: CoinGeckoMarketData[] = [];
-  const uncachedIds: string[] = [];
-
-  try {
-    const cached = await db.select().from(coingeckoMarketCache)
-      .where(inArray(coingeckoMarketCache.coingeckoId, ids));
-    const now = Date.now();
-    for (const row of cached) {
-      if ((now - new Date(row.fetchedAt).getTime()) < CG_CACHE_TTL_MS) {
-        results.push(row.data as CoinGeckoMarketData);
-      } else {
-        uncachedIds.push(row.coingeckoId);
-      }
-    }
-    const cachedIdSet = new Set(cached.map(r => r.coingeckoId));
-    for (const id of ids) {
-      if (!cachedIdSet.has(id)) uncachedIds.push(id);
-    }
-  } catch (e) {
-    uncachedIds.push(...ids);
-  }
-
-  if (uncachedIds.length > 0) {
-    const idsStr = uncachedIds.join(",");
-    const res = await fetchWithRetry(
-      `${COINGECKO_BASE}/coins/markets?vs_currency=usd&ids=${encodeURIComponent(idsStr)}&sparkline=true&price_change_percentage=7d`
-    );
-    const freshData: CoinGeckoMarketData[] = await res.json();
-    results.push(...freshData);
-
-    for (const coin of freshData) {
-      try {
-        await db.insert(coingeckoMarketCache)
-          .values({ coingeckoId: coin.id, data: coin as any })
-          .onConflictDoUpdate({
-            target: coingeckoMarketCache.coingeckoId,
-            set: { data: coin as any, fetchedAt: new Date() },
-          });
-      } catch (e) {}
-    }
-  }
-
-  return results;
+  const idsStr = ids.join(",");
+  const res = await fetchWithRetry(
+    `${COINGECKO_BASE}/coins/markets?vs_currency=usd&ids=${encodeURIComponent(idsStr)}&sparkline=true&price_change_percentage=7d`
+  );
+  const data: CoinGeckoMarketData[] = await res.json();
+  return data;
 }
 
 export function mapCoinGeckoToProject(coin: CoinGeckoMarketData) {
