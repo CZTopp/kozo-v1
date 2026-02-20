@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,17 +9,22 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, CartesianGrid, Legend,
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid, Legend, Cell,
 } from "recharts";
 import {
   Search, Loader2, TrendingUp, X, Plus, AlertTriangle,
-  Lock, Unlock, Clock, BarChart3, ArrowUpDown,
+  Lock, Unlock, Clock, BarChart3, ArrowUpDown, Filter,
 } from "lucide-react";
 
 const TOKEN_COLORS = [
   "#3b82f6", "#22c55e", "#f97316", "#a855f7", "#ef4444",
   "#06b6d4", "#eab308", "#ec4899", "#14b8a6", "#f43f5e",
+  "#6366f1", "#84cc16", "#d946ef", "#0ea5e9", "#fb923c",
+];
+
+const CATEGORY_FILTERS = [
+  "All", "Layer 1", "Layer 2", "DeFi", "Perpetuals", "RWA", "Gaming", "AI", "Meme",
 ];
 
 function formatSupply(n: number | null | undefined): string {
@@ -73,6 +78,7 @@ interface EmissionsData {
     currentPrice: number;
     marketCap: number;
     image: string;
+    category?: string;
   };
   months: string[];
   allocations: EmissionAllocation[];
@@ -81,6 +87,61 @@ interface EmissionsData {
   cliffEvents: { month: string; label: string; amount: number }[];
   confidence: string;
   notes: string;
+}
+
+type UnlockMode = "total" | "cliff" | "linear";
+type SortField = "name" | "circulationPct" | "totalUnlock" | "cliffUnlock" | "linearUnlock" | "marketCap" | "unlockValue";
+type SortDir = "asc" | "desc";
+type TimeframeOption = "12m" | "24m" | "36m" | "60m";
+type PercentOfOption = "circulating" | "total";
+
+interface TokenMetrics {
+  data: EmissionsData;
+  circulationPct: number;
+  lockedPct: number;
+  totalCliffUnlock: number;
+  totalLinearUnlock: number;
+  cliffUnlockPct: number;
+  linearUnlockPct: number;
+  totalUnlockPct: number;
+  unlockValue: number;
+}
+
+function computeTokenMetrics(d: EmissionsData): TokenMetrics {
+  const totalSupply = d.token.totalSupply || 1;
+  const circSupply = d.token.circulatingSupply || 0;
+  const circulationPct = (circSupply / totalSupply) * 100;
+  const lockedPct = 100 - circulationPct;
+
+  let totalCliffUnlock = 0;
+  let totalLinearUnlock = 0;
+  for (const a of d.allocations) {
+    const tokens = a.totalTokens;
+    const tgeTokens = Math.round(tokens * (a.tgePercent || 0) / 100);
+    const remaining = tokens - tgeTokens;
+    if (a.vestingType === "cliff" || (a.cliffMonths > 0 && a.vestingType !== "linear")) {
+      totalCliffUnlock += remaining;
+    } else if (a.vestingType === "linear" || a.vestingMonths > 0) {
+      totalLinearUnlock += remaining;
+    }
+  }
+
+  const cliffUnlockPct = (totalCliffUnlock / totalSupply) * 100;
+  const linearUnlockPct = (totalLinearUnlock / totalSupply) * 100;
+  const totalUnlockPct = cliffUnlockPct + linearUnlockPct;
+  const unlockValue = (totalCliffUnlock + totalLinearUnlock) * d.token.currentPrice;
+
+  return {
+    data: d,
+    circulationPct,
+    lockedPct,
+    totalCliffUnlock,
+    totalLinearUnlock,
+    cliffUnlockPct,
+    linearUnlockPct,
+    totalUnlockPct,
+    unlockValue,
+  };
 }
 
 function TokenSearch({ onSelect, excludeIds }: { onSelect: (r: SearchResult) => void; excludeIds: string[] }) {
@@ -101,11 +162,11 @@ function TokenSearch({ onSelect, excludeIds }: { onSelect: (r: SearchResult) => 
     <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setTimeout(() => setOpen(false), 200); }}>
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
       <Input
-        placeholder="Search tokens to add (e.g. Bitcoin, Ethereum, Solana)..."
+        placeholder="Search tokens to add..."
         value={query}
         onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
-        className="pl-10"
+        className="pl-10 h-9 text-sm"
         data-testid="input-emissions-search"
       />
       {open && query.length >= 2 && (
@@ -120,12 +181,8 @@ function TokenSearch({ onSelect, excludeIds }: { onSelect: (r: SearchResult) => 
               .map((result) => (
                 <button
                   key={result.id}
-                  className="w-full flex items-center gap-3 p-3 text-left hover-elevate"
-                  onClick={() => {
-                    onSelect(result);
-                    setQuery("");
-                    setOpen(false);
-                  }}
+                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-muted/50 transition-colors"
+                  onClick={() => { onSelect(result); setQuery(""); setOpen(false); }}
                   data-testid={`button-search-result-${result.id}`}
                 >
                   {result.thumb && <img src={result.thumb} alt="" className="h-6 w-6 rounded-full" />}
@@ -146,208 +203,124 @@ function TokenSearch({ onSelect, excludeIds }: { onSelect: (r: SearchResult) => 
   );
 }
 
-
-function SelectedTokenChips({
-  tokens,
-  loadingIds,
-  onRemove,
-}: {
-  tokens: { id: string; name: string; symbol: string; thumb: string }[];
-  loadingIds: string[];
-  onRemove: (id: string) => void;
-}) {
+function UnlockModeTabs({ mode, onChange }: { mode: UnlockMode; onChange: (m: UnlockMode) => void }) {
   return (
-    <div className="flex flex-wrap gap-2">
-      {tokens.map((t, i) => (
-        <Badge key={t.id} variant="outline" className="flex items-center gap-1.5 py-1 px-2">
-          <div className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: TOKEN_COLORS[i % TOKEN_COLORS.length] }} />
-          {t.thumb && <img src={t.thumb} alt="" className="h-4 w-4 rounded-full" />}
-          <span className="text-xs">{t.symbol.toUpperCase()}</span>
-          {loadingIds.includes(t.id) && <Loader2 className="h-3 w-3 animate-spin" />}
-          <button onClick={() => onRemove(t.id)} className="ml-1">
-            <X className="h-3 w-3" />
-          </button>
-        </Badge>
+    <div className="flex border rounded-md overflow-hidden" data-testid="unlock-mode-tabs">
+      {(["total", "cliff", "linear"] as const).map((m) => (
+        <button
+          key={m}
+          onClick={() => onChange(m)}
+          className={`px-3 py-1.5 text-xs font-medium transition-colors ${mode === m ? "bg-primary text-primary-foreground" : "bg-muted/30 text-muted-foreground hover:bg-muted/50"}`}
+          data-testid={`button-unlock-mode-${m}`}
+        >
+          {m === "total" ? "Total Value Unlock" : m === "cliff" ? "Cliff Value Unlock" : "Linear Value Unlock"}
+        </button>
       ))}
     </div>
   );
 }
 
-function CompareEmissionTab({ tokenIds, emissionsMap }: { tokenIds: string[]; emissionsMap: Map<string, EmissionsData> }) {
-  const chartData = useMemo(() => {
-    const allData = tokenIds.map((id) => emissionsMap.get(id)).filter(Boolean) as EmissionsData[];
+function CategoryFilters({ selected, onChange }: { selected: string; onChange: (c: string) => void }) {
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap" data-testid="category-filters">
+      <Filter className="h-4 w-4 text-muted-foreground mr-1" />
+      {CATEGORY_FILTERS.map((cat) => (
+        <button
+          key={cat}
+          onClick={() => onChange(cat)}
+          className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${selected === cat ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:bg-muted/60"}`}
+          data-testid={`button-filter-${cat.toLowerCase().replace(/\s+/g, "-")}`}
+        >
+          {cat}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
+  return (
+    <Card>
+      <CardContent className="flex flex-col items-center justify-center gap-3 p-12 text-center">
+        <Icon className="h-8 w-8 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">{message}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CryptoMarketEmissionsTab({
+  allData,
+  unlockMode,
+}: {
+  allData: EmissionsData[];
+  unlockMode: UnlockMode;
+}) {
+  const barData = useMemo(() => {
     if (allData.length === 0) return [];
 
     const maxMonths = Math.max(...allData.map((d) => d.months.length));
     const refData = allData.reduce((best, d) => d.months.length > best.months.length ? d : best, allData[0]);
 
     return refData.months.map((month, i) => {
-      const row: Record<string, any> = { month };
+      let totalVal = 0;
+      let cliffVal = 0;
+      let linearVal = 0;
+
       for (const d of allData) {
-        const total = d.totalSupplyTimeSeries[i] || 0;
-        const supply = d.token.totalSupply || 1;
-        row[`${d.token.symbol}_pct`] = (total / supply) * 100;
-        row[`${d.token.symbol}_abs`] = total;
+        const price = d.token.currentPrice || 0;
+        for (const a of d.allocations) {
+          if (i >= a.monthlyValues.length) continue;
+          const prev = i > 0 ? a.monthlyValues[i - 1] : 0;
+          const curr = a.monthlyValues[i];
+          const delta = Math.max(curr - prev, 0);
+          const val = delta * price;
+          totalVal += val;
+
+          if (a.vestingType === "cliff" || (a.cliffMonths > 0 && a.vestingType !== "linear")) {
+            cliffVal += val;
+          } else if (a.vestingType === "linear" || a.vestingMonths > 0) {
+            linearVal += val;
+          }
+        }
       }
-      return row;
-    });
-  }, [tokenIds, emissionsMap]);
 
-  const allData = tokenIds.map((id) => emissionsMap.get(id)).filter(Boolean) as EmissionsData[];
+      return { month, total: totalVal, cliff: cliffVal, linear: linearVal };
+    }).filter((_, i) => i > 0);
+  }, [allData]);
 
-  if (allData.length === 0) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center gap-3 p-12 text-center">
-          <TrendingUp className="h-8 w-8 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Add tokens above to compare their emission schedules</p>
-        </CardContent>
-      </Card>
-    );
-  }
+  if (allData.length === 0) return <EmptyState icon={BarChart3} message="Add tokens above to view market-wide emission data" />;
 
-  return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-          <CardTitle className="text-base">Emission Schedule Comparison (% of Total Supply Unlocked)</CardTitle>
-          <Badge variant="outline"><Clock className="h-3 w-3 mr-1" />60-month</Badge>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[400px]" data-testid="chart-compare-emission">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis
-                  dataKey="month" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))"
-                  tickFormatter={(v) => { const [y, m] = v.split("-"); return m === "01" || m === "07" ? `${y}-${m}` : ""; }}
-                />
-                <YAxis
-                  tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))"
-                  tickFormatter={(v) => `${v.toFixed(0)}%`}
-                  domain={[0, 100]}
-                />
-                <Tooltip
-                  contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
-                  formatter={(value: number, name: string) => [`${value.toFixed(1)}%`, name.replace("_pct", "")]}
-                  labelFormatter={(label) => `Month: ${label}`}
-                />
-                <Legend formatter={(v) => v.replace("_pct", "")} />
-                {allData.map((d, i) => (
-                  <Line
-                    key={d.token.coingeckoId}
-                    type="monotone"
-                    dataKey={`${d.token.symbol}_pct`}
-                    stroke={TOKEN_COLORS[i % TOKEN_COLORS.length]}
-                    strokeWidth={2}
-                    dot={false}
-                    name={`${d.token.symbol}_pct`}
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Allocation Breakdown Comparison</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {allData.map((d, i) => (
-              <div key={d.token.coingeckoId}>
-                <div className="flex items-center gap-2 mb-3">
-                  {d.token.image && <img src={d.token.image} alt="" className="h-5 w-5 rounded-full" />}
-                  <span className="font-medium text-sm">{d.token.name} ({d.token.symbol})</span>
-                  <Badge variant={d.confidence === "high" ? "default" : "secondary"} className="text-xs">{d.confidence}</Badge>
-                </div>
-                <div className="space-y-1.5">
-                  {d.allocations.map((a) => (
-                    <div key={a.category} className="flex items-center gap-2 text-sm">
-                      <div className="w-24 truncate text-muted-foreground">{a.category}</div>
-                      <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${a.percentage}%`, backgroundColor: TOKEN_COLORS[i % TOKEN_COLORS.length] }} />
-                      </div>
-                      <div className="w-12 text-right font-medium">{a.percentage.toFixed(1)}%</div>
-                      <Badge variant="outline" className="text-xs">{a.vestingType}</Badge>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function CompareInflationTab({ tokenIds, emissionsMap }: { tokenIds: string[]; emissionsMap: Map<string, EmissionsData> }) {
-  const chartData = useMemo(() => {
-    const allData = tokenIds.map((id) => emissionsMap.get(id)).filter(Boolean) as EmissionsData[];
-    if (allData.length === 0) return [];
-
-    const refData = allData.reduce((best, d) => d.months.length > best.months.length ? d : best, allData[0]);
-    return refData.months.map((month, i) => {
-      const row: Record<string, any> = { month };
-      for (const d of allData) {
-        row[d.token.symbol] = d.inflationRate[i] || 0;
-      }
-      return row;
-    });
-  }, [tokenIds, emissionsMap]);
-
-  const allData = tokenIds.map((id) => emissionsMap.get(id)).filter(Boolean) as EmissionsData[];
-
-  if (allData.length === 0) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center gap-3 p-12 text-center">
-          <TrendingUp className="h-8 w-8 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Add tokens above to compare their inflation rates</p>
-        </CardContent>
-      </Card>
-    );
-  }
+  const dataKey = unlockMode === "total" ? "total" : unlockMode === "cliff" ? "cliff" : "linear";
+  const color = unlockMode === "total" ? "#3b82f6" : unlockMode === "cliff" ? "#ef4444" : "#22c55e";
+  const label = unlockMode === "total" ? "Total Value Unlock" : unlockMode === "cliff" ? "Cliff Value Unlock" : "Linear Value Unlock";
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-        <CardTitle className="text-base">Monthly Inflation Rate Comparison</CardTitle>
-        <Badge variant="outline"><Clock className="h-3 w-3 mr-1" />60-month</Badge>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">{label} — Aggregate Market View</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[400px]" data-testid="chart-compare-inflation">
+        <div className="h-[420px]" data-testid="chart-market-emissions">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
+            <BarChart data={barData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
-                dataKey="month" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))"
+                dataKey="month" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
                 tickFormatter={(v) => { const [y, m] = v.split("-"); return m === "01" || m === "07" ? `${y}-${m}` : ""; }}
+                interval="preserveStartEnd"
               />
               <YAxis
-                tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))"
-                tickFormatter={(v) => `${v.toFixed(1)}%`}
+                tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
+                tickFormatter={(v) => formatCompact(v).replace("$", "")}
               />
               <Tooltip
                 contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
-                formatter={(value: number, name: string) => [`${value.toFixed(2)}%`, name]}
-                labelFormatter={(label) => `Month: ${label}`}
+                formatter={(value: number) => [formatCompact(value), label]}
+                labelFormatter={(l) => `Month: ${l}`}
               />
-              <Legend />
-              {allData.map((d, i) => (
-                <Line
-                  key={d.token.coingeckoId}
-                  type="monotone"
-                  dataKey={d.token.symbol}
-                  stroke={TOKEN_COLORS[i % TOKEN_COLORS.length]}
-                  strokeWidth={2}
-                  dot={false}
-                />
-              ))}
-            </LineChart>
+              <Bar dataKey={dataKey} fill={color} name={label} radius={[2, 2, 0, 0]} />
+            </BarChart>
           </ResponsiveContainer>
         </div>
       </CardContent>
@@ -355,69 +328,419 @@ function CompareInflationTab({ tokenIds, emissionsMap }: { tokenIds: string[]; e
   );
 }
 
-type ScreenerChartMode = "total" | "cliff" | "linear";
-type SortField = "name" | "circulationPct" | "totalUnlock" | "cliffUnlock" | "linearUnlock" | "marketCap";
-type SortDir = "asc" | "desc";
+function CompareEmissionTab({
+  allData,
+  unlockMode,
+  timeframe,
+  percentOf,
+  onTimeframeChange,
+  onPercentOfChange,
+}: {
+  allData: EmissionsData[];
+  unlockMode: UnlockMode;
+  timeframe: TimeframeOption;
+  percentOf: PercentOfOption;
+  onTimeframeChange: (t: TimeframeOption) => void;
+  onPercentOfChange: (p: PercentOfOption) => void;
+}) {
+  const monthLimit = parseInt(timeframe);
 
-function EmissionScreenerTab({ tokenIds, emissionsMap }: { tokenIds: string[]; emissionsMap: Map<string, EmissionsData> }) {
-  const [chartMode, setChartMode] = useState<ScreenerChartMode>("total");
-  const [sortField, setSortField] = useState<SortField>("circulationPct");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const metrics = useMemo(() => {
+    return allData.map(computeTokenMetrics)
+      .sort((a, b) => {
+        if (unlockMode === "cliff") return b.cliffUnlockPct - a.cliffUnlockPct;
+        if (unlockMode === "linear") return b.linearUnlockPct - a.linearUnlockPct;
+        return b.totalUnlockPct - a.totalUnlockPct;
+      });
+  }, [allData, unlockMode]);
 
-  const allData = tokenIds.map((id) => emissionsMap.get(id)).filter(Boolean) as EmissionsData[];
+  const top7 = metrics.slice(0, 7);
 
-  const tokenMetrics = useMemo(() => {
-    return allData.map((d) => {
-      const totalSupply = d.token.totalSupply || 1;
-      const circSupply = d.token.circulatingSupply || 0;
-      const circulationPct = (circSupply / totalSupply) * 100;
-      const lockedPct = 100 - circulationPct;
+  const chartData = useMemo(() => {
+    if (top7.length === 0) return [];
+    const refData = top7.reduce((best, m) => m.data.months.length > best.data.months.length ? m : best, top7[0]);
+    const limit = Math.min(monthLimit, refData.data.months.length);
 
-      let totalCliffUnlock = 0;
-      let totalLinearUnlock = 0;
-      for (const a of d.allocations) {
-        const tokens = a.totalTokens;
-        const tgeTokens = Math.round(tokens * (a.tgePercent || 0) / 100);
-        const remaining = tokens - tgeTokens;
-        if (a.vestingType === "cliff" || (a.cliffMonths > 0 && a.vestingType !== "linear")) {
-          totalCliffUnlock += remaining;
-        } else if (a.vestingType === "linear" || a.vestingMonths > 0) {
-          totalLinearUnlock += remaining;
+    return refData.data.months.slice(0, limit).map((month, i) => {
+      const row: Record<string, any> = { month };
+      for (const m of top7) {
+        const d = m.data;
+        const supply = percentOf === "circulating" ? (d.token.circulatingSupply || 1) : (d.token.totalSupply || 1);
+
+        if (unlockMode === "total") {
+          const total = d.totalSupplyTimeSeries[i] || 0;
+          row[d.token.symbol] = (total / supply) * 100;
+        } else {
+          let sum = 0;
+          for (const a of d.allocations) {
+            if (i >= a.monthlyValues.length) continue;
+            const isCliff = a.vestingType === "cliff" || (a.cliffMonths > 0 && a.vestingType !== "linear");
+            const isLinear = a.vestingType === "linear" || a.vestingMonths > 0;
+            if ((unlockMode === "cliff" && isCliff) || (unlockMode === "linear" && isLinear)) {
+              sum += a.monthlyValues[i] || 0;
+            }
+          }
+          row[d.token.symbol] = (sum / supply) * 100;
         }
       }
+      return row;
+    });
+  }, [top7, monthLimit, percentOf, unlockMode]);
 
-      const cliffUnlockPct = (totalCliffUnlock / totalSupply) * 100;
-      const linearUnlockPct = (totalLinearUnlock / totalSupply) * 100;
-      const totalUnlockPct = cliffUnlockPct + linearUnlockPct;
+  if (allData.length === 0) return <EmptyState icon={TrendingUp} message="Add tokens above to compare emission schedules" />;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span>Timeframe:</span>
+          <div className="flex border rounded-md overflow-hidden">
+            {(["12m", "24m", "36m", "60m"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => onTimeframeChange(t)}
+                className={`px-2 py-1 text-xs ${timeframe === t ? "bg-primary text-primary-foreground" : "bg-muted/30 text-muted-foreground hover:bg-muted/50"}`}
+                data-testid={`button-timeframe-${t}`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span>% of:</span>
+          <div className="flex border rounded-md overflow-hidden">
+            {(["circulating", "total"] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => onPercentOfChange(p)}
+                className={`px-2 py-1 text-xs capitalize ${percentOf === p ? "bg-primary text-primary-foreground" : "bg-muted/30 text-muted-foreground hover:bg-muted/50"}`}
+                data-testid={`button-percentof-${p}`}
+              >
+                {p} Supply
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-4">
+        <div className="w-[340px] shrink-0 space-y-1 max-h-[480px] overflow-auto pr-1">
+          <div className="text-xs font-medium text-muted-foreground mb-2 px-1">
+            {unlockMode === "total" ? "Total" : unlockMode === "cliff" ? "Cliff" : "Linear"} Unlock Ranking
+          </div>
+          {metrics.map((m, i) => {
+            const pct = unlockMode === "cliff" ? m.cliffUnlockPct : unlockMode === "linear" ? m.linearUnlockPct : m.totalUnlockPct;
+            return (
+              <div
+                key={m.data.token.coingeckoId}
+                className="flex items-center gap-2 p-2 rounded-md bg-muted/20 hover:bg-muted/30 transition-colors"
+                data-testid={`list-compare-item-${i}`}
+              >
+                <div className="w-5 text-center text-xs text-muted-foreground font-mono">{i + 1}</div>
+                {m.data.token.image && <img src={m.data.token.image} alt="" className="h-5 w-5 rounded-full shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium truncate">{m.data.token.name}</div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: TOKEN_COLORS[i % TOKEN_COLORS.length] }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-muted-foreground w-10 text-right">{pct.toFixed(1)}%</span>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-xs font-medium">{formatCompact(m.unlockValue)}</div>
+                  <div className="text-[10px] text-muted-foreground">{m.circulationPct.toFixed(0)}% circ</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <Card className="flex-1">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">
+                {unlockMode === "total" ? "Total" : unlockMode === "cliff" ? "Cliff" : "Linear"} Supply Projection (% of {percentOf} supply)
+              </CardTitle>
+              <Badge variant="outline"><Clock className="h-3 w-3 mr-1" />{timeframe}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[400px]" data-testid="chart-compare-emission">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis
+                    dataKey="month" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
+                    tickFormatter={(v) => { const [y, m] = v.split("-"); return m === "01" || m === "07" ? `${y}-${m}` : ""; }}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
+                    tickFormatter={(v) => `${v.toFixed(0)}%`}
+                  />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
+                    formatter={(value: number, name: string) => [`${value.toFixed(2)}%`, name]}
+                    labelFormatter={(l) => `Month: ${l}`}
+                  />
+                  <Legend />
+                  {top7.map((m, i) => (
+                    <Line
+                      key={m.data.token.coingeckoId}
+                      type="monotone"
+                      dataKey={m.data.token.symbol}
+                      stroke={TOKEN_COLORS[i % TOKEN_COLORS.length]}
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function CompareInflationTab({
+  allData,
+}: {
+  allData: EmissionsData[];
+}) {
+  const top7 = useMemo(() => {
+    return allData
+      .map((d) => {
+        const rates = d.inflationRate;
+        const avg12 = rates.slice(0, 12);
+        const currentRate = avg12.length > 0 ? avg12.reduce((s, v) => s + v, 0) / avg12.length : 0;
+        return { data: d, currentRate };
+      })
+      .sort((a, b) => b.currentRate - a.currentRate)
+      .slice(0, 7);
+  }, [allData]);
+
+  const chartData = useMemo(() => {
+    if (top7.length === 0) return [];
+    const refData = top7.reduce((best, m) => m.data.months.length > best.data.months.length ? m : best, top7[0]);
+
+    return refData.data.months.map((month, i) => {
+      const row: Record<string, any> = { month };
+      for (const m of top7) {
+        row[m.data.token.symbol] = m.data.inflationRate[i] || 0;
+      }
+      return row;
+    });
+  }, [top7]);
+
+  const periodMetrics = useMemo(() => {
+    return allData.map((d) => {
+      const rates = d.inflationRate;
+      const avgSlice = (start: number, end: number) => {
+        const slice = rates.slice(start, end);
+        if (slice.length === 0) return 0;
+        const monthlyAvg = slice.reduce((s, v) => s + v, 0) / slice.length;
+        return ((1 + monthlyAvg / 100) ** 12 - 1) * 100;
+      };
 
       return {
-        ...d,
-        circulationPct,
-        lockedPct,
-        totalCliffUnlock,
-        totalLinearUnlock,
-        cliffUnlockPct,
-        linearUnlockPct,
-        totalUnlockPct,
+        coingeckoId: d.token.coingeckoId,
+        symbol: d.token.symbol,
+        name: d.token.name,
+        image: d.token.image,
+        year1: avgSlice(0, 12),
+        year2: avgSlice(12, 24),
+        year3: avgSlice(24, 36),
       };
     });
   }, [allData]);
 
+  if (allData.length === 0) return <EmptyState icon={TrendingUp} message="Add tokens above to compare inflation rates" />;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-4">
+        <div className="w-[280px] shrink-0 space-y-1 max-h-[480px] overflow-auto pr-1">
+          <div className="text-xs font-medium text-muted-foreground mb-2 px-1">Inflation Rate Ranking</div>
+          {top7.map((m, i) => (
+            <div
+              key={m.data.token.coingeckoId}
+              className="flex items-center gap-2 p-2 rounded-md bg-muted/20 hover:bg-muted/30 transition-colors"
+              data-testid={`list-inflation-item-${i}`}
+            >
+              {m.data.token.image && <img src={m.data.token.image} alt="" className="h-5 w-5 rounded-full shrink-0" />}
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-medium truncate">{m.data.token.name}</div>
+                <div className="text-[10px] text-muted-foreground">{m.data.token.symbol}</div>
+              </div>
+              <div className="text-right">
+                <div className={`text-xs font-medium ${m.currentRate > 1 ? "text-destructive" : "text-green-500"}`}>
+                  {m.currentRate.toFixed(2)}%/mo
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <Card className="flex-1">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Monthly Inflation Rate Comparison</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[400px]" data-testid="chart-compare-inflation">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis
+                    dataKey="month" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
+                    tickFormatter={(v) => { const [y, m] = v.split("-"); return m === "01" || m === "07" ? `${y}-${m}` : ""; }}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
+                    tickFormatter={(v) => `${v.toFixed(1)}%`}
+                  />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
+                    formatter={(value: number, name: string) => [`${value.toFixed(3)}%`, name]}
+                    labelFormatter={(l) => `Month: ${l}`}
+                  />
+                  <Legend />
+                  {top7.map((m, i) => (
+                    <Line
+                      key={m.data.token.coingeckoId}
+                      type="monotone"
+                      dataKey={m.data.token.symbol}
+                      stroke={TOKEN_COLORS[i % TOKEN_COLORS.length]}
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Annualized Inflation by Period</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Project</TableHead>
+                  <TableHead className="text-center">Year 1</TableHead>
+                  <TableHead className="text-center">Year 2</TableHead>
+                  <TableHead className="text-center">Year 3</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {periodMetrics.map((m) => (
+                  <TableRow key={m.coingeckoId} data-testid={`row-inflation-${m.coingeckoId}`}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {m.image && <img src={m.image} alt="" className="h-5 w-5 rounded-full" />}
+                        <span className="text-sm font-medium">{m.name}</span>
+                        <span className="text-xs text-muted-foreground">{m.symbol}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className={`text-sm font-medium ${m.year1 > 20 ? "text-destructive" : m.year1 > 10 ? "text-yellow-500" : ""}`}>
+                        {m.year1.toFixed(1)}%
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className={`text-sm font-medium ${m.year2 > 20 ? "text-destructive" : m.year2 > 10 ? "text-yellow-500" : ""}`}>
+                        {m.year2.toFixed(1)}%
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className={`text-sm font-medium ${m.year3 > 20 ? "text-destructive" : m.year3 > 10 ? "text-yellow-500" : ""}`}>
+                        {m.year3.toFixed(1)}%
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        {periodMetrics.map((m, idx) => (
+          <Card key={m.coingeckoId} data-testid={`card-inflation-${m.coingeckoId}`}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                {m.image && <img src={m.image} alt="" className="h-5 w-5 rounded-full" />}
+                <span className="font-medium text-sm truncate">{m.name}</span>
+                <span className="text-xs text-muted-foreground">{m.symbol}</span>
+              </div>
+              <div className="h-[100px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={[
+                    { period: "Y1", value: m.year1 },
+                    { period: "Y2", value: m.year2 },
+                    { period: "Y3", value: m.year3 },
+                  ]}>
+                    <XAxis dataKey="period" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                    <YAxis tick={{ fontSize: 9 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${v.toFixed(0)}%`} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "6px", fontSize: "11px" }}
+                      formatter={(v: number) => [`${v.toFixed(1)}%`, "Inflation"]}
+                    />
+                    <Bar dataKey="value" radius={[3, 3, 0, 0]}>
+                      {[m.year1, m.year2, m.year3].map((val, j) => (
+                        <Cell key={j} fill={val > 20 ? "#ef4444" : val > 10 ? "#eab308" : "#22c55e"} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EmissionScreenerTab({
+  allData,
+  unlockMode,
+}: {
+  allData: EmissionsData[];
+  unlockMode: UnlockMode;
+}) {
+  const [sortField, setSortField] = useState<SortField>("totalUnlock");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  const metrics = useMemo(() => allData.map(computeTokenMetrics), [allData]);
+
   const sortedMetrics = useMemo(() => {
-    return [...tokenMetrics].sort((a, b) => {
+    return [...metrics].sort((a, b) => {
       let va: number | string = 0, vb: number | string = 0;
       switch (sortField) {
-        case "name": va = a.token.name; vb = b.token.name; break;
+        case "name": va = a.data.token.name; vb = b.data.token.name; break;
         case "circulationPct": va = a.circulationPct; vb = b.circulationPct; break;
         case "totalUnlock": va = a.totalUnlockPct; vb = b.totalUnlockPct; break;
         case "cliffUnlock": va = a.cliffUnlockPct; vb = b.cliffUnlockPct; break;
         case "linearUnlock": va = a.linearUnlockPct; vb = b.linearUnlockPct; break;
-        case "marketCap": va = a.token.marketCap; vb = b.token.marketCap; break;
+        case "marketCap": va = a.data.token.marketCap; vb = b.data.token.marketCap; break;
+        case "unlockValue": va = a.unlockValue; vb = b.unlockValue; break;
       }
       if (typeof va === "string") return sortDir === "asc" ? va.localeCompare(vb as string) : (vb as string).localeCompare(va);
       return sortDir === "asc" ? (va as number) - (vb as number) : (vb as number) - (va as number);
     });
-  }, [tokenMetrics, sortField, sortDir]);
+  }, [metrics, sortField, sortDir]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -430,7 +753,7 @@ function EmissionScreenerTab({ tokenIds, emissionsMap }: { tokenIds: string[]; e
 
   const barData = useMemo(() => {
     return sortedMetrics.map((m) => ({
-      name: m.token.symbol,
+      name: m.data.token.symbol,
       total: m.totalUnlockPct,
       cliff: m.cliffUnlockPct,
       linear: m.linearUnlockPct,
@@ -438,16 +761,7 @@ function EmissionScreenerTab({ tokenIds, emissionsMap }: { tokenIds: string[]; e
     }));
   }, [sortedMetrics]);
 
-  if (allData.length === 0) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center gap-3 p-12 text-center">
-          <BarChart3 className="h-8 w-8 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Add tokens above to screen their emission profiles</p>
-        </CardContent>
-      </Card>
-    );
-  }
+  if (allData.length === 0) return <EmptyState icon={BarChart3} message="Add tokens above to screen emission profiles" />;
 
   const SortHeader = ({ field, label }: { field: SortField; label: string }) => (
     <TableHead
@@ -466,53 +780,38 @@ function EmissionScreenerTab({ tokenIds, emissionsMap }: { tokenIds: string[]; e
     <div className="space-y-4">
       <Card>
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <CardTitle className="text-base">Value Unlock Overview</CardTitle>
-            <div className="flex gap-1">
-              {(["total", "cliff", "linear"] as const).map((mode) => (
-                <Button
-                  key={mode}
-                  variant={chartMode === mode ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setChartMode(mode)}
-                  data-testid={`button-chart-mode-${mode}`}
-                >
-                  {mode === "total" ? "Total Unlock" : mode === "cliff" ? "Cliff Unlock" : "Linear Unlock"}
-                </Button>
-              ))}
-            </div>
-          </div>
+          <CardTitle className="text-base">
+            {unlockMode === "total" ? "Total" : unlockMode === "cliff" ? "Cliff" : "Linear"} Value Unlock Overview
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[300px]" data-testid="chart-screener">
+          <div className="h-[320px]" data-testid="chart-screener">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={barData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis
-                  type="number" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))"
-                  tickFormatter={(v) => `${v.toFixed(0)}%`}
-                  domain={[0, 100]}
+                  type="number" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
+                  tickFormatter={(v) => `${v.toFixed(0)}%`} domain={[0, 100]}
                 />
                 <YAxis
-                  type="category" dataKey="name" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))"
-                  width={60}
+                  type="category" dataKey="name" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={55}
                 />
                 <Tooltip
                   contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
                   formatter={(value: number, name: string) => [`${value.toFixed(1)}%`, name]}
                 />
                 <Legend />
-                {chartMode === "total" && (
+                {unlockMode === "total" && (
                   <>
                     <Bar dataKey="circulating" stackId="a" fill="#22c55e" name="Circulating" />
                     <Bar dataKey="cliff" stackId="a" fill="#ef4444" name="Cliff Unlock" />
                     <Bar dataKey="linear" stackId="a" fill="#3b82f6" name="Linear Unlock" />
                   </>
                 )}
-                {chartMode === "cliff" && (
+                {unlockMode === "cliff" && (
                   <Bar dataKey="cliff" fill="#ef4444" name="Cliff Unlock %" />
                 )}
-                {chartMode === "linear" && (
+                {unlockMode === "linear" && (
                   <Bar dataKey="linear" fill="#3b82f6" name="Linear Unlock %" />
                 )}
               </BarChart>
@@ -537,28 +836,29 @@ function EmissionScreenerTab({ tokenIds, emissionsMap }: { tokenIds: string[]; e
                   <SortHeader field="cliffUnlock" label="Cliff Unlock %" />
                   <SortHeader field="linearUnlock" label="Linear Unlock %" />
                   <SortHeader field="totalUnlock" label="Total Pending %" />
+                  <SortHeader field="unlockValue" label="Unlock Value" />
                   <TableHead>Confidence</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sortedMetrics.map((m, i) => (
-                  <TableRow key={m.token.coingeckoId} data-testid={`row-screener-${i}`}>
+                  <TableRow key={m.data.token.coingeckoId} data-testid={`row-screener-${i}`}>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {m.token.image && <img src={m.token.image} alt="" className="h-5 w-5 rounded-full" />}
+                        {m.data.token.image && <img src={m.data.token.image} alt="" className="h-5 w-5 rounded-full" />}
                         <div>
-                          <div className="font-medium text-sm">{m.token.name}</div>
-                          <div className="text-xs text-muted-foreground">{m.token.symbol}</div>
+                          <div className="font-medium text-sm">{m.data.token.name}</div>
+                          <div className="text-xs text-muted-foreground">{m.data.token.symbol}</div>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right">{formatCompact(m.token.marketCap)}</TableCell>
+                    <TableCell className="text-right">{formatCompact(m.data.token.marketCap)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
                         <div className="w-16 h-2 rounded-full bg-muted overflow-hidden">
                           <div className="h-full rounded-full bg-green-500" style={{ width: `${Math.min(m.circulationPct, 100)}%` }} />
                         </div>
-                        <span className="font-medium">{m.circulationPct.toFixed(1)}%</span>
+                        <span className="font-medium text-sm">{m.circulationPct.toFixed(1)}%</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
@@ -589,9 +889,10 @@ function EmissionScreenerTab({ tokenIds, emissionsMap }: { tokenIds: string[]; e
                         {m.totalUnlockPct.toFixed(1)}%
                       </span>
                     </TableCell>
+                    <TableCell className="text-right font-medium">{formatCompact(m.unlockValue)}</TableCell>
                     <TableCell>
-                      <Badge variant={m.confidence === "high" ? "default" : m.confidence === "medium" ? "secondary" : "outline"} className="text-xs">
-                        {m.confidence}
+                      <Badge variant={m.data.confidence === "high" ? "default" : m.data.confidence === "medium" ? "secondary" : "outline"} className="text-xs">
+                        {m.data.confidence}
                       </Badge>
                     </TableCell>
                   </TableRow>
@@ -626,7 +927,11 @@ interface CryptoProject {
 
 export default function CryptoEmissions() {
   const [selectedTokens, setSelectedTokens] = useState<{ id: string; name: string; symbol: string; thumb: string }[]>([]);
-  const [activeTab, setActiveTab] = useState("emission");
+  const [activeTab, setActiveTab] = useState("market");
+  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [unlockMode, setUnlockMode] = useState<UnlockMode>("total");
+  const [timeframe, setTimeframe] = useState<TimeframeOption>("60m");
+  const [percentOf, setPercentOf] = useState<PercentOfOption>("total");
   const [initialized, setInitialized] = useState(false);
 
   const watchlistQuery = useQuery<CryptoProject[]>({
@@ -673,61 +978,101 @@ export default function CryptoEmissions() {
     return map;
   }, [selectedTokens, tokenQueries]);
 
+  const filteredData = useMemo(() => {
+    const all = Array.from(emissionsMap.values());
+    if (categoryFilter === "All") return all;
+    return all.filter((d) => d.token.category === categoryFilter);
+  }, [emissionsMap, categoryFilter]);
+
   const loadingIds = useMemo(() => {
     return selectedTokens.filter((_, i) => tokenQueries[i]?.isLoading).map((t) => t.id);
   }, [selectedTokens, tokenQueries]);
 
-  const handleAddToken = (result: SearchResult) => {
+  const handleAddToken = useCallback((result: SearchResult) => {
     if (selectedTokens.find((t) => t.id === result.id)) return;
     setSelectedTokens((prev) => [...prev, { id: result.id, name: result.name, symbol: result.symbol, thumb: result.thumb }]);
-  };
+  }, [selectedTokens]);
 
-  const handleRemoveToken = (id: string) => {
+  const handleRemoveToken = useCallback((id: string) => {
     setSelectedTokens((prev) => prev.filter((t) => t.id !== id));
-  };
+  }, []);
+
+  const showUnlockTabs = activeTab !== "inflation";
 
   return (
-    <div className="flex-1 overflow-auto p-4 md:p-6 space-y-4">
+    <div className="flex-1 overflow-auto p-4 md:p-6 space-y-3">
       <div>
         <h1 className="text-2xl font-bold" data-testid="text-emissions-title">Crypto Market Emissions</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Compare token emission schedules, inflation rates, and screen for unlock pressure across projects
+          Analyze token emission schedules, inflation rates, and screen for unlock pressure across projects
         </p>
       </div>
 
-      <Card>
-        <CardContent className="p-4 space-y-3">
-          <TokenSearch onSelect={handleAddToken} excludeIds={selectedTokens.map((t) => t.id)} />
-          {selectedTokens.length > 0 && (
-            <SelectedTokenChips tokens={selectedTokens} loadingIds={loadingIds} onRemove={handleRemoveToken} />
-          )}
-          {loadingIds.length > 0 && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Analyzing emissions for {loadingIds.length} token{loadingIds.length > 1 ? "s" : ""}...
-              <span className="text-xs">(fetching supply data and researching allocations)</span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList data-testid="tabs-emissions">
+        <TabsList className="w-full justify-start" data-testid="tabs-emissions-main">
+          <TabsTrigger value="market" data-testid="tab-market-emissions">Crypto Market Emissions</TabsTrigger>
           <TabsTrigger value="emission" data-testid="tab-compare-emission">Compare Emission</TabsTrigger>
           <TabsTrigger value="inflation" data-testid="tab-compare-inflation">Compare Inflation</TabsTrigger>
           <TabsTrigger value="screener" data-testid="tab-screener">Emission Screener</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="emission" className="mt-4">
-          <CompareEmissionTab tokenIds={selectedTokens.map((t) => t.id)} emissionsMap={emissionsMap} />
+        <div className="mt-3 space-y-2">
+          <CategoryFilters selected={categoryFilter} onChange={setCategoryFilter} />
+
+          <div className="flex items-center gap-3 flex-wrap">
+            {showUnlockTabs && (
+              <UnlockModeTabs mode={unlockMode} onChange={setUnlockMode} />
+            )}
+            <div className="flex-1 min-w-[200px]">
+              <TokenSearch onSelect={handleAddToken} excludeIds={selectedTokens.map((t) => t.id)} />
+            </div>
+          </div>
+
+          {selectedTokens.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {selectedTokens.map((t, i) => (
+                <Badge key={t.id} variant="outline" className="flex items-center gap-1 py-0.5 px-2 text-xs">
+                  <div className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: TOKEN_COLORS[i % TOKEN_COLORS.length] }} />
+                  {t.thumb && <img src={t.thumb} alt="" className="h-3.5 w-3.5 rounded-full" />}
+                  <span>{t.symbol.toUpperCase()}</span>
+                  {loadingIds.includes(t.id) && <Loader2 className="h-3 w-3 animate-spin" />}
+                  <button onClick={() => handleRemoveToken(t.id)} className="ml-0.5 hover:text-destructive">
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          {loadingIds.length > 0 && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Analyzing emissions for {loadingIds.length} token{loadingIds.length > 1 ? "s" : ""}...
+            </div>
+          )}
+        </div>
+
+        <TabsContent value="market" className="mt-3">
+          <CryptoMarketEmissionsTab allData={filteredData} unlockMode={unlockMode} />
         </TabsContent>
 
-        <TabsContent value="inflation" className="mt-4">
-          <CompareInflationTab tokenIds={selectedTokens.map((t) => t.id)} emissionsMap={emissionsMap} />
+        <TabsContent value="emission" className="mt-3">
+          <CompareEmissionTab
+            allData={filteredData}
+            unlockMode={unlockMode}
+            timeframe={timeframe}
+            percentOf={percentOf}
+            onTimeframeChange={setTimeframe}
+            onPercentOfChange={setPercentOf}
+          />
         </TabsContent>
 
-        <TabsContent value="screener" className="mt-4">
-          <EmissionScreenerTab tokenIds={selectedTokens.map((t) => t.id)} emissionsMap={emissionsMap} />
+        <TabsContent value="inflation" className="mt-3">
+          <CompareInflationTab allData={filteredData} />
+        </TabsContent>
+
+        <TabsContent value="screener" className="mt-3">
+          <EmissionScreenerTab allData={filteredData} unlockMode={unlockMode} />
         </TabsContent>
       </Tabs>
     </div>

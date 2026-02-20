@@ -28,6 +28,7 @@ import {
   INCENTIVE_TEMPLATES, getCoinContractAddress, estimateBurnFromSupply,
 } from "./crypto-data";
 import { getOnChainTokenData } from "./thirdweb-data";
+import { getTokenEmissions, TOKEN_CATEGORIES, getTokenCategory } from "./emissions-service";
 
 type Params = Record<string, string>;
 
@@ -2080,177 +2081,14 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(updated);
   });
 
-  const emissionsCache = new Map<string, { data: any; timestamp: number }>();
-  const EMISSIONS_CACHE_TTL = 30 * 60 * 1000;
-
   app.get("/api/crypto/emissions/:coingeckoId", isAuthenticated as any, async (req: Request<Params>, res: Response) => {
     try {
       const { coingeckoId } = req.params;
       if (!coingeckoId) return res.status(400).json({ message: "Missing coingeckoId" });
 
-      const cached = emissionsCache.get(coingeckoId);
-      if (cached && Date.now() - cached.timestamp < EMISSIONS_CACHE_TTL) {
-        return res.json(cached.data);
-      }
+      const result = await getTokenEmissions(coingeckoId);
+      if (!result) return res.status(404).json({ message: "Could not retrieve emission data for this token" });
 
-      const marketData = await getCoinMarketData(coingeckoId);
-      if (!marketData) return res.status(404).json({ message: "Token not found on CoinGecko" });
-
-      const totalSupply = marketData.max_supply || marketData.total_supply || 0;
-      const circulatingSupply = marketData.circulating_supply || 0;
-      const tokenName = marketData.name;
-      const tokenSymbol = (marketData.symbol || "").toUpperCase();
-
-      const { researchAllocationsWithAI } = await import("./crypto-data");
-      const aiResult = await researchAllocationsWithAI(tokenName, tokenSymbol, totalSupply);
-
-      if (!aiResult || !aiResult.allocations || aiResult.allocations.length === 0) {
-        return res.status(404).json({ message: "Could not retrieve allocation data for this token" });
-      }
-
-      const MONTHS = 60;
-      const now = new Date();
-      const tgeGuess = new Date(marketData.ath_date || now);
-      tgeGuess.setDate(1);
-      if (tgeGuess > now) tgeGuess.setFullYear(now.getFullYear() - 2);
-
-      const timeSeriesMonths: string[] = [];
-      for (let m = 0; m < MONTHS; m++) {
-        const d = new Date(tgeGuess);
-        d.setMonth(d.getMonth() + m);
-        timeSeriesMonths.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
-      }
-
-      interface AllocationTimeSeries {
-        category: string;
-        standardGroup: string;
-        percentage: number;
-        totalTokens: number;
-        vestingType: string;
-        cliffMonths: number;
-        vestingMonths: number;
-        tgePercent: number;
-        monthlyValues: number[];
-      }
-
-      const allocations: AllocationTimeSeries[] = aiResult.allocations.map((a) => {
-        const pct = a.percentage || 0;
-        const tokens = totalSupply ? Math.round(totalSupply * pct / 100) : 0;
-        const cliffM = a.cliffMonths || 0;
-        const vestM = a.vestingMonths || 0;
-        const tgePct = a.tgePercent || 0;
-        const vType = a.vestingType || "linear";
-
-        const tgeTokens = Math.round(tokens * tgePct / 100);
-        const remainingTokens = tokens - tgeTokens;
-
-        const monthlyValues: number[] = [];
-
-        for (let m = 0; m < MONTHS; m++) {
-          if (m === 0) {
-            monthlyValues.push(tgeTokens);
-          } else if (vType === "immediate" || vestM === 0) {
-            monthlyValues.push(m === 0 ? tokens : tokens);
-          } else if (vType === "cliff") {
-            if (m < cliffM) {
-              monthlyValues.push(tgeTokens);
-            } else {
-              monthlyValues.push(tokens);
-            }
-          } else {
-            if (m < cliffM) {
-              monthlyValues.push(tgeTokens);
-            } else {
-              const vestingElapsed = m - cliffM;
-              const effectiveVestMonths = Math.max(vestM - cliffM, 1);
-              const vestedFraction = Math.min(vestingElapsed / effectiveVestMonths, 1);
-              monthlyValues.push(Math.round(tgeTokens + remainingTokens * vestedFraction));
-            }
-          }
-        }
-
-        if (vType === "immediate" || vestM === 0) {
-          for (let m = 0; m < MONTHS; m++) {
-            monthlyValues[m] = tokens;
-          }
-        }
-
-        return {
-          category: a.category,
-          standardGroup: a.standardGroup || "community",
-          percentage: pct,
-          totalTokens: tokens,
-          vestingType: vType,
-          cliffMonths: cliffM,
-          vestingMonths: vestM,
-          tgePercent: tgePct,
-          monthlyValues,
-        };
-      });
-
-      const totalTimeSeries: number[] = [];
-      for (let m = 0; m < MONTHS; m++) {
-        totalTimeSeries.push(allocations.reduce((sum, a) => sum + a.monthlyValues[m], 0));
-      }
-
-      const inflationRate: number[] = [];
-      for (let m = 0; m < MONTHS; m++) {
-        if (m === 0 || totalTimeSeries[m - 1] === 0) {
-          inflationRate.push(0);
-        } else {
-          const newTokens = totalTimeSeries[m] - totalTimeSeries[m - 1];
-          inflationRate.push((newTokens / totalTimeSeries[m - 1]) * 100);
-        }
-      }
-
-      const cliffEvents: { month: string; label: string; amount: number }[] = [];
-      for (const a of allocations) {
-        if (a.cliffMonths > 0 && a.cliffMonths < MONTHS) {
-          const prevVal = a.monthlyValues[a.cliffMonths - 1] || 0;
-          const postVal = a.monthlyValues[a.cliffMonths] || 0;
-          const unlocked = postVal - prevVal;
-          if (unlocked > 0) {
-            cliffEvents.push({
-              month: timeSeriesMonths[a.cliffMonths] || "",
-              label: `${a.category} Cliff Unlock`,
-              amount: unlocked,
-            });
-          }
-        }
-      }
-
-      const result = {
-        token: {
-          name: tokenName,
-          symbol: tokenSymbol,
-          coingeckoId,
-          totalSupply,
-          circulatingSupply,
-          maxSupply: marketData.max_supply,
-          currentPrice: marketData.current_price,
-          marketCap: marketData.market_cap,
-          image: marketData.image,
-        },
-        months: timeSeriesMonths,
-        allocations: allocations.map((a) => ({
-          category: a.category,
-          standardGroup: a.standardGroup,
-          percentage: a.percentage,
-          totalTokens: a.totalTokens,
-          vestingType: a.vestingType,
-          cliffMonths: a.cliffMonths,
-          vestingMonths: a.vestingMonths,
-          tgePercent: a.tgePercent,
-          monthlyValues: a.monthlyValues,
-        })),
-        totalSupplyTimeSeries: totalTimeSeries,
-        inflationRate,
-        cliffEvents,
-        confidence: aiResult.confidence,
-        notes: aiResult.notes,
-      };
-
-      emissionsCache.set(coingeckoId, { data: result, timestamp: Date.now() });
       res.json(result);
     } catch (err: any) {
       console.error("Emissions endpoint error:", err);
@@ -2259,6 +2097,10 @@ export async function registerRoutes(server: Server, app: Express) {
       }
       res.status(500).json({ message: err.message || "Internal error" });
     }
+  });
+
+  app.get("/api/crypto/emissions-categories", isAuthenticated as any, (_req: Request, res: Response) => {
+    res.json(TOKEN_CATEGORIES);
   });
 
 }
