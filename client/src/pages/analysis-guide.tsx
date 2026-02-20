@@ -374,6 +374,29 @@ const sections = [
     tips: "Deflationary tokens (net burns exceeding minting) can appreciate in value purely from supply reduction. However, verify that burn mechanisms are sustainable and not just temporary. Staking lockups reduce effective circulating supply but can create selling pressure when unlock periods end.",
     cascadeInfo: "Projected cumulative supply feeds into Crypto Valuation for dilution-adjusted implied token price.",
   },
+  {
+    id: "crypto-emissions",
+    title: "Crypto Market Emissions",
+    icon: TrendingDown,
+    path: "/crypto/emissions",
+    purpose: "Market-wide token unlock and emissions analysis tool. Compare vesting schedules, inflation rates, and unlock pressure across multiple crypto projects side by side. Auto-populates from your watchlist plus curated default emitters.",
+    keyMetrics: ["Total/Cliff/Linear Unlock Value ($)", "Annualized Inflation Rate", "Unlock as % of Market Cap", "Unlock as % of Circulating Supply", "6-Month Forward Emission Schedule"],
+    howToUse: [
+      "The page loads automatically with tokens from your watchlist plus curated default emitters (major protocols like ETH, SOL, ARB, OP, etc.).",
+      "Use the search bar to add any additional token by name or ticker. Up to 30 tokens can be analyzed simultaneously.",
+      "Four analysis tabs provide different perspectives on emissions:",
+      "  -- Crypto Market Emissions: Aggregate column bar chart showing total unlock value across all tracked tokens over time. Toggle between Total, Cliff, and Linear unlock modes. Switch aggregation between weekly and monthly.",
+      "  -- Compare Emission: Ranked list of projects by upcoming unlock value with a multi-line chart. Filter by timeframe (30d, 90d, 6m, 1y) and view unlock as % of market cap or circulating supply.",
+      "  -- Compare Inflation: Ranked list by annualized inflation rate with period comparison table and project summary cards. Shows which projects have the highest dilution pressure.",
+      "  -- Emission Screener: Horizontal bar chart and sortable table for screening all tokens by unlock metrics. Quick way to identify which projects have the most significant upcoming unlocks.",
+      "Use category filters (DeFi, L1, L2, Perpetuals, RWA, Gaming, AI, Meme) to focus on specific sectors.",
+      "Toggle between Total, Cliff, and Linear unlock sub-tabs to isolate different unlock types.",
+      "Vesting schedule data is AI-researched via OpenAI and cached permanently in the database. Only price and market cap data refreshes from CoinGecko (10-minute cache).",
+      "If some tokens show a warning about missing data, it means CoinGecko rate limits were hit or the token has no available emission data.",
+    ],
+    tips: "Large upcoming cliff unlocks (one-time releases) create more concentrated selling pressure than linear vesting. Compare unlock value as a % of daily trading volume to gauge actual market impact. Projects with inflation rates above 15-20% annually face significant headwinds to token price appreciation. Use the Emission Screener to quickly identify the highest-risk tokens in your watchlist.",
+    cascadeInfo: null,
+  },
 ];
 
 const workflowSteps = [
@@ -390,6 +413,7 @@ const workflowSteps = [
   { step: 11, title: "Forecast Protocol Revenue", page: "Revenue Forecast", description: "Project fees and revenue 3-5 years forward with emission tracking and net value accrual." },
   { step: 12, title: "Model Token Flows", page: "Token Flow Model", description: "Track minting, unlocks, burns, buybacks, and staking lockups to project supply trajectory." },
   { step: 13, title: "Value the Token", page: "Crypto Valuation", description: "Run Discounted Fee Revenue, Comparable Analysis, and Scenario Analysis to determine implied token price." },
+  { step: 14, title: "Analyze Market Emissions", page: "Crypto Market Emissions", description: "Compare token unlock schedules, inflation rates, and emission pressure across your watchlist and the broader market." },
 ];
 
 const requiredInputs = [
@@ -483,6 +507,13 @@ const requiredInputs = [
     critical: ["Revenue data from upstream or manual entry"],
     optional: ["Comparable protocol peers", "Scenario multipliers"],
     downstream: "Final crypto output: implied token price across methods and scenarios.",
+  },
+  {
+    page: "Crypto Market Emissions",
+    path: "/crypto/emissions",
+    critical: [],
+    optional: ["Add extra tokens beyond watchlist defaults", "Category filters for sector focus"],
+    downstream: "Standalone analysis tool. Auto-populates from watchlist. Emissions data is cached in the database for future API dataset offerings.",
   },
 ];
 
@@ -1196,6 +1227,35 @@ const featureGuides = [
           "Click 'Save' to persist the governance information.",
         ],
         notes: "Governance type affects how protocol decisions are made and how treasury funds are allocated. DAOs with on-chain voting are generally considered more decentralized than multi-sig or foundation governance.",
+      },
+    ],
+  },
+  {
+    id: "crypto-emissions",
+    title: "Crypto Market Emissions",
+    icon: TrendingDown,
+    features: [
+      {
+        name: "Analyze Token Emissions Across Projects",
+        steps: [
+          "Navigate to Crypto Market Emissions from the sidebar.",
+          "The page auto-loads with tokens from your watchlist plus curated default emitters.",
+          "Use the search bar to add any additional token by name or ticker (up to 30 tokens).",
+          "Use category filters (DeFi, L1, L2, Perpetuals, RWA, Gaming, AI, Meme) to focus on specific sectors.",
+          "Toggle between Total, Cliff, and Linear unlock sub-tabs to isolate unlock types.",
+        ],
+        notes: "Vesting schedules are AI-researched via OpenAI and cached permanently in the database. Only price and market cap data refreshes from CoinGecko every 10 minutes. The batch endpoint processes up to 30 tokens in a single request.",
+      },
+      {
+        name: "Compare Emissions and Inflation",
+        steps: [
+          "Click 'Compare Emission' tab to see projects ranked by upcoming unlock value.",
+          "Filter by timeframe (30d, 90d, 6m, 1y) and view unlock as % of market cap or circulating supply.",
+          "Click 'Compare Inflation' tab to see projects ranked by annualized inflation rate.",
+          "Review the period comparison table and project summary cards for dilution pressure insights.",
+          "Click 'Emission Screener' tab for a sortable table and horizontal bar chart to screen all tokens by unlock metrics.",
+        ],
+        notes: "Projects with inflation rates above 15-20% annually face significant headwinds to token price appreciation. Cliff unlocks create more concentrated selling pressure than linear vesting.",
       },
     ],
   },
