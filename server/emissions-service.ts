@@ -1,4 +1,7 @@
 import { getCoinMarketData, researchAllocationsWithAI } from "./crypto-data";
+import { db } from "./db";
+import { emissionsCache as emissionsCacheTable } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 export interface EmissionAllocation {
   category: string;
@@ -71,13 +74,24 @@ export interface InflationPeriodMetrics {
   currentInflation: number;
 }
 
-const emissionsCache = new Map<string, { data: EmissionsData; timestamp: number }>();
-const EMISSIONS_CACHE_TTL = 30 * 60 * 1000;
+const memCache = new Map<string, { data: EmissionsData; timestamp: number }>();
+const MEM_CACHE_TTL = 30 * 60 * 1000;
+const DB_CACHE_TTL = 24 * 60 * 60 * 1000;
 
 export async function getTokenEmissions(coingeckoId: string): Promise<EmissionsData | null> {
-  const cached = emissionsCache.get(coingeckoId);
-  if (cached && Date.now() - cached.timestamp < EMISSIONS_CACHE_TTL) {
-    return cached.data;
+  const mem = memCache.get(coingeckoId);
+  if (mem && Date.now() - mem.timestamp < MEM_CACHE_TTL) {
+    return mem.data;
+  }
+
+  try {
+    const [dbRow] = await db.select().from(emissionsCacheTable).where(eq(emissionsCacheTable.coingeckoId, coingeckoId)).limit(1);
+    if (dbRow && dbRow.updatedAt && Date.now() - dbRow.updatedAt.getTime() < DB_CACHE_TTL) {
+      const data = dbRow.data as EmissionsData;
+      memCache.set(coingeckoId, { data, timestamp: Date.now() });
+      return data;
+    }
+  } catch (e) {
   }
 
   const marketData = await getCoinMarketData(coingeckoId);
@@ -215,7 +229,26 @@ export async function getTokenEmissions(coingeckoId: string): Promise<EmissionsD
     notes: aiResult.notes,
   };
 
-  emissionsCache.set(coingeckoId, { data: result, timestamp: Date.now() });
+  memCache.set(coingeckoId, { data: result, timestamp: Date.now() });
+
+  try {
+    await db.insert(emissionsCacheTable)
+      .values({
+        coingeckoId,
+        category: getTokenCategory(coingeckoId) || null,
+        data: result,
+      })
+      .onConflictDoUpdate({
+        target: emissionsCacheTable.coingeckoId,
+        set: {
+          category: getTokenCategory(coingeckoId) || null,
+          data: result,
+          updatedAt: new Date(),
+        },
+      });
+  } catch (e) {
+  }
+
   return result;
 }
 
@@ -323,8 +356,8 @@ export function computeInflationPeriods(emissions: EmissionsData[]): InflationPe
 }
 
 export function getCachedEmissions(coingeckoId: string): EmissionsData | null {
-  const cached = emissionsCache.get(coingeckoId);
-  if (cached && Date.now() - cached.timestamp < EMISSIONS_CACHE_TTL) {
+  const cached = memCache.get(coingeckoId);
+  if (cached && Date.now() - cached.timestamp < MEM_CACHE_TTL) {
     return cached.data;
   }
   return null;

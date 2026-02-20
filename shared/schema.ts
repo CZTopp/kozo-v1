@@ -494,6 +494,16 @@ export const insertTokenFlowEntrySchema = createInsertSchema(tokenFlowEntries).o
 export const insertTokenAllocationSchema = createInsertSchema(tokenAllocations).omit({ id: true });
 export const insertFundraisingRoundSchema = createInsertSchema(fundraisingRounds).omit({ id: true });
 
+export const emissionsCache = pgTable("emissions_cache", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  coingeckoId: text("coingecko_id").notNull().unique(),
+  category: text("category"),
+  data: jsonb("data").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertEmissionsCacheSchema = createInsertSchema(emissionsCache).omit({ id: true, updatedAt: true });
+
 export type FinancialModel = typeof financialModels.$inferSelect;
 export type InsertFinancialModel = z.infer<typeof insertFinancialModelSchema>;
 export type RevenueLineItem = typeof revenueLineItems.$inferSelect;
@@ -544,3 +554,5 @@ export type TokenAllocation = typeof tokenAllocations.$inferSelect;
 export type InsertTokenAllocation = z.infer<typeof insertTokenAllocationSchema>;
 export type FundraisingRound = typeof fundraisingRounds.$inferSelect;
 export type InsertFundraisingRound = z.infer<typeof insertFundraisingRoundSchema>;
+export type EmissionsCache = typeof emissionsCache.$inferSelect;
+export type InsertEmissionsCache = z.infer<typeof insertEmissionsCacheSchema>;

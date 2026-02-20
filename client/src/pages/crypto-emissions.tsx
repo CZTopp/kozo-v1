@@ -271,7 +271,16 @@ function CryptoMarketEmissionsTab({
 
     const refData = allData.reduce((best, d) => d.months.length > best.months.length ? d : best, allData[0]);
 
-    return refData.months.map((month, i) => {
+    const now = new Date();
+    const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    let startIdx = refData.months.indexOf(currentMonthStr);
+    if (startIdx === -1) {
+      startIdx = refData.months.findIndex((m) => m >= currentMonthStr);
+      if (startIdx === -1) startIdx = Math.max(refData.months.length - monthLimit, 0);
+    }
+
+    const rows: { month: string; total: number; cliff: number; linear: number }[] = [];
+    for (let i = startIdx; i < Math.min(startIdx + monthLimit, refData.months.length); i++) {
       let totalVal = 0;
       let cliffVal = 0;
       let linearVal = 0;
@@ -294,8 +303,9 @@ function CryptoMarketEmissionsTab({
         }
       }
 
-      return { month, total: totalVal, cliff: cliffVal, linear: linearVal };
-    }).filter((_, i) => i > 0).slice(0, monthLimit);
+      rows.push({ month: refData.months[i], total: totalVal, cliff: cliffVal, linear: linearVal });
+    }
+    return rows;
   }, [allData, monthLimit]);
 
   const barData = useMemo(() => {
