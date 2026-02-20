@@ -1,7 +1,7 @@
-import { getCoinMarketData, researchAllocationsWithAI } from "./crypto-data";
+import { getCoinMarketData, getMultipleCoinMarketData, researchAllocationsWithAI } from "./crypto-data";
 import { db } from "./db";
 import { emissionsCache as emissionsCacheTable } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 export interface EmissionAllocation {
   category: string;
@@ -374,6 +374,234 @@ export function getCachedEmissions(coingeckoId: string): EmissionsData | null {
     return cached.data;
   }
   return null;
+}
+
+export async function getBatchTokenEmissions(
+  coingeckoIds: string[],
+  onProgress?: (id: string, data: EmissionsData | null) => void,
+): Promise<Map<string, EmissionsData>> {
+  const result = new Map<string, EmissionsData>();
+  const needsDbLookup: string[] = [];
+  const needsFreshFetch: string[] = [];
+
+  for (const id of coingeckoIds) {
+    const mem = memCache.get(id);
+    if (mem && Date.now() - mem.timestamp < MEM_CACHE_TTL) {
+      result.set(id, mem.data);
+    } else {
+      needsDbLookup.push(id);
+    }
+  }
+
+  if (needsDbLookup.length > 0) {
+    try {
+      const dbRows = await db.select().from(emissionsCacheTable)
+        .where(inArray(emissionsCacheTable.coingeckoId, needsDbLookup));
+      for (const row of dbRows) {
+        const data = row.data as EmissionsData;
+        result.set(row.coingeckoId, data);
+        memCache.set(row.coingeckoId, { data, timestamp: Date.now() });
+      }
+    } catch (e) {
+    }
+    for (const id of needsDbLookup) {
+      if (!result.has(id)) needsFreshFetch.push(id);
+    }
+  }
+
+  const allIdsNeedingMarketRefresh = [...needsDbLookup.filter(id => result.has(id)), ...needsFreshFetch];
+  if (allIdsNeedingMarketRefresh.length > 0 || result.size > 0) {
+    try {
+      const allIdsForPrices = coingeckoIds.filter(id => result.has(id) || needsFreshFetch.includes(id));
+      if (allIdsForPrices.length > 0) {
+        const marketDataArr = await getMultipleCoinMarketData(allIdsForPrices);
+        const marketMap = new Map(marketDataArr.map(m => [m.id, m]));
+
+        for (const id of Array.from(result.keys())) {
+          const data = result.get(id)!;
+          const md = marketMap.get(id);
+          if (md) {
+            data.token.currentPrice = md.current_price;
+            data.token.marketCap = md.market_cap;
+            data.token.circulatingSupply = md.circulating_supply || data.token.circulatingSupply;
+            data.token.image = md.image || data.token.image;
+          }
+        }
+
+        for (const id of needsFreshFetch) {
+          const md = marketMap.get(id);
+          if (md) {
+            try {
+              const emissions = await buildEmissionsFromMarketData(id, md);
+              if (emissions) {
+                result.set(id, emissions);
+                memCache.set(id, { data: emissions, timestamp: Date.now() });
+                onProgress?.(id, emissions);
+              }
+            } catch (e) {
+            }
+          }
+        }
+      }
+    } catch (e) {
+    }
+  }
+
+  return result;
+}
+
+async function buildEmissionsFromMarketData(coingeckoId: string, marketData: any): Promise<EmissionsData | null> {
+  const totalSupply = marketData.max_supply || marketData.total_supply || 0;
+  const circulatingSupply = marketData.circulating_supply || 0;
+  const tokenName = marketData.name;
+  const tokenSymbol = (marketData.symbol || "").toUpperCase();
+
+  const aiResult = await researchAllocationsWithAI(tokenName, tokenSymbol, totalSupply);
+
+  if (!aiResult || !aiResult.allocations || aiResult.allocations.length === 0) {
+    return null;
+  }
+
+  const MONTHS = 60;
+  const now = new Date();
+  const tgeGuess = new Date(marketData.ath_date || now);
+  tgeGuess.setDate(1);
+  if (tgeGuess > now) tgeGuess.setFullYear(now.getFullYear() - 2);
+
+  const timeSeriesMonths: string[] = [];
+  for (let m = 0; m < MONTHS; m++) {
+    const d = new Date(tgeGuess);
+    d.setMonth(d.getMonth() + m);
+    timeSeriesMonths.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+
+  const allocations: EmissionAllocation[] = aiResult.allocations.map((a: any) => {
+    const pct = a.percentage || 0;
+    const tokens = totalSupply ? Math.round(totalSupply * pct / 100) : 0;
+    const cliffM = a.cliffMonths || 0;
+    const vestM = a.vestingMonths || 0;
+    const tgePct = a.tgePercent || 0;
+    const vType = a.vestingType || "linear";
+
+    const tgeTokens = Math.round(tokens * tgePct / 100);
+    const remainingTokens = tokens - tgeTokens;
+
+    const monthlyValues: number[] = [];
+
+    for (let m = 0; m < MONTHS; m++) {
+      if (m === 0) {
+        monthlyValues.push(tgeTokens);
+      } else if (vType === "immediate" || vestM === 0) {
+        monthlyValues.push(tokens);
+      } else if (vType === "cliff") {
+        if (m < cliffM) {
+          monthlyValues.push(tgeTokens);
+        } else {
+          monthlyValues.push(tokens);
+        }
+      } else {
+        if (m < cliffM) {
+          monthlyValues.push(tgeTokens);
+        } else {
+          const vestingElapsed = m - cliffM;
+          const effectiveVestMonths = Math.max(vestM - cliffM, 1);
+          const vestedFraction = Math.min(vestingElapsed / effectiveVestMonths, 1);
+          monthlyValues.push(Math.round(tgeTokens + remainingTokens * vestedFraction));
+        }
+      }
+    }
+
+    if (vType === "immediate" || vestM === 0) {
+      for (let m = 0; m < MONTHS; m++) {
+        monthlyValues[m] = tokens;
+      }
+    }
+
+    return {
+      category: a.category,
+      standardGroup: a.standardGroup || "community",
+      percentage: pct,
+      totalTokens: tokens,
+      vestingType: vType,
+      cliffMonths: cliffM,
+      vestingMonths: vestM,
+      tgePercent: tgePct,
+      monthlyValues,
+    };
+  });
+
+  const totalTimeSeries: number[] = [];
+  for (let m = 0; m < MONTHS; m++) {
+    totalTimeSeries.push(allocations.reduce((sum, a) => sum + a.monthlyValues[m], 0));
+  }
+
+  const inflationRate: number[] = [];
+  for (let m = 0; m < MONTHS; m++) {
+    if (m === 0 || totalTimeSeries[m - 1] === 0) {
+      inflationRate.push(0);
+    } else {
+      const newTokens = totalTimeSeries[m] - totalTimeSeries[m - 1];
+      inflationRate.push((newTokens / totalTimeSeries[m - 1]) * 100);
+    }
+  }
+
+  const cliffEvents: { month: string; label: string; amount: number }[] = [];
+  for (const a of allocations) {
+    if (a.cliffMonths > 0 && a.cliffMonths < MONTHS) {
+      const prevVal = a.monthlyValues[a.cliffMonths - 1] || 0;
+      const postVal = a.monthlyValues[a.cliffMonths] || 0;
+      const unlocked = postVal - prevVal;
+      if (unlocked > 0) {
+        cliffEvents.push({
+          month: timeSeriesMonths[a.cliffMonths] || "",
+          label: `${a.category} Cliff Unlock`,
+          amount: unlocked,
+        });
+      }
+    }
+  }
+
+  const emissionsResult: EmissionsData = {
+    token: {
+      name: tokenName,
+      symbol: tokenSymbol,
+      coingeckoId,
+      totalSupply,
+      circulatingSupply,
+      maxSupply: marketData.max_supply,
+      currentPrice: marketData.current_price,
+      marketCap: marketData.market_cap,
+      image: marketData.image,
+      category: getTokenCategory(coingeckoId) || undefined,
+    },
+    months: timeSeriesMonths,
+    allocations,
+    totalSupplyTimeSeries: totalTimeSeries,
+    inflationRate,
+    cliffEvents,
+    confidence: aiResult.confidence,
+    notes: aiResult.notes,
+  };
+
+  try {
+    await db.insert(emissionsCacheTable)
+      .values({
+        coingeckoId,
+        category: getTokenCategory(coingeckoId) || null,
+        data: emissionsResult,
+      })
+      .onConflictDoUpdate({
+        target: emissionsCacheTable.coingeckoId,
+        set: {
+          category: getTokenCategory(coingeckoId) || null,
+          data: emissionsResult,
+          updatedAt: new Date(),
+        },
+      });
+  } catch (e) {
+  }
+
+  return emissionsResult;
 }
 
 export const TOKEN_CATEGORIES: Record<string, string[]> = {

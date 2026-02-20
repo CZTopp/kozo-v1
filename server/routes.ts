@@ -28,7 +28,7 @@ import {
   INCENTIVE_TEMPLATES, getCoinContractAddress, estimateBurnFromSupply,
 } from "./crypto-data";
 import { getOnChainTokenData } from "./thirdweb-data";
-import { getTokenEmissions, TOKEN_CATEGORIES, getTokenCategory } from "./emissions-service";
+import { getTokenEmissions, getBatchTokenEmissions, TOKEN_CATEGORIES, getTokenCategory } from "./emissions-service";
 
 type Params = Record<string, string>;
 
@@ -2095,6 +2095,34 @@ export async function registerRoutes(server: Server, app: Express) {
       if (err.message === "RATE_LIMITED") {
         return res.status(429).json({ message: "Rate limited by CoinGecko. Please try again in a moment." });
       }
+      res.status(500).json({ message: err.message || "Internal error" });
+    }
+  });
+
+  app.post("/api/crypto/emissions/batch", isAuthenticated as any, async (req: Request, res: Response) => {
+    try {
+      const { ids } = req.body as { ids?: string[] };
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "Missing or invalid ids array" });
+      }
+      if (ids.length > 30) {
+        return res.status(400).json({ message: "Maximum 30 tokens per batch request" });
+      }
+
+      const resultMap = await getBatchTokenEmissions(ids);
+      const results: Record<string, any> = {};
+      const missingIds: string[] = [];
+      for (const id of ids) {
+        const data = resultMap.get(id);
+        if (data) {
+          results[id] = data;
+        } else {
+          missingIds.push(id);
+        }
+      }
+      res.json({ data: results, missingIds });
+    } catch (err: any) {
+      console.error("Batch emissions error:", err);
       res.status(500).json({ message: err.message || "Internal error" });
     }
   });

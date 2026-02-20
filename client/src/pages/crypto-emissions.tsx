@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1033,23 +1034,32 @@ export default function CryptoEmissions() {
     }
   }, [initialized, watchlistQuery.data, watchlistQuery.isError]);
 
-  const tokenQueries = useQueries({
-    queries: selectedTokens.map((t) => ({
-      queryKey: ["/api/crypto/emissions", t.id],
-      enabled: true,
-      staleTime: 30 * 60 * 1000,
-      retry: 1,
-    })),
+  const batchIdsKey = useMemo(() => {
+    return selectedTokens.map(t => t.id).slice().sort().join(",");
+  }, [selectedTokens]);
+
+  const batchQuery = useQuery<{ data: Record<string, EmissionsData>; missingIds: string[] }>({
+    queryKey: ["/api/crypto/emissions/batch", batchIdsKey],
+    queryFn: async () => {
+      const ids = selectedTokens.map(t => t.id);
+      if (ids.length === 0) return { data: {}, missingIds: [] };
+      const res = await apiRequest("POST", "/api/crypto/emissions/batch", { ids });
+      return res.json();
+    },
+    enabled: selectedTokens.length > 0,
+    staleTime: 10 * 60 * 1000,
+    retry: 2,
   });
 
   const emissionsMap = useMemo(() => {
     const map = new Map<string, EmissionsData>();
-    selectedTokens.forEach((t, i) => {
-      const q = tokenQueries[i];
-      if (q?.data) map.set(t.id, q.data as EmissionsData);
-    });
+    if (batchQuery.data?.data) {
+      for (const [id, emissions] of Object.entries(batchQuery.data.data)) {
+        map.set(id, emissions);
+      }
+    }
     return map;
-  }, [selectedTokens, tokenQueries]);
+  }, [batchQuery.data]);
 
   const filteredData = useMemo(() => {
     const all = Array.from(emissionsMap.values());
@@ -1058,8 +1068,9 @@ export default function CryptoEmissions() {
   }, [emissionsMap, categoryFilter]);
 
   const loadingIds = useMemo(() => {
-    return selectedTokens.filter((_, i) => tokenQueries[i]?.isLoading).map((t) => t.id);
-  }, [selectedTokens, tokenQueries]);
+    if (!batchQuery.isLoading) return [];
+    return selectedTokens.filter(t => !emissionsMap.has(t.id)).map(t => t.id);
+  }, [selectedTokens, emissionsMap, batchQuery.isLoading]);
 
   const handleAddToken = useCallback((result: SearchResult) => {
     if (selectedTokens.find((t) => t.id === result.id)) return;
@@ -1117,10 +1128,16 @@ export default function CryptoEmissions() {
             </div>
           )}
 
-          {loadingIds.length > 0 && (
+          {batchQuery.isLoading && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Analyzing emissions for {loadingIds.length} token{loadingIds.length > 1 ? "s" : ""}...
+              Analyzing emissions for {selectedTokens.length} token{selectedTokens.length > 1 ? "s" : ""}...
+            </div>
+          )}
+          {!batchQuery.isLoading && batchQuery.data?.missingIds && batchQuery.data.missingIds.length > 0 && (
+            <div className="flex items-center gap-2 text-xs text-amber-500" data-testid="text-missing-tokens">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Could not load emission data for {batchQuery.data.missingIds.length} token{batchQuery.data.missingIds.length > 1 ? "s" : ""} (rate limited or no data available)
             </div>
           )}
         </div>
