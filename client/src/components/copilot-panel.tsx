@@ -1,7 +1,7 @@
 import { useState, useCallback, createContext, useContext } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles } from "lucide-react";
+import { Sparkles, AlertCircle, Loader2 } from "lucide-react";
 import { useModel } from "@/lib/model-context";
 import { useLocation } from "wouter";
 import { ChatKit, useChatKit } from "@openai/chatkit-react";
@@ -62,39 +62,100 @@ function useCopilotMode(): { mode: CopilotMode; cryptoProjectId: string | null; 
   return { mode: "financial", cryptoProjectId: null, label: "Financial Model" };
 }
 
+const STARTER_PROMPTS: Record<CopilotMode, { label: string; prompt: string }[]> = {
+  "financial": [
+    { label: "DCF Analysis", prompt: "What's driving DCF upside or downside?" },
+    { label: "Model Summary", prompt: "Summarize this financial model" },
+    { label: "Red Flags", prompt: "Are there any red flags in the data?" },
+  ],
+  "crypto-project": [
+    { label: "Token Supply", prompt: "Analyze the token supply and unlock schedule" },
+    { label: "Token Risks", prompt: "What are the biggest risks for this token?" },
+    { label: "Revenue", prompt: "How sustainable is the protocol's revenue?" },
+  ],
+  "crypto-dashboard": [
+    { label: "Best Fundamentals", prompt: "Which tracked projects have the best fundamentals?" },
+    { label: "Compare Tokens", prompt: "Compare the tokens in my watchlist" },
+    { label: "Valuation Metrics", prompt: "What metrics matter most for token valuation?" },
+  ],
+};
+
 function ChatKitInner({ mode, cryptoProjectId, modelId }: { mode: CopilotMode; cryptoProjectId: string | null; modelId: string | undefined }) {
+  const prompts = STARTER_PROMPTS[mode];
+  const [sessionError, setSessionError] = useState<string | null>(null);
+
   const { control } = useChatKit({
     api: {
       async getClientSecret(existing) {
         if (existing) {
+          setSessionError(null);
           return existing;
         }
 
-        const body: Record<string, any> = {};
-        if (mode === "crypto-project" && cryptoProjectId) {
-          body.cryptoProjectId = cryptoProjectId;
-        } else if (mode === "crypto-dashboard") {
-          body.contextType = "crypto-dashboard";
-        } else if (modelId) {
-          body.modelId = modelId;
+        try {
+          const body: Record<string, any> = {};
+          if (mode === "crypto-project" && cryptoProjectId) {
+            body.cryptoProjectId = cryptoProjectId;
+          } else if (mode === "crypto-dashboard") {
+            body.contextType = "crypto-dashboard";
+          } else if (modelId) {
+            body.modelId = modelId;
+          }
+
+          const res = await fetch("/api/chatkit/session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            const msg = err.message || "Failed to create session";
+            setSessionError(msg);
+            throw new Error(msg);
+          }
+
+          const { client_secret } = await res.json();
+          setSessionError(null);
+          return client_secret;
+        } catch (err: any) {
+          const msg = err.message || "Connection error";
+          setSessionError(msg);
+          throw err;
         }
-
-        const res = await fetch("/api/chatkit/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.message || "Failed to create ChatKit session");
-        }
-
-        const { client_secret } = await res.json();
-        return client_secret;
       },
     },
+    theme: "dark",
+    startScreen: {
+      greeting: mode === "crypto-project"
+        ? "Ask about this crypto project's tokenomics, valuation, or fundamentals."
+        : mode === "crypto-dashboard"
+        ? "Ask about your tracked crypto projects or general crypto topics."
+        : "Ask about your financial model, valuation, or key metrics.",
+      prompts,
+    },
+    header: { enabled: false },
   });
+
+  if (sessionError) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-4 gap-3 text-sm" data-testid="chatkit-error">
+        <AlertCircle className="h-8 w-8 text-destructive" />
+        <p className="text-center text-muted-foreground">{sessionError}</p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setSessionError(null);
+            window.location.reload();
+          }}
+          data-testid="button-chatkit-retry"
+        >
+          Retry
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-hidden flex flex-col min-h-0" data-testid="chatkit-container">
