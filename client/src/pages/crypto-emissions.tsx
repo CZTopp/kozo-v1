@@ -344,7 +344,7 @@ function CryptoMarketEmissionsTab({
       <CardContent>
         <div className="h-[420px]" data-testid="chart-market-emissions">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={barData}>
+            <BarChart data={barData} barCategoryGap="5%" barGap={0}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={periodKey} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
