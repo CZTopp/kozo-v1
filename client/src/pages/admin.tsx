@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { Users, BarChart3, Briefcase, Coins, Shield, ShieldOff, Loader2, Crown, CreditCard } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Users, BarChart3, Briefcase, Coins, Shield, ShieldOff, Loader2, Crown, CreditCard, RotateCcw } from "lucide-react";
 
 interface AdminStats {
   users: number;
@@ -61,6 +62,20 @@ export default function AdminPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       toast({ title: "User updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const resetUsageMutation = useMutation({
+    mutationFn: async ({ id, aiCallsUsed, pdfParsesUsed }: { id: string; aiCallsUsed?: number; pdfParsesUsed?: number }) => {
+      const res = await apiRequest("PATCH", `/api/admin/users/${id}/usage`, { aiCallsUsed, pdfParsesUsed });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Usage reset" });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -220,8 +235,54 @@ export default function AdminPage() {
                         <TableCell className="text-center text-sm" data-testid={`count-positions-${u.id}`}>{u.positionCount}</TableCell>
                         <TableCell className="text-center text-sm" data-testid={`count-indices-${u.id}`}>{u.indexCount}</TableCell>
                         <TableCell className="text-center text-sm" data-testid={`count-macro-${u.id}`}>{u.macroCount}</TableCell>
-                        <TableCell className="text-center text-sm" data-testid={`count-ai-${u.id}`}>{u.aiCallsUsed}</TableCell>
-                        <TableCell className="text-center text-sm" data-testid={`count-pdf-${u.id}`}>{u.pdfParsesUsed}</TableCell>
+                        <TableCell className="text-center text-sm" data-testid={`count-ai-${u.id}`}>
+                          <div className="flex items-center justify-center gap-1">
+                            <span>{u.aiCallsUsed}</span>
+                            {u.aiCallsUsed > 0 && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6"
+                                      onClick={() => resetUsageMutation.mutate({ id: u.id, aiCallsUsed: 0 })}
+                                      disabled={resetUsageMutation.isPending}
+                                      data-testid={`button-reset-ai-${u.id}`}
+                                    >
+                                      <RotateCcw className="h-3 w-3" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Reset AI calls to 0</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center text-sm" data-testid={`count-pdf-${u.id}`}>
+                          <div className="flex items-center justify-center gap-1">
+                            <span>{u.pdfParsesUsed}</span>
+                            {u.pdfParsesUsed > 0 && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6"
+                                      onClick={() => resetUsageMutation.mutate({ id: u.id, pdfParsesUsed: 0 })}
+                                      disabled={resetUsageMutation.isPending}
+                                      data-testid={`button-reset-pdf-${u.id}`}
+                                    >
+                                      <RotateCcw className="h-3 w-3" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Reset PDF parses to 0</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <div className="text-xs text-muted-foreground min-w-[100px]">
                             {u.billingCycle && <div className="capitalize">{u.billingCycle}</div>}

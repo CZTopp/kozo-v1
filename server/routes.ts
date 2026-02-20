@@ -2146,6 +2146,18 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(updated);
   });
 
+  app.patch("/api/admin/users/:id/usage", isAdmin as any, async (req: Request<Params>, res: Response) => {
+    const { aiCallsUsed, pdfParsesUsed } = req.body;
+    const targetUserId = req.params.id;
+    const [existingSub] = await db.select().from(subscriptions).where(eq(subscriptions.userId, targetUserId));
+    if (!existingSub) return res.status(404).json({ message: "No subscription found for this user" });
+    const updates: Record<string, any> = { updatedAt: new Date() };
+    if (typeof aiCallsUsed === "number" && aiCallsUsed >= 0) updates.aiCallsUsed = aiCallsUsed;
+    if (typeof pdfParsesUsed === "number" && pdfParsesUsed >= 0) updates.pdfParsesUsed = pdfParsesUsed;
+    const [updated] = await db.update(subscriptions).set(updates).where(eq(subscriptions.userId, targetUserId)).returning();
+    res.json(updated);
+  });
+
   app.patch("/api/admin/users/:id/plan", isAdmin as any, async (req: Request<Params>, res: Response) => {
     const { plan } = req.body;
     if (!["free", "pro", "enterprise"].includes(plan)) {
