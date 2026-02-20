@@ -1010,6 +1010,9 @@ export default function CryptoEmissions() {
   const [percentOf, setPercentOf] = useState<PercentOfOption>("total");
   const [initialized, setInitialized] = useState(false);
 
+  const { data: subInfo } = useSubscription();
+  const [, setLocation] = useLocation();
+
   const watchlistQuery = useQuery<CryptoProject[]>({
     queryKey: ["/api/crypto/projects"],
   });
@@ -1079,8 +1082,6 @@ export default function CryptoEmissions() {
     return selectedTokens.filter(t => !emissionsMap.has(t.id)).map(t => t.id);
   }, [selectedTokens, emissionsMap, batchQuery.isLoading]);
 
-  const { data: subInfo } = useSubscription();
-  const [, setLocation] = useLocation();
   const emissionsLimit = subInfo?.limits?.emissionsTokens ?? 5;
   const isFreePlan = !subInfo || subInfo.plan === "free";
 

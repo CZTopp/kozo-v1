@@ -45,6 +45,7 @@ interface StripePrice {
 export default function SubscriptionPage() {
   const { toast } = useToast();
   const search = useSearch();
+  const [, setLocation] = useLocation();
   const { data: sub, isLoading } = useSubscription();
   const checkout = useCreateCheckout();
   const portal = useCreatePortal();
@@ -123,8 +124,6 @@ export default function SubscriptionPage() {
   ];
 
   const planBadgeVariant = plan === "pro" ? "default" : plan === "enterprise" ? "default" : "secondary";
-
-  const [, setLocation] = useLocation();
 
   const handleUpgrade = () => {
     if (proMonthlyPrice?.price_id) {
