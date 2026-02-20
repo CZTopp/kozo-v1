@@ -74,6 +74,11 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
+const portfolioItems = [
+  { title: "Portfolio", url: "/portfolio", icon: Briefcase },
+  { title: "Market Data", url: "/market-data", icon: TrendingUp },
+];
+
 const modelingItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Revenue Forecast", url: "/revenue", icon: DollarSign },
@@ -82,16 +87,14 @@ const modelingItems = [
   { title: "Cash Flow", url: "/cash-flow", icon: Wallet },
   { title: "DCF Valuation", url: "/dcf", icon: Calculator },
   { title: "Valuation Compare", url: "/valuation", icon: Scale },
-  { title: "Company Chart", url: "/chart", icon: LineChart },
 ];
 
 const cryptoItems = [
   { title: "Crypto Dashboard", url: "/crypto", icon: Coins },
 ];
 
-const portfolioItems = [
-  { title: "Portfolio", url: "/portfolio", icon: Briefcase },
-  { title: "Market Data", url: "/market-data", icon: TrendingUp },
+const chartingItems = [
+  { title: "Company Chart", url: "/chart", icon: LineChart },
 ];
 
 export function AppSidebar() {
@@ -329,10 +332,70 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
+          <SidebarGroupLabel>Portfolio & Markets</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {portfolioItems.map((item) => {
+                const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s/g, "-")}`}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
           <SidebarGroupLabel>Financial Model</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {modelingItems.map((item) => {
+                const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s/g, "-")}`}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Crypto Analysis</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {cryptoItems.map((item) => {
+                const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s/g, "-")}`}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Charting</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {chartingItems.map((item) => {
                 const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
                 return (
                   <SidebarMenuItem key={item.title}>
@@ -360,46 +423,6 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>Crypto Analysis</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {cryptoItems.map((item) => {
-                const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s/g, "-")}`}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>Portfolio & Markets</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {portfolioItems.map((item) => {
-                const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s/g, "-")}`}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
