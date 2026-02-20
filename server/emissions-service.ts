@@ -75,8 +75,21 @@ export interface InflationPeriodMetrics {
 }
 
 const memCache = new Map<string, { data: EmissionsData; timestamp: number }>();
-const MEM_CACHE_TTL = 30 * 60 * 1000;
-const DB_CACHE_TTL = 24 * 60 * 60 * 1000;
+const MEM_CACHE_TTL = 10 * 60 * 1000;
+
+async function refreshMarketData(data: EmissionsData): Promise<EmissionsData> {
+  try {
+    const marketData = await getCoinMarketData(data.token.coingeckoId);
+    if (marketData) {
+      data.token.currentPrice = marketData.current_price;
+      data.token.marketCap = marketData.market_cap;
+      data.token.circulatingSupply = marketData.circulating_supply || data.token.circulatingSupply;
+      data.token.image = marketData.image || data.token.image;
+    }
+  } catch (e) {
+  }
+  return data;
+}
 
 export async function getTokenEmissions(coingeckoId: string): Promise<EmissionsData | null> {
   const mem = memCache.get(coingeckoId);
@@ -86,8 +99,8 @@ export async function getTokenEmissions(coingeckoId: string): Promise<EmissionsD
 
   try {
     const [dbRow] = await db.select().from(emissionsCacheTable).where(eq(emissionsCacheTable.coingeckoId, coingeckoId)).limit(1);
-    if (dbRow && dbRow.updatedAt && Date.now() - dbRow.updatedAt.getTime() < DB_CACHE_TTL) {
-      const data = dbRow.data as EmissionsData;
+    if (dbRow) {
+      const data = await refreshMarketData(dbRow.data as EmissionsData);
       memCache.set(coingeckoId, { data, timestamp: Date.now() });
       return data;
     }
