@@ -34,6 +34,8 @@ import CryptoTokenFlows from "@/pages/crypto-token-flows";
 import CryptoSettings from "@/pages/crypto-settings";
 import CryptoEmissions from "@/pages/crypto-emissions";
 import AdminPage from "@/pages/admin";
+import PricingPage from "@/pages/pricing";
+import SubscriptionPage from "@/pages/subscription";
 import Landing from "@/pages/landing";
 
 function Router() {
@@ -59,6 +61,8 @@ function Router() {
       <Route path="/crypto/settings/:id" component={CryptoSettings} />
       <Route path="/crypto/emissions" component={CryptoEmissions} />
       <Route path="/admin" component={AdminPage} />
+      <Route path="/pricing" component={PricingPage} />
+      <Route path="/subscription" component={SubscriptionPage} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -23,6 +23,8 @@ import {
   RefreshCw,
   Coins,
   Shield,
+  CreditCard,
+  Zap,
 } from "lucide-react";
 import {
   Sidebar,
@@ -73,6 +75,7 @@ import { useModel } from "@/lib/model-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { UpgradeGate } from "@/components/upgrade-gate";
 
 const portfolioItems = [
   { title: "Portfolio", url: "/portfolio", icon: Briefcase },
@@ -319,13 +322,15 @@ export function AppSidebar() {
                     <Pencil className="h-4 w-4 mr-2" />
                     <span className="text-xs">Edit Company</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setCreateOpen(true)}
-                    data-testid="button-new-company"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    <span className="text-xs">New Company</span>
-                  </DropdownMenuItem>
+                  <UpgradeGate resource="financial_model">
+                    <DropdownMenuItem
+                      onClick={() => setCreateOpen(true)}
+                      data-testid="button-new-company"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      <span className="text-xs">New Company</span>
+                    </DropdownMenuItem>
+                  </UpgradeGate>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -421,6 +426,29 @@ export function AppSidebar() {
                   <Link href="/guide" data-testid="link-nav-analysis-guide">
                     <BookOpen className="h-4 w-4" />
                     <span>Analysis Guide</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Account</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location === "/pricing"}>
+                  <Link href="/pricing" data-testid="link-nav-pricing">
+                    <Zap className="h-4 w-4" />
+                    <span>Pricing</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location === "/subscription"}>
+                  <Link href="/subscription" data-testid="link-nav-subscription">
+                    <CreditCard className="h-4 w-4" />
+                    <span>Subscription</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

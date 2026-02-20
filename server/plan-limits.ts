@@ -46,10 +46,10 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
     financialModels: 10,
     cryptoProjects: 20,
     aiCallsPerMonth: 50,
-    pdfParsesPerMonth: Infinity,
-    portfolioPositions: Infinity,
-    marketIndices: Infinity,
-    macroIndicators: Infinity,
+    pdfParsesPerMonth: -1,
+    portfolioPositions: -1,
+    marketIndices: -1,
+    macroIndicators: -1,
     emissionsTokens: 30,
     secEdgarImport: true,
     valuationComparison: true,
@@ -59,13 +59,13 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
     unlimitedPdfParsing: true,
   },
   enterprise: {
-    financialModels: Infinity,
-    cryptoProjects: Infinity,
+    financialModels: -1,
+    cryptoProjects: -1,
     aiCallsPerMonth: 500,
-    pdfParsesPerMonth: Infinity,
-    portfolioPositions: Infinity,
-    marketIndices: Infinity,
-    macroIndicators: Infinity,
+    pdfParsesPerMonth: -1,
+    portfolioPositions: -1,
+    marketIndices: -1,
+    macroIndicators: -1,
     emissionsTokens: 30,
     secEdgarImport: true,
     valuationComparison: true,
@@ -153,47 +153,47 @@ export async function checkLimit(userId: string, resource: string): Promise<Limi
   switch (resource) {
     case "financial_model": {
       const [c] = await db.select({ value: count() }).from(financialModels).where(eq(financialModels.userId, userId));
-      if (c.value >= limits.financialModels) {
+      if (limits.financialModels !== -1 && c.value >= limits.financialModels) {
         return { allowed: false, reason: `Free plan allows ${limits.financialModels} financial models. Delete an existing model or upgrade to Pro.`, current: c.value, limit: limits.financialModels, requiredPlan: "pro" };
       }
       return { allowed: true, current: c.value, limit: limits.financialModels };
     }
     case "crypto_project": {
       const [c] = await db.select({ value: count() }).from(cryptoProjects).where(eq(cryptoProjects.userId, userId));
-      if (c.value >= limits.cryptoProjects) {
+      if (limits.cryptoProjects !== -1 && c.value >= limits.cryptoProjects) {
         return { allowed: false, reason: `Free plan allows ${limits.cryptoProjects} crypto projects. Delete an existing project or upgrade to Pro.`, current: c.value, limit: limits.cryptoProjects, requiredPlan: "pro" };
       }
       return { allowed: true, current: c.value, limit: limits.cryptoProjects };
     }
     case "portfolio_position": {
       const [c] = await db.select({ value: count() }).from(portfolioPositions).where(eq(portfolioPositions.userId, userId));
-      if (c.value >= limits.portfolioPositions) {
+      if (limits.portfolioPositions !== -1 && c.value >= limits.portfolioPositions) {
         return { allowed: false, reason: `Free plan allows ${limits.portfolioPositions} portfolio positions. Upgrade to Pro for unlimited positions.`, current: c.value, limit: limits.portfolioPositions, requiredPlan: "pro" };
       }
       return { allowed: true, current: c.value, limit: limits.portfolioPositions };
     }
     case "market_index": {
       const [c] = await db.select({ value: count() }).from(marketIndices).where(eq(marketIndices.userId, userId));
-      if (c.value >= limits.marketIndices) {
+      if (limits.marketIndices !== -1 && c.value >= limits.marketIndices) {
         return { allowed: false, reason: `Free plan allows ${limits.marketIndices} market indices. Upgrade to Pro for unlimited.`, current: c.value, limit: limits.marketIndices, requiredPlan: "pro" };
       }
       return { allowed: true, current: c.value, limit: limits.marketIndices };
     }
     case "macro_indicator": {
       const [c] = await db.select({ value: count() }).from(macroIndicators).where(eq(macroIndicators.userId, userId));
-      if (c.value >= limits.macroIndicators) {
+      if (limits.macroIndicators !== -1 && c.value >= limits.macroIndicators) {
         return { allowed: false, reason: `Free plan allows ${limits.macroIndicators} macro indicators. Upgrade to Pro for unlimited.`, current: c.value, limit: limits.macroIndicators, requiredPlan: "pro" };
       }
       return { allowed: true, current: c.value, limit: limits.macroIndicators };
     }
     case "ai_call": {
-      if (sub.aiCallsUsed >= limits.aiCallsPerMonth) {
+      if (limits.aiCallsPerMonth !== -1 && sub.aiCallsUsed >= limits.aiCallsPerMonth) {
         return { allowed: false, reason: `You've used all ${limits.aiCallsPerMonth} AI research calls this month. Upgrade to Pro for ${PLAN_LIMITS.pro.aiCallsPerMonth} calls/month.`, current: sub.aiCallsUsed, limit: limits.aiCallsPerMonth, requiredPlan: "pro" };
       }
       return { allowed: true, current: sub.aiCallsUsed, limit: limits.aiCallsPerMonth };
     }
     case "pdf_parse": {
-      if (!limits.unlimitedPdfParsing && sub.pdfParsesUsed >= limits.pdfParsesPerMonth) {
+      if (limits.pdfParsesPerMonth !== -1 && sub.pdfParsesUsed >= limits.pdfParsesPerMonth) {
         return { allowed: false, reason: `Free plan allows ${limits.pdfParsesPerMonth} PDF parse per month. Upgrade to Pro for unlimited.`, current: sub.pdfParsesUsed, limit: limits.pdfParsesPerMonth, requiredPlan: "pro" };
       }
       return { allowed: true, current: sub.pdfParsesUsed, limit: limits.pdfParsesPerMonth };

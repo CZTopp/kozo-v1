@@ -18,6 +18,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { TrendingUp, TrendingDown, AlertTriangle, Shield, Activity, Plus, Pencil, Trash2, RefreshCw, Loader2, ChevronDown, ChevronUp, Layers } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { UpgradeGate } from "@/components/upgrade-gate";
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))", "#f97316", "#06b6d4", "#8b5cf6"];
 
@@ -386,10 +387,12 @@ export default function Portfolio() {
             )}
             {refreshMutation.isPending ? "Refreshing..." : "Refresh Prices"}
           </Button>
-          <Button onClick={openCreate} data-testid="button-add-position">
-            <Plus className="h-4 w-4 mr-1" />
-            Add Position
-          </Button>
+          <UpgradeGate resource="portfolio_position">
+            <Button onClick={openCreate} data-testid="button-add-position">
+              <Plus className="h-4 w-4 mr-1" />
+              Add Position
+            </Button>
+          </UpgradeGate>
         </div>
       </div>
 

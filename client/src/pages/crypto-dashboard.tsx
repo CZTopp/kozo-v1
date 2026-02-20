@@ -26,6 +26,7 @@ import {
   TrendingUp, Activity, Coins, DollarSign, GitBranch, MoreHorizontal,
   Calendar, Clock, BarChart3, ChevronUp, ChevronDown, Unlock, GripVertical,
 } from "lucide-react";
+import { UpgradeGate } from "@/components/upgrade-gate";
 
 function formatCompact(n: number | null | undefined): string {
   if (n == null || isNaN(n)) return "--";
@@ -580,8 +581,8 @@ export default function CryptoDashboard() {
                   </div>
                 )}
                 {searchResults.map((result) => (
+                  <UpgradeGate key={result.id} resource="crypto_project">
                   <button
-                    key={result.id}
                     className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover-elevate disabled:opacity-50"
                     onClick={() => addProjectMutation.mutate(result.id)}
                     disabled={addProjectMutation.isPending || addingId !== null}
@@ -598,6 +599,7 @@ export default function CryptoDashboard() {
                       <span className="text-xs text-muted-foreground ml-auto">#{result.market_cap_rank}</span>
                     )}
                   </button>
+                  </UpgradeGate>
                 ))}
               </div>
             )}
