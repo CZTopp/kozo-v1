@@ -94,6 +94,7 @@ type SortField = "name" | "circulationPct" | "totalUnlock" | "cliffUnlock" | "li
 type SortDir = "asc" | "desc";
 type TimeframeOption = "12m" | "24m" | "36m" | "60m";
 type PercentOfOption = "circulating" | "total";
+type AggregationPeriod = "week" | "month";
 
 interface TokenMetrics {
   data: EmissionsData;
@@ -252,14 +253,17 @@ function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
 function CryptoMarketEmissionsTab({
   allData,
   unlockMode,
+  aggregation,
+  onAggregationChange,
 }: {
   allData: EmissionsData[];
   unlockMode: UnlockMode;
+  aggregation: AggregationPeriod;
+  onAggregationChange: (a: AggregationPeriod) => void;
 }) {
-  const barData = useMemo(() => {
+  const monthlyData = useMemo(() => {
     if (allData.length === 0) return [];
 
-    const maxMonths = Math.max(...allData.map((d) => d.months.length));
     const refData = allData.reduce((best, d) => d.months.length > best.months.length ? d : best, allData[0]);
 
     return refData.months.map((month, i) => {
@@ -289,16 +293,53 @@ function CryptoMarketEmissionsTab({
     }).filter((_, i) => i > 0);
   }, [allData]);
 
+  const barData = useMemo(() => {
+    if (monthlyData.length === 0) return [];
+    if (aggregation === "month") return monthlyData;
+
+    const weeklyRows: { period: string; total: number; cliff: number; linear: number }[] = [];
+    for (const row of monthlyData) {
+      const [y, m] = row.month.split("-").map(Number);
+      const weeksInMonth = 4.345;
+      for (let w = 0; w < 4; w++) {
+        const weekStart = new Date(y, m - 1, 1 + w * 7);
+        const wLabel = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, "0")}-${String(weekStart.getDate()).padStart(2, "0")}`;
+        weeklyRows.push({
+          period: wLabel,
+          total: row.total / weeksInMonth,
+          cliff: row.cliff / weeksInMonth,
+          linear: row.linear / weeksInMonth,
+        });
+      }
+    }
+    return weeklyRows;
+  }, [monthlyData, aggregation]);
+
   if (allData.length === 0) return <EmptyState icon={BarChart3} message="Add tokens above to view market-wide emission data" />;
 
   const dataKey = unlockMode === "total" ? "total" : unlockMode === "cliff" ? "cliff" : "linear";
   const color = unlockMode === "total" ? "#3b82f6" : unlockMode === "cliff" ? "#ef4444" : "#22c55e";
   const label = unlockMode === "total" ? "Total Value Unlock" : unlockMode === "cliff" ? "Cliff Value Unlock" : "Linear Value Unlock";
+  const periodKey = aggregation === "month" ? "month" : "period";
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">{label} — Aggregate Market View</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">{label} — Aggregate Market View</CardTitle>
+          <div className="flex items-center gap-1">
+            {(["week", "month"] as AggregationPeriod[]).map((a) => (
+              <button
+                key={a}
+                onClick={() => onAggregationChange(a)}
+                className={`px-2 py-1 text-xs rounded ${aggregation === a ? "bg-primary text-primary-foreground" : "bg-muted/30 text-muted-foreground hover:bg-muted/50"}`}
+                data-testid={`button-aggregation-${a}`}
+              >
+                {a === "week" ? "Weekly" : "Monthly"}
+              </button>
+            ))}
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="h-[420px]" data-testid="chart-market-emissions">
@@ -306,8 +347,8 @@ function CryptoMarketEmissionsTab({
             <BarChart data={barData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
-                dataKey="month" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
-                tickFormatter={(v) => { const [y, m] = v.split("-"); return m === "01" || m === "07" ? `${y}-${m}` : ""; }}
+                dataKey={periodKey} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
+                tickFormatter={(v) => { const parts = v.split("-"); return aggregation === "month" ? (parts[1] === "01" || parts[1] === "07" ? `${parts[0]}-${parts[1]}` : "") : (parts[2] === "01" ? `${parts[0]}-${parts[1]}` : ""); }}
                 interval="preserveStartEnd"
               />
               <YAxis
@@ -317,7 +358,7 @@ function CryptoMarketEmissionsTab({
               <Tooltip
                 contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
                 formatter={(value: number) => [formatCompact(value), label]}
-                labelFormatter={(l) => `Month: ${l}`}
+                labelFormatter={(l) => `${aggregation === "week" ? "Week of" : "Month"}: ${l}`}
               />
               <Bar dataKey={dataKey} fill={color} name={label} radius={[2, 2, 0, 0]} />
             </BarChart>
@@ -930,6 +971,7 @@ export default function CryptoEmissions() {
   const [activeTab, setActiveTab] = useState("market");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [unlockMode, setUnlockMode] = useState<UnlockMode>("total");
+  const [aggregation, setAggregation] = useState<AggregationPeriod>("week");
   const [timeframe, setTimeframe] = useState<TimeframeOption>("60m");
   const [percentOf, setPercentOf] = useState<PercentOfOption>("total");
   const [initialized, setInitialized] = useState(false);
@@ -1053,7 +1095,7 @@ export default function CryptoEmissions() {
         </div>
 
         <TabsContent value="market" className="mt-3">
-          <CryptoMarketEmissionsTab allData={filteredData} unlockMode={unlockMode} />
+          <CryptoMarketEmissionsTab allData={filteredData} unlockMode={unlockMode} aggregation={aggregation} onAggregationChange={setAggregation} />
         </TabsContent>
 
         <TabsContent value="emission" className="mt-3">
