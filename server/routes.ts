@@ -2037,6 +2037,7 @@ export async function registerRoutes(server: Server, app: Express) {
         clientDisconnected = true;
       });
 
+      let streamSuccess = false;
       try {
         await streamCopilotToResponse(
           { modelId, cryptoProjectId, contextType },
@@ -2046,9 +2047,13 @@ export async function registerRoutes(server: Server, app: Express) {
           res,
           () => clientDisconnected
         );
+        streamSuccess = true;
       } catch (streamErr: any) {
         console.error("Copilot stream error:", streamErr);
         res.write(`data: ${JSON.stringify({ error: streamErr.message || "Stream error" })}\n\n`);
+      }
+      if (streamSuccess) {
+        await incrementAiCalls(userId);
       }
       if (!clientDisconnected) {
         res.write(`data: [DONE]\n\n`);
