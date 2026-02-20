@@ -1,7 +1,7 @@
 import { getCoinMarketData, getMultipleCoinMarketData, researchAllocationsWithAI } from "./crypto-data";
 import { db } from "./db";
-import { emissionsCache as emissionsCacheTable } from "@shared/schema";
-import { eq, inArray } from "drizzle-orm";
+import { emissionsCache as emissionsCacheTable, aiResearchCache } from "@shared/schema";
+import { eq, and, inArray } from "drizzle-orm";
 
 export interface EmissionAllocation {
   category: string;
@@ -77,6 +77,22 @@ export interface InflationPeriodMetrics {
 const memCache = new Map<string, { data: EmissionsData; timestamp: number }>();
 const MEM_CACHE_TTL = 10 * 60 * 1000;
 
+async function upsertAiResearch(coingeckoId: string, researchType: string, aiResult: any): Promise<void> {
+  const [existing] = await db.select().from(aiResearchCache)
+    .where(and(eq(aiResearchCache.coingeckoId, coingeckoId), eq(aiResearchCache.researchType, researchType)))
+    .limit(1);
+  if (existing) {
+    await db.update(aiResearchCache)
+      .set({ data: aiResult, confidence: aiResult.confidence, notes: aiResult.notes, researchedAt: new Date() })
+      .where(eq(aiResearchCache.id, existing.id));
+  } else {
+    await db.insert(aiResearchCache).values({
+      coingeckoId, researchType,
+      data: aiResult, confidence: aiResult.confidence, notes: aiResult.notes,
+    });
+  }
+}
+
 async function refreshMarketData(data: EmissionsData): Promise<EmissionsData> {
   try {
     const marketData = await getCoinMarketData(data.token.coingeckoId);
@@ -115,7 +131,24 @@ export async function getTokenEmissions(coingeckoId: string): Promise<EmissionsD
   const tokenName = marketData.name;
   const tokenSymbol = (marketData.symbol || "").toUpperCase();
 
-  const aiResult = await researchAllocationsWithAI(tokenName, tokenSymbol, totalSupply);
+  let aiResult: any = null;
+  try {
+    const [cachedResearch] = await db.select().from(aiResearchCache)
+      .where(and(eq(aiResearchCache.coingeckoId, coingeckoId), eq(aiResearchCache.researchType, "allocations")))
+      .limit(1);
+    if (cachedResearch) {
+      aiResult = cachedResearch.data;
+    }
+  } catch (e) {}
+
+  if (!aiResult) {
+    aiResult = await researchAllocationsWithAI(tokenName, tokenSymbol, totalSupply);
+    if (aiResult && aiResult.allocations && aiResult.allocations.length > 0) {
+      try {
+        await upsertAiResearch(coingeckoId, "allocations", aiResult);
+      } catch (e) {}
+    }
+  }
 
   if (!aiResult || !aiResult.allocations || aiResult.allocations.length === 0) {
     return null;
@@ -134,7 +167,7 @@ export async function getTokenEmissions(coingeckoId: string): Promise<EmissionsD
     timeSeriesMonths.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
   }
 
-  const allocations: EmissionAllocation[] = aiResult.allocations.map((a) => {
+  const allocations: EmissionAllocation[] = aiResult.allocations.map((a: any) => {
     const pct = a.percentage || 0;
     const tokens = totalSupply ? Math.round(totalSupply * pct / 100) : 0;
     const cliffM = a.cliffMonths || 0;
@@ -456,7 +489,24 @@ async function buildEmissionsFromMarketData(coingeckoId: string, marketData: any
   const tokenName = marketData.name;
   const tokenSymbol = (marketData.symbol || "").toUpperCase();
 
-  const aiResult = await researchAllocationsWithAI(tokenName, tokenSymbol, totalSupply);
+  let aiResult: any = null;
+  try {
+    const [cachedResearch] = await db.select().from(aiResearchCache)
+      .where(and(eq(aiResearchCache.coingeckoId, coingeckoId), eq(aiResearchCache.researchType, "allocations")))
+      .limit(1);
+    if (cachedResearch) {
+      aiResult = cachedResearch.data;
+    }
+  } catch (e) {}
+
+  if (!aiResult) {
+    aiResult = await researchAllocationsWithAI(tokenName, tokenSymbol, totalSupply);
+    if (aiResult && aiResult.allocations && aiResult.allocations.length > 0) {
+      try {
+        await upsertAiResearch(coingeckoId, "allocations", aiResult);
+      } catch (e) {}
+    }
+  }
 
   if (!aiResult || !aiResult.allocations || aiResult.allocations.length === 0) {
     return null;

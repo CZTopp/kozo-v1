@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, numeric, integer, boolean, timestamp, jsonb, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, numeric, integer, boolean, timestamp, jsonb, real, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -534,6 +534,27 @@ export const aiResearchCache = pgTable("ai_research_cache", {
 
 export const insertAiResearchCacheSchema = createInsertSchema(aiResearchCache).omit({ id: true, researchedAt: true });
 
+export const coingeckoMarketCache = pgTable("coingecko_market_cache", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  coingeckoId: text("coingecko_id").notNull().unique(),
+  data: jsonb("data").notNull(),
+  fetchedAt: timestamp("fetched_at").defaultNow().notNull(),
+});
+
+export const insertCoingeckoMarketCacheSchema = createInsertSchema(coingeckoMarketCache).omit({ id: true, fetchedAt: true });
+
+export const defillamaCache = pgTable("defillama_cache", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  protocolId: text("protocol_id").notNull(),
+  metricType: text("metric_type").notNull(),
+  data: jsonb("data").notNull(),
+  fetchedAt: timestamp("fetched_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("defillama_cache_protocol_metric_idx").on(table.protocolId, table.metricType),
+]);
+
+export const insertDefillamaCacheSchema = createInsertSchema(defillamaCache).omit({ id: true, fetchedAt: true });
+
 export type FinancialModel = typeof financialModels.$inferSelect;
 export type InsertFinancialModel = z.infer<typeof insertFinancialModelSchema>;
 export type RevenueLineItem = typeof revenueLineItems.$inferSelect;
@@ -590,3 +611,7 @@ export type Subscription = typeof subscriptions.$inferSelect;
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export type AiResearchCache = typeof aiResearchCache.$inferSelect;
 export type InsertAiResearchCache = z.infer<typeof insertAiResearchCacheSchema>;
+export type CoingeckoMarketCache = typeof coingeckoMarketCache.$inferSelect;
+export type InsertCoingeckoMarketCache = z.infer<typeof insertCoingeckoMarketCacheSchema>;
+export type DefillamaCache = typeof defillamaCache.$inferSelect;
+export type InsertDefillamaCache = z.infer<typeof insertDefillamaCacheSchema>;

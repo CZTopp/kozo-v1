@@ -37,14 +37,20 @@ Kozo is a comprehensive financial modeling and valuation platform designed to de
 - **AI-Powered Research**: Integrates AI (OpenAI gpt-4o-mini) for researching token allocations, fundraising rounds, and supply schedules for crypto projects, with a priority chain including curated data and industry templates. AI research results are cached globally in `ai_research_cache` table (keyed by coingeckoId + researchType) so subsequent users get instant results without AI calls. These research calls do NOT consume user AI credits — they build platform data for future API services. Cache only stores platform-derived data (not user-provided dataSources). AI-sourced data is stored separately from user-entered data for data integrity.
 - **Copilot (ChatKit)**: The AI copilot slide-out panel uses OpenAI ChatKit (`@openai/chatkit-react`) connected to a published agent workflow (ID in `OPENAI_CHATKIT_WORKFLOW_ID` env var). Backend endpoint `POST /api/chatkit/session` creates sessions with user-specific financial/crypto context injection and multi-user isolation via authenticated `userId`. The ChatKit JS script is loaded from CDN in `client/index.html`. Domain public key is stored as `OPENAI_CHATKIT_DOMAIN_PK` secret. The legacy streaming copilot endpoint (`POST /api/copilot`) remains as fallback.
 - **Admin Panel**: Provides system statistics, user management, and admin grant/revoke functionalities, accessible only to authenticated administrators.
+- **Data Caching Architecture**: Multi-layer caching strategy across all external data sources to minimize API calls and build datasets for future API services. See `API.md` for full dataset specification.
+  - `coingecko_market_cache`: Shared CoinGecko market data with 15-min TTL (price, volume, supply, sparklines). Keyed by `coingecko_id`.
+  - `defillama_cache`: Shared DefiLlama protocol data with 1-hour TTL (TVL, fees, revenue). Keyed by `protocol_id` + `metric_type`.
+  - `ai_research_cache`: Global AI research results (allocations, fundraising, supply schedules). No TTL — permanent dataset building. Keyed by `coingecko_id` + `research_type`. Shared between tokenomics module and emissions engine.
+  - `emissions_cache`: Computed 60-month emission schedules with market data refresh on read. Keyed by `coingecko_id`.
+  - Per-project caches: `cachedOnchainData` (Thirdweb) and `cachedDefiData` (DefiLlama) on crypto_projects table.
 
 ## External Dependencies
 - **Yahoo Finance**: Live market data, stock prices, technical indicators, company fundamentals.
 - **FRED API**: Live macro economic indicators (rates, inflation, GDP).
 - **SEC EDGAR API**: Fetching and parsing 10-K financial filings.
 - **TradingView**: Interactive charting widgets.
-- **CoinGecko API**: Crypto market data (price, supply, volume, sparklines).
-- **DefiLlama API**: DeFi protocol financials (TVL, fees, revenue).
-- **OpenAI API**: AI-powered research for crypto project data.
+- **CoinGecko API**: Crypto market data (price, supply, volume, sparklines). Cached in `coingecko_market_cache` with 15-min TTL.
+- **DefiLlama API**: DeFi protocol financials (TVL, fees, revenue). Cached in `defillama_cache` with 1-hour TTL.
+- **OpenAI API**: AI-powered research for crypto project data. Results cached globally in `ai_research_cache`.
 - **Replit Auth (OIDC)**: User authentication.
 - **Thirdweb Insight**: Optional on-chain data for crypto projects (burn events, staking balances, holder concentration).

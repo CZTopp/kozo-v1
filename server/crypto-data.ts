@@ -1,6 +1,13 @@
+import { db } from "./db";
+import { coingeckoMarketCache, defillamaCache } from "@shared/schema";
+import { eq, and, inArray } from "drizzle-orm";
+
 const COINGECKO_BASE = "https://api.coingecko.com/api/v3";
 const DEFILLAMA_BASE = "https://api.llama.fi";
 const MESSARI_BASE = "https://api.messari.io";
+
+const CG_CACHE_TTL_MS = 15 * 60 * 1000;
+const DL_CACHE_TTL_MS = 60 * 60 * 1000;
 
 interface CoinGeckoSearchResult {
   id: string;
@@ -128,7 +135,7 @@ export async function searchCoinByContract(address: string): Promise<CoinGeckoSe
 
 export { looksLikeContractAddress };
 
-export async function getCoinMarketData(coingeckoId: string): Promise<CoinGeckoMarketData | null> {
+async function fetchCoinMarketDataFromApi(coingeckoId: string): Promise<CoinGeckoMarketData | null> {
   const res = await fetchWithRetry(
     `${COINGECKO_BASE}/coins/markets?vs_currency=usd&ids=${encodeURIComponent(coingeckoId)}&sparkline=true&price_change_percentage=7d`
   );
@@ -137,13 +144,75 @@ export async function getCoinMarketData(coingeckoId: string): Promise<CoinGeckoM
   return data[0];
 }
 
+export async function getCoinMarketData(coingeckoId: string): Promise<CoinGeckoMarketData | null> {
+  try {
+    const [cached] = await db.select().from(coingeckoMarketCache)
+      .where(eq(coingeckoMarketCache.coingeckoId, coingeckoId)).limit(1);
+    if (cached && (Date.now() - new Date(cached.fetchedAt).getTime()) < CG_CACHE_TTL_MS) {
+      return cached.data as CoinGeckoMarketData;
+    }
+  } catch (e) {}
+
+  const fresh = await fetchCoinMarketDataFromApi(coingeckoId);
+  if (fresh) {
+    try {
+      await db.insert(coingeckoMarketCache)
+        .values({ coingeckoId, data: fresh as any })
+        .onConflictDoUpdate({
+          target: coingeckoMarketCache.coingeckoId,
+          set: { data: fresh as any, fetchedAt: new Date() },
+        });
+    } catch (e) {}
+  }
+  return fresh;
+}
+
 export async function getMultipleCoinMarketData(ids: string[]): Promise<CoinGeckoMarketData[]> {
   if (ids.length === 0) return [];
-  const idsStr = ids.join(",");
-  const res = await fetchWithRetry(
-    `${COINGECKO_BASE}/coins/markets?vs_currency=usd&ids=${encodeURIComponent(idsStr)}&sparkline=true&price_change_percentage=7d`
-  );
-  return res.json();
+
+  const results: CoinGeckoMarketData[] = [];
+  const uncachedIds: string[] = [];
+
+  try {
+    const cached = await db.select().from(coingeckoMarketCache)
+      .where(inArray(coingeckoMarketCache.coingeckoId, ids));
+    const now = Date.now();
+    for (const row of cached) {
+      if ((now - new Date(row.fetchedAt).getTime()) < CG_CACHE_TTL_MS) {
+        results.push(row.data as CoinGeckoMarketData);
+      } else {
+        uncachedIds.push(row.coingeckoId);
+      }
+    }
+    const cachedIdSet = new Set(cached.map(r => r.coingeckoId));
+    for (const id of ids) {
+      if (!cachedIdSet.has(id)) uncachedIds.push(id);
+    }
+  } catch (e) {
+    uncachedIds.push(...ids);
+  }
+
+  if (uncachedIds.length > 0) {
+    const idsStr = uncachedIds.join(",");
+    const res = await fetchWithRetry(
+      `${COINGECKO_BASE}/coins/markets?vs_currency=usd&ids=${encodeURIComponent(idsStr)}&sparkline=true&price_change_percentage=7d`
+    );
+    const freshData: CoinGeckoMarketData[] = await res.json();
+    results.push(...freshData);
+
+    for (const coin of freshData) {
+      try {
+        await db.insert(coingeckoMarketCache)
+          .values({ coingeckoId: coin.id, data: coin as any })
+          .onConflictDoUpdate({
+            target: coingeckoMarketCache.coingeckoId,
+            set: { data: coin as any, fetchedAt: new Date() },
+          });
+      } catch (e) {}
+    }
+  }
+
+  return results;
 }
 
 export function mapCoinGeckoToProject(coin: CoinGeckoMarketData) {
@@ -317,28 +386,61 @@ export async function searchDefiLlamaProtocols(query: string): Promise<DefiLlama
     }));
 }
 
+async function getDlCache(protocolId: string, metricType: string): Promise<any | null> {
+  try {
+    const rows = await db.select().from(defillamaCache)
+      .where(and(eq(defillamaCache.protocolId, protocolId), eq(defillamaCache.metricType, metricType)))
+      .limit(1);
+    if (rows.length > 0 && (Date.now() - new Date(rows[0].fetchedAt).getTime()) < DL_CACHE_TTL_MS) {
+      return rows[0].data;
+    }
+  } catch (e) {}
+  return null;
+}
+
+async function setDlCache(protocolId: string, metricType: string, data: unknown): Promise<void> {
+  try {
+    await db.insert(defillamaCache)
+      .values({ protocolId, metricType, data: data as any })
+      .onConflictDoUpdate({
+        target: [defillamaCache.protocolId, defillamaCache.metricType],
+        set: { data: data as any, fetchedAt: new Date() },
+      });
+  } catch (e) {}
+}
+
 export async function getProtocolTVLHistory(slug: string): Promise<{ date: string; tvl: number }[]> {
+  const cached = await getDlCache(slug, "tvl");
+  if (cached) return cached as any;
+
   const res = await fetch(`${DEFILLAMA_BASE}/protocol/${encodeURIComponent(slug)}`);
   if (!res.ok) return [];
   const data = await res.json();
   const tvls = data.tvl || [];
-  return tvls.slice(-365).map((entry: any) => ({
+  const result = tvls.slice(-365).map((entry: any) => ({
     date: new Date(entry.date * 1000).toISOString().split("T")[0],
     tvl: entry.totalLiquidityUSD || 0,
   }));
+  await setDlCache(slug, "tvl", result);
+  return result;
 }
 
 export async function getProtocolFees(slug: string): Promise<{ date: string; dailyFees: number; dailyRevenue: number }[]> {
   try {
+    const cached = await getDlCache(slug, "fees");
+    if (cached) return cached as any;
+
     const res = await fetch(`${DEFILLAMA_BASE}/summary/fees/${encodeURIComponent(slug)}?dataType=dailyFees`);
     if (!res.ok) return [];
     const data = await res.json();
     const totalDataChart = data.totalDataChart || [];
-    return totalDataChart.slice(-365).map((entry: any) => ({
+    const result = totalDataChart.slice(-365).map((entry: any) => ({
       date: new Date(entry[0] * 1000).toISOString().split("T")[0],
       dailyFees: entry[1] || 0,
       dailyRevenue: (entry[1] || 0) * 0.3,
     }));
+    await setDlCache(slug, "fees", result);
+    return result;
   } catch {
     return [];
   }
@@ -346,14 +448,19 @@ export async function getProtocolFees(slug: string): Promise<{ date: string; dai
 
 export async function getProtocolRevenue(slug: string): Promise<{ date: string; dailyRevenue: number }[]> {
   try {
+    const cached = await getDlCache(slug, "revenue");
+    if (cached) return cached as any;
+
     const res = await fetch(`${DEFILLAMA_BASE}/summary/fees/${encodeURIComponent(slug)}?dataType=dailyRevenue`);
     if (!res.ok) return [];
     const data = await res.json();
     const totalDataChart = data.totalDataChart || [];
-    return totalDataChart.slice(-365).map((entry: any) => ({
+    const result = totalDataChart.slice(-365).map((entry: any) => ({
       date: new Date(entry[0] * 1000).toISOString().split("T")[0],
       dailyRevenue: entry[1] || 0,
     }));
+    await setDlCache(slug, "revenue", result);
+    return result;
   } catch {
     return [];
   }
