@@ -8,7 +8,7 @@ import { searchCompanyByTicker, getCompanyFilings, fetchAndParseAllStatements } 
 import { streamCopilotToResponse } from "./copilot";
 import { db } from "./db";
 import { eq, and, sql, count } from "drizzle-orm";
-import { revenuePeriods, users, financialModels, portfolioPositions, cryptoProjects } from "@shared/schema";
+import { revenuePeriods, users, financialModels, portfolioPositions, cryptoProjects, subscriptions, macroIndicators, marketIndices } from "@shared/schema";
 import { isAuthenticated } from "./replit_integrations/auth";
 import {
   insertFinancialModelSchema, insertRevenueLineItemSchema,
@@ -29,6 +29,9 @@ import {
 } from "./crypto-data";
 import { getOnChainTokenData } from "./thirdweb-data";
 import { getTokenEmissions, getBatchTokenEmissions, TOKEN_CATEGORIES, getTokenCategory } from "./emissions-service";
+import { getUserPlanInfo, checkLimit, incrementAiCalls, incrementPdfParses, type LimitCheckResult } from "./plan-limits";
+import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+import { getOrCreateSubscription, updateSubscriptionPlan, cancelSubscription } from "./plan-limits";
 
 type Params = Record<string, string>;
 
@@ -66,6 +69,8 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/models", async (req: Request<Params>, res: Response) => {
     const userId = (req as any).user?.claims?.sub as string;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const limit = await checkLimit(userId, "financial_model");
+    if (!limit.allowed) return res.status(403).json({ message: limit.reason, requiredPlan: limit.requiredPlan, current: limit.current, limit: limit.limit });
     const parsed = insertFinancialModelSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const model = await storage.createModel({ ...parsed.data, userId });
@@ -341,6 +346,11 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   app.post("/api/valuation-comparison", async (req: Request<Params>, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (userId) {
+      const limit = await checkLimit(userId, "valuation_comparison");
+      if (!limit.allowed) return res.status(403).json({ message: limit.reason, requiredPlan: limit.requiredPlan });
+    }
     const val = await storage.upsertValuationComparison(req.body);
     res.json(val);
   });
@@ -355,6 +365,8 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/portfolio", async (req: Request<Params>, res: Response) => {
     const userId = (req as any).user?.claims?.sub as string;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const limit = await checkLimit(userId, "portfolio_position");
+    if (!limit.allowed) return res.status(403).json({ message: limit.reason, requiredPlan: limit.requiredPlan, current: limit.current, limit: limit.limit });
     const parsed = insertPortfolioPositionSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const pos = await storage.createPortfolioPosition({ ...parsed.data, userId });
@@ -430,6 +442,8 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/macro-indicators", async (req: Request<Params>, res: Response) => {
     const userId = (req as any).user?.claims?.sub as string;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const limit = await checkLimit(userId, "macro_indicator");
+    if (!limit.allowed) return res.status(403).json({ message: limit.reason, requiredPlan: limit.requiredPlan, current: limit.current, limit: limit.limit });
     const ind = await storage.upsertMacroIndicator({ ...req.body, userId });
     res.json(ind);
   });
@@ -444,6 +458,8 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/market-indices", async (req: Request<Params>, res: Response) => {
     const userId = (req as any).user?.claims?.sub as string;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const limit = await checkLimit(userId, "market_index");
+    if (!limit.allowed) return res.status(403).json({ message: limit.reason, requiredPlan: limit.requiredPlan, current: limit.current, limit: limit.limit });
     const idx = await storage.upsertMarketIndex({ ...req.body, userId });
     res.json(idx);
   });
@@ -879,6 +895,8 @@ export async function registerRoutes(server: Server, app: Express) {
     try {
       const userId = (req as any).user?.claims?.sub as string;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const secLimit = await checkLimit(userId, "sec_edgar");
+      if (!secLimit.allowed) return res.status(403).json({ message: secLimit.reason, requiredPlan: secLimit.requiredPlan });
       const modelId = req.params.modelId;
       const model = await storage.getModel(modelId, userId);
       if (!model) return res.status(404).json({ message: "Model not found" });
@@ -1139,6 +1157,8 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/crypto/projects", async (req: Request<Params>, res: Response) => {
     const userId = (req as any).user?.claims?.sub as string;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const limit = await checkLimit(userId, "crypto_project");
+    if (!limit.allowed) return res.status(403).json({ message: limit.reason, requiredPlan: limit.requiredPlan, current: limit.current, limit: limit.limit });
     try {
       const { coingeckoId } = req.body;
       if (!coingeckoId) return res.status(400).json({ message: "coingeckoId is required" });
@@ -1234,6 +1254,8 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/crypto/projects/:id/parse-pdf", async (req: Request<Params>, res: Response) => {
     const userId = (req as any).user?.claims?.sub as string;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const pdfLimit = await checkLimit(userId, "pdf_parse");
+    if (!pdfLimit.allowed) return res.status(403).json({ message: pdfLimit.reason, requiredPlan: pdfLimit.requiredPlan });
     try {
       const project = await storage.getCryptoProject(req.params.id, userId);
       if (!project) return res.status(404).json({ message: "Project not found" });
@@ -1763,10 +1785,13 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/crypto/projects/:id/allocations/seed", async (req: Request, res: Response) => {
     const userId = (req as any).user?.claims?.sub as string;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const aiLimit = await checkLimit(userId, "ai_call");
+    if (!aiLimit.allowed) return res.status(403).json({ message: aiLimit.reason, requiredPlan: aiLimit.requiredPlan, current: aiLimit.current, limit: aiLimit.limit });
     const project = await storage.getCryptoProject(req.params.id as string, userId);
     if (!project) return res.status(404).json({ message: "Project not found" });
     const existing = await storage.getTokenAllocations(project.id);
     if (existing.length > 0) return res.status(400).json({ message: "Allocations already exist. Clear them first to re-seed." });
+    await incrementAiCalls(userId);
 
     const { lookupCuratedAllocations, mapCuratedToAllocations, researchAllocationsWithAI, mapAIToAllocations } = await import("./crypto-data");
     let allocationsToCreate: Record<string, unknown>[] = [];
@@ -1889,10 +1914,13 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/crypto/projects/:id/fundraising/seed", async (req: Request, res: Response) => {
     const userId = (req as any).user?.claims?.sub as string;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const aiLimit = await checkLimit(userId, "ai_call");
+    if (!aiLimit.allowed) return res.status(403).json({ message: aiLimit.reason, requiredPlan: aiLimit.requiredPlan, current: aiLimit.current, limit: aiLimit.limit });
     const project = await storage.getCryptoProject(req.params.id as string, userId);
     if (!project) return res.status(404).json({ message: "Project not found" });
     const existing = await storage.getFundraisingRounds(project.id);
     if (existing.length > 0) return res.status(400).json({ message: "Fundraising rounds already exist. Clear them first to re-seed." });
+    await incrementAiCalls(userId);
 
     const { researchFundraisingWithAI, mapAIToFundraisingRounds } = await import("./crypto-data");
     const tokenName = project.name || "";
@@ -1933,10 +1961,13 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/crypto/projects/:id/supply-schedule/seed", async (req: Request, res: Response) => {
     const userId = (req as any).user?.claims?.sub as string;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const aiLimit = await checkLimit(userId, "ai_call");
+    if (!aiLimit.allowed) return res.status(403).json({ message: aiLimit.reason, requiredPlan: aiLimit.requiredPlan, current: aiLimit.current, limit: aiLimit.limit });
     const project = await storage.getCryptoProject(req.params.id as string, userId);
     if (!project) return res.status(404).json({ message: "Project not found" });
     const existing = await storage.getTokenSupplySchedules(project.id);
     if (existing.length > 0) return res.status(400).json({ message: "Supply schedule already exists. Clear it first to re-seed." });
+    await incrementAiCalls(userId);
 
     const { researchSupplyScheduleWithAI, mapAIToSupplySchedule } = await import("./crypto-data");
     const tokenName = project.name || "";
@@ -1980,6 +2011,8 @@ export async function registerRoutes(server: Server, app: Express) {
     try {
       const userId = (req as any).user?.claims?.sub as string;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const aiLimit = await checkLimit(userId, "ai_call");
+      if (!aiLimit.allowed) return res.status(403).json({ message: aiLimit.reason, requiredPlan: aiLimit.requiredPlan });
       const { modelId, cryptoProjectId, message, history, context: contextType } = req.body;
       if (!message) {
         return res.status(400).json({ message: "message is required" });
@@ -2004,6 +2037,7 @@ export async function registerRoutes(server: Server, app: Express) {
         clientDisconnected = true;
       });
 
+      let streamSuccess = false;
       try {
         await streamCopilotToResponse(
           { modelId, cryptoProjectId, contextType },
@@ -2013,9 +2047,13 @@ export async function registerRoutes(server: Server, app: Express) {
           res,
           () => clientDisconnected
         );
+        streamSuccess = true;
       } catch (streamErr: any) {
         console.error("Copilot stream error:", streamErr);
         res.write(`data: ${JSON.stringify({ error: streamErr.message || "Stream error" })}\n\n`);
+      }
+      if (streamSuccess) {
+        await incrementAiCalls(userId);
       }
       if (!clientDisconnected) {
         res.write(`data: [DONE]\n\n`);
@@ -2054,6 +2092,7 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.get("/api/admin/users", isAdmin as any, async (_req: Request, res: Response) => {
     const allUsers = await db.select().from(users);
+    const allSubs = await db.select().from(subscriptions);
     const modelsPerUser = await db
       .select({ userId: financialModels.userId, value: count() })
       .from(financialModels)
@@ -2062,12 +2101,38 @@ export async function registerRoutes(server: Server, app: Express) {
       .select({ userId: portfolioPositions.userId, value: count() })
       .from(portfolioPositions)
       .groupBy(portfolioPositions.userId);
+    const cryptoPerUser = await db
+      .select({ userId: cryptoProjects.userId, value: count() })
+      .from(cryptoProjects)
+      .groupBy(cryptoProjects.userId);
+    const indicesPerUser = await db
+      .select({ userId: marketIndices.userId, value: count() })
+      .from(marketIndices)
+      .groupBy(marketIndices.userId);
+    const macroPerUser = await db
+      .select({ userId: macroIndicators.userId, value: count() })
+      .from(macroIndicators)
+      .groupBy(macroIndicators.userId);
 
-    const enriched = allUsers.map((u) => ({
-      ...u,
-      modelCount: modelsPerUser.find((m) => m.userId === u.id)?.value ?? 0,
-      positionCount: positionsPerUser.find((p) => p.userId === u.id)?.value ?? 0,
-    }));
+    const enriched = allUsers.map((u) => {
+      const sub = allSubs.find((s) => s.userId === u.id);
+      return {
+        ...u,
+        modelCount: modelsPerUser.find((m) => m.userId === u.id)?.value ?? 0,
+        positionCount: positionsPerUser.find((p) => p.userId === u.id)?.value ?? 0,
+        cryptoProjectCount: cryptoPerUser.find((c) => c.userId === u.id)?.value ?? 0,
+        indexCount: indicesPerUser.find((i) => i.userId === u.id)?.value ?? 0,
+        macroCount: macroPerUser.find((m) => m.userId === u.id)?.value ?? 0,
+        plan: sub?.plan ?? "free",
+        billingCycle: sub?.billingCycle ?? null,
+        aiCallsUsed: sub?.aiCallsUsed ?? 0,
+        pdfParsesUsed: sub?.pdfParsesUsed ?? 0,
+        stripeCustomerId: sub?.stripeCustomerId ?? null,
+        stripeSubscriptionId: sub?.stripeSubscriptionId ?? null,
+        currentPeriodEnd: sub?.currentPeriodEnd ?? null,
+        cancelAtPeriodEnd: sub?.cancelAtPeriodEnd ?? false,
+      };
+    });
     res.json(enriched);
   });
 
@@ -2079,6 +2144,47 @@ export async function registerRoutes(server: Server, app: Express) {
     const [updated] = await db.update(users).set({ isAdmin: makeAdmin }).where(eq(users.id, req.params.id)).returning();
     if (!updated) return res.status(404).json({ message: "User not found" });
     res.json(updated);
+  });
+
+  app.patch("/api/admin/users/:id/usage", isAdmin as any, async (req: Request<Params>, res: Response) => {
+    const { aiCallsUsed, pdfParsesUsed } = req.body;
+    const targetUserId = req.params.id;
+    const [existingSub] = await db.select().from(subscriptions).where(eq(subscriptions.userId, targetUserId));
+    if (!existingSub) return res.status(404).json({ message: "No subscription found for this user" });
+    const updates: Record<string, any> = { updatedAt: new Date() };
+    if (typeof aiCallsUsed === "number" && aiCallsUsed >= 0) updates.aiCallsUsed = aiCallsUsed;
+    if (typeof pdfParsesUsed === "number" && pdfParsesUsed >= 0) updates.pdfParsesUsed = pdfParsesUsed;
+    const [updated] = await db.update(subscriptions).set(updates).where(eq(subscriptions.userId, targetUserId)).returning();
+    res.json(updated);
+  });
+
+  app.patch("/api/admin/users/:id/plan", isAdmin as any, async (req: Request<Params>, res: Response) => {
+    const { plan } = req.body;
+    if (!["free", "pro", "enterprise"].includes(plan)) {
+      return res.status(400).json({ message: "plan must be free, pro, or enterprise" });
+    }
+    const targetUserId = req.params.id;
+    const [existingSub] = await db.select().from(subscriptions).where(eq(subscriptions.userId, targetUserId));
+    if (existingSub) {
+      const [updated] = await db.update(subscriptions).set({
+        plan,
+        aiCallsUsed: 0,
+        pdfParsesUsed: 0,
+        updatedAt: new Date(),
+      }).where(eq(subscriptions.userId, targetUserId)).returning();
+      return res.json(updated);
+    }
+    const now = new Date();
+    const [created] = await db.insert(subscriptions).values({
+      userId: targetUserId,
+      plan,
+      aiCallsUsed: 0,
+      pdfParsesUsed: 0,
+      currentPeriodStart: now,
+      currentPeriodEnd: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+      cancelAtPeriodEnd: false,
+    }).returning();
+    res.json(created);
   });
 
   app.get("/api/crypto/emissions/:coingeckoId", isAuthenticated as any, async (req: Request<Params>, res: Response) => {
@@ -2129,6 +2235,143 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.get("/api/crypto/emissions-categories", isAuthenticated as any, (_req: Request, res: Response) => {
     res.json(TOKEN_CATEGORIES);
+  });
+
+  app.get("/api/subscription", isAuthenticated as any, async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const info = await getUserPlanInfo(userId);
+      res.json(info);
+    } catch (err: any) {
+      console.error("Get subscription error:", err);
+      res.status(500).json({ message: err.message || "Internal error" });
+    }
+  });
+
+  app.post("/api/subscription/check", isAuthenticated as any, async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const { resource } = req.body as { resource: string };
+      if (!resource) return res.status(400).json({ message: "Missing resource" });
+      const result = await checkLimit(userId, resource);
+      res.json(result);
+    } catch (err: any) {
+      console.error("Check limit error:", err);
+      res.status(500).json({ message: err.message || "Internal error" });
+    }
+  });
+
+  app.get("/api/stripe/publishable-key", async (_req: Request, res: Response) => {
+    try {
+      const key = await getStripePublishableKey();
+      res.json({ publishableKey: key });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to get Stripe key" });
+    }
+  });
+
+  app.post("/api/stripe/checkout", isAuthenticated as any, async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const { priceId } = req.body as { priceId: string };
+      if (!priceId) return res.status(400).json({ message: "Missing priceId" });
+
+      const stripe = await getUncachableStripeClient();
+      const sub = await getOrCreateSubscription(userId);
+
+      let customerId = sub.stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          metadata: { userId },
+        });
+        customerId = customer.id;
+        await updateSubscriptionPlan(userId, "free", { customerId });
+      }
+
+      const baseUrl = `${req.protocol}://${req.get("host")}`;
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        payment_method_types: ["card"],
+        line_items: [{ price: priceId, quantity: 1 }],
+        mode: "subscription",
+        success_url: `${baseUrl}/subscription?success=true`,
+        cancel_url: `${baseUrl}/pricing?cancelled=true`,
+      });
+
+      res.json({ url: session.url });
+    } catch (err: any) {
+      console.error("Checkout error:", err);
+      res.status(500).json({ message: err.message || "Failed to create checkout session" });
+    }
+  });
+
+  app.post("/api/stripe/portal", isAuthenticated as any, async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const sub = await getOrCreateSubscription(userId);
+      if (!sub.stripeCustomerId) {
+        return res.status(400).json({ message: "No billing account found" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const baseUrl = `${req.protocol}://${req.get("host")}`;
+      const session = await stripe.billingPortal.sessions.create({
+        customer: sub.stripeCustomerId,
+        return_url: `${baseUrl}/subscription`,
+      });
+
+      res.json({ url: session.url });
+    } catch (err: any) {
+      console.error("Portal error:", err);
+      res.status(500).json({ message: err.message || "Failed to create portal session" });
+    }
+  });
+
+  app.post("/api/stripe/cancel", isAuthenticated as any, async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const sub = await getOrCreateSubscription(userId);
+      if (!sub.stripeSubscriptionId) {
+        return res.status(400).json({ message: "No active subscription" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      await stripe.subscriptions.update(sub.stripeSubscriptionId, {
+        cancel_at_period_end: true,
+      });
+
+      await cancelSubscription(userId);
+      res.json({ message: "Subscription will cancel at end of billing period" });
+    } catch (err: any) {
+      console.error("Cancel error:", err);
+      res.status(500).json({ message: err.message || "Failed to cancel subscription" });
+    }
+  });
+
+  app.get("/api/stripe/prices", async (_req: Request, res: Response) => {
+    try {
+      const result = await db.execute(sql`
+        SELECT p.id as product_id, p.name as product_name, p.description as product_description,
+               p.metadata as product_metadata,
+               pr.id as price_id, pr.unit_amount, pr.currency, pr.recurring, pr.active as price_active
+        FROM stripe.products p
+        LEFT JOIN stripe.prices pr ON pr.product = p.id AND pr.active = true
+        WHERE p.active = true
+        ORDER BY p.id, pr.unit_amount
+      `);
+      res.json({ data: result.rows });
+    } catch (err: any) {
+      console.error("Stripe prices error:", err);
+      res.status(500).json({ message: "Failed to fetch prices" });
+    }
   });
 
 }

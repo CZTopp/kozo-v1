@@ -25,7 +25,11 @@ import {
   Search, RefreshCw, Trash2, ArrowUpRight, ArrowDownRight, Loader2,
   TrendingUp, Activity, Coins, DollarSign, GitBranch, MoreHorizontal,
   Calendar, Clock, BarChart3, ChevronUp, ChevronDown, Unlock, GripVertical,
+  AlertTriangle,
 } from "lucide-react";
+import { UpgradeGate } from "@/components/upgrade-gate";
+import { useSubscription } from "@/hooks/use-subscription";
+import { Link } from "wouter";
 
 function formatCompact(n: number | null | undefined): string {
   if (n == null || isNaN(n)) return "--";
@@ -290,6 +294,7 @@ function SortableRow({ project, navigate, deleteMutation, isCustomSort }: Sortab
 export default function CryptoDashboard() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
+  const { data: subscription } = useSubscription();
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -554,7 +559,14 @@ export default function CryptoDashboard() {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Crypto Analysis</h1>
-          <p className="text-sm text-muted-foreground">{projects?.length || 0} projects tracked</p>
+          <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+            {projects?.length || 0} projects tracked
+            {subscription && subscription.limits.cryptoProjects !== -1 && (projects?.length || 0) >= subscription.limits.cryptoProjects && (
+              <Link href="/pricing" data-testid="link-crypto-limit-upgrade" title={`Limit reached (${subscription.limits.cryptoProjects}/${subscription.limits.cryptoProjects}). Upgrade for more.`}>
+                <AlertTriangle className="h-4 w-4 text-amber-500 cursor-pointer" />
+              </Link>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
@@ -579,6 +591,7 @@ export default function CryptoDashboard() {
                     No results found
                   </div>
                 )}
+                <UpgradeGate resource="crypto_project">
                 {searchResults.map((result) => (
                   <button
                     key={result.id}
@@ -599,6 +612,7 @@ export default function CryptoDashboard() {
                     )}
                   </button>
                 ))}
+                </UpgradeGate>
               </div>
             )}
           </div>

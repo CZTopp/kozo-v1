@@ -73,6 +73,7 @@ import { useModel } from "@/lib/model-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { UpgradeGate } from "@/components/upgrade-gate";
 
 const portfolioItems = [
   { title: "Portfolio", url: "/portfolio", icon: Briefcase },
@@ -319,13 +320,15 @@ export function AppSidebar() {
                     <Pencil className="h-4 w-4 mr-2" />
                     <span className="text-xs">Edit Company</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setCreateOpen(true)}
-                    data-testid="button-new-company"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    <span className="text-xs">New Company</span>
-                  </DropdownMenuItem>
+                  <UpgradeGate resource="financial_model">
+                    <DropdownMenuItem
+                      onClick={() => setCreateOpen(true)}
+                      data-testid="button-new-company"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      <span className="text-xs">New Company</span>
+                    </DropdownMenuItem>
+                  </UpgradeGate>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>

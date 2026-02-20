@@ -8,6 +8,8 @@ import type { ValuationComparison, FinancialModel } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
 import { TrendingUp, TrendingDown, Target, ArrowDown, AlertTriangle, Globe } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
+import { UpgradeGate } from "@/components/upgrade-gate";
+import { useSubscription } from "@/hooks/use-subscription";
 
 interface YahooFundamentals {
   currentPrice: number;
@@ -28,6 +30,7 @@ interface YahooFundamentals {
 
 export default function ValuationComparisonPage() {
   const { selectedModel: model, isLoading } = useModel();
+  const { data: sub } = useSubscription();
 
   const { data: valData } = useQuery<ValuationComparison>({
     queryKey: ["/api/models", model?.id, "valuation-comparison"],
@@ -41,6 +44,7 @@ export default function ValuationComparisonPage() {
     retry: 1,
   });
 
+  if (sub?.plan === "free") return <div className="p-6"><UpgradeGate resource="valuation_comparison"><></></UpgradeGate></div>;
   if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
   if (!model) return <div className="p-4 text-muted-foreground">Select a company from the sidebar to begin.</div>;
 

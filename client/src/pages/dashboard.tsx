@@ -1,11 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { formatCurrency, formatPercent, calcPortfolioMetrics } from "@/lib/calculations";
 import { useModel } from "@/lib/model-context";
+import { useSubscription } from "@/hooks/use-subscription";
 import type { IncomeStatementLine, PortfolioPosition, MacroIndicator, MarketIndex, RevenueLineItem, RevenuePeriod, BalanceSheetLine, DcfValuation, CashFlowLine } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { TrendingUp, TrendingDown, DollarSign, Briefcase, Activity, CheckCircle2, AlertCircle } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Briefcase, Activity, CheckCircle2, AlertCircle, Crown } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { Link } from "wouter";
 
@@ -36,6 +38,8 @@ export default function Dashboard() {
     queryKey: ["/api/models", model?.id, "cash-flow"],
     enabled: !!model,
   });
+
+  const { data: sub } = useSubscription();
 
   const portfolioMetrics = portfolio?.length ? calcPortfolioMetrics(
     portfolio.map(p => ({
@@ -143,6 +147,47 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {sub && (
+        <Card data-testid="card-subscription-overview">
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-1">
+              <Crown className="h-4 w-4" />
+              Subscription
+            </CardTitle>
+            <Badge variant={sub.plan === "free" ? "secondary" : "default"} data-testid="badge-plan">
+              {sub.plan === "free" ? "Free" : sub.plan === "pro" ? "Pro" : "Enterprise"}
+            </Badge>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: "Models", current: sub.usage.financialModels, limit: sub.limits.financialModels },
+                { label: "Crypto Projects", current: sub.usage.cryptoProjects, limit: sub.limits.cryptoProjects },
+                { label: "AI Calls", current: sub.usage.aiCallsUsed, limit: sub.limits.aiCallsPerMonth },
+                { label: "Positions", current: sub.usage.portfolioPositions, limit: sub.limits.portfolioPositions },
+              ].map((item) => {
+                const isUnlimited = item.limit === -1;
+                const pct = isUnlimited ? 0 : Math.min((item.current / item.limit) * 100, 100);
+                return (
+                  <div key={item.label} className="space-y-1" data-testid={`usage-${item.label.toLowerCase().replace(/\s+/g, "-")}`}>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{item.label}</span>
+                      <span>{item.current}/{isUnlimited ? "\u221E" : item.limit}</span>
+                    </div>
+                    <Progress value={isUnlimited ? 0 : pct} />
+                  </div>
+                );
+              })}
+            </div>
+            {sub.plan === "free" && (
+              <Link href="/pricing" className="text-xs text-primary hover:underline" data-testid="link-upgrade-from-dashboard">
+                Upgrade to Pro for more capacity
+              </Link>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {model && (
         <Card className="border-dashed" data-testid="card-model-readiness">
