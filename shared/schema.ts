@@ -355,6 +355,7 @@ export const cryptoProjects = pgTable("crypto_projects", {
   stakingContract: text("staking_contract"),
   notes: text("notes"),
   dataSources: text("data_sources").array(),
+  sortOrder: integer("sort_order").default(0),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

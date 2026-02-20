@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,9 +14,17 @@ import type { CryptoProject } from "@shared/schema";
 import { useLocation } from "wouter";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove, SortableContext, useSortable, verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   Search, RefreshCw, Trash2, ArrowUpRight, ArrowDownRight, Loader2,
   TrendingUp, Activity, Coins, DollarSign, GitBranch, MoreHorizontal,
-  Calendar, Clock, BarChart3, ChevronUp, ChevronDown, Unlock,
+  Calendar, Clock, BarChart3, ChevronUp, ChevronDown, Unlock, GripVertical,
 } from "lucide-react";
 
 function formatCompact(n: number | null | undefined): string {
@@ -98,8 +106,186 @@ interface DashboardSummary {
   }[];
 }
 
-type SortKey = "name" | "currentPrice" | "priceChange24h" | "priceChange7d" | "marketCap" | "circulatingSupply";
+type SortKey = "custom" | "name" | "currentPrice" | "priceChange24h" | "priceChange7d" | "marketCap" | "circulatingSupply";
 type SortDir = "asc" | "desc";
+
+interface SortableRowProps {
+  project: CryptoProject;
+  navigate: (to: string) => void;
+  deleteMutation: ReturnType<typeof useMutation<void, Error, string>>;
+  isCustomSort: boolean;
+}
+
+function SortableRow({ project, navigate, deleteMutation, isCustomSort }: SortableRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: project.id, disabled: !isCustomSort });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    position: isDragging ? "relative" as const : undefined,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  const sparkData = Array.isArray(project.sparklineData)
+    ? (project.sparklineData as number[]).map((v) => ({ v }))
+    : null;
+
+  const unlockedPct = project.circulatingSupply && project.totalSupply && project.totalSupply > 0
+    ? Math.min((project.circulatingSupply / project.totalSupply) * 100, 100)
+    : null;
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={style}
+      className="border-b last:border-b-0 cursor-pointer hover-elevate"
+      onClick={() => navigate(`/crypto/valuation/${project.id}`)}
+      data-testid={`row-project-${project.id}`}
+    >
+      {isCustomSort && (
+        <td className="px-2 py-3 w-8">
+          <button
+            className="cursor-grab active:cursor-grabbing touch-none text-muted-foreground hover:text-foreground p-1"
+            onClick={(e) => e.stopPropagation()}
+            {...attributes}
+            {...listeners}
+            data-testid={`drag-handle-${project.id}`}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+        </td>
+      )}
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          {project.image && (
+            <img
+              src={project.image}
+              alt={project.name}
+              className="h-7 w-7 rounded-full flex-shrink-0"
+              data-testid={`img-project-${project.id}`}
+            />
+          )}
+          <div className="min-w-0">
+            <div className="font-medium truncate" data-testid={`text-name-${project.id}`}>{project.name}</div>
+            <div className="text-xs text-muted-foreground uppercase" data-testid={`badge-symbol-${project.id}`}>{project.symbol}</div>
+          </div>
+        </div>
+      </td>
+      <td className="text-right px-4 py-3">
+        <span className="font-semibold" data-testid={`text-price-${project.id}`}>{formatPrice(project.currentPrice)}</span>
+      </td>
+      <td className="text-right px-4 py-3">
+        <ChangeCell value={project.priceChange24h} />
+      </td>
+      <td className="text-right px-4 py-3 hidden sm:table-cell">
+        <ChangeCell value={project.priceChange7d} />
+      </td>
+      <td className="text-right px-4 py-3 hidden md:table-cell" data-testid={`text-mcap-${project.id}`}>
+        <div className="font-medium">{formatCompact(project.marketCap)}</div>
+        <div className="text-[10px] text-muted-foreground">Vol: {formatCompact(project.volume24h)}</div>
+      </td>
+      <td className="text-right px-4 py-3 hidden lg:table-cell">
+        <div className="font-medium">{formatSupply(project.circulatingSupply)}</div>
+        {unlockedPct != null && (
+          <div className="flex items-center gap-1.5 justify-end mt-0.5">
+            <Progress value={unlockedPct} className="h-1 w-12" />
+            <span className="text-[10px] text-muted-foreground">{unlockedPct.toFixed(0)}%</span>
+          </div>
+        )}
+      </td>
+      <td className="text-right px-4 py-3 hidden xl:table-cell" data-testid={`chart-sparkline-${project.id}`}>
+        {sparkData && sparkData.length > 0 ? (
+          <div className="w-24 ml-auto">
+            <ResponsiveContainer width="100%" height={32}>
+              <AreaChart data={sparkData}>
+                <Area
+                  type="monotone"
+                  dataKey="v"
+                  stroke={(project.priceChange7d || 0) >= 0 ? "hsl(142, 71%, 45%)" : "hsl(0, 84%, 60%)"}
+                  fill={(project.priceChange7d || 0) >= 0 ? "hsl(142, 71%, 45%)" : "hsl(0, 84%, 60%)"}
+                  fillOpacity={0.1}
+                  strokeWidth={1.5}
+                  dot={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <span className="text-muted-foreground">--</span>
+        )}
+      </td>
+      <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label="Project actions"
+              data-testid={`button-menu-${project.id}`}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={() => navigate(`/crypto/tokenomics/${project.id}`)}
+              data-testid={`link-tokenomics-${project.id}`}
+            >
+              <Coins className="h-4 w-4 mr-2" />
+              Tokenomics
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => navigate(`/crypto/financials/${project.id}`)}
+              data-testid={`link-financials-${project.id}`}
+            >
+              <Activity className="h-4 w-4 mr-2" />
+              Financials
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => navigate(`/crypto/valuation/${project.id}`)}
+              data-testid={`link-valuation-${project.id}`}
+            >
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Valuation
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => navigate(`/crypto/revenue/${project.id}`)}
+              data-testid={`link-revenue-forecast-${project.id}`}
+            >
+              <DollarSign className="h-4 w-4 mr-2" />
+              Revenue Forecast
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => navigate(`/crypto/token-flows/${project.id}`)}
+              data-testid={`link-token-flows-${project.id}`}
+            >
+              <GitBranch className="h-4 w-4 mr-2" />
+              Token Flows
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-destructive"
+              onClick={() => deleteMutation.mutate(project.id)}
+              disabled={deleteMutation.isPending}
+              data-testid={`button-delete-${project.id}`}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Remove
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </td>
+    </tr>
+  );
+}
 
 export default function CryptoDashboard() {
   const { toast } = useToast();
@@ -110,8 +296,14 @@ export default function CryptoDashboard() {
   const [searchDone, setSearchDone] = useState(false);
   const [refreshCooldown, setRefreshCooldown] = useState(0);
   const [addingId, setAddingId] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>("marketCap");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [sortKey, setSortKey] = useState<SortKey>("custom");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [localOrder, setLocalOrder] = useState<string[]>([]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
 
   const { data: projects, isLoading: projectsLoading } = useQuery<CryptoProject[]>({
     queryKey: ["/api/crypto/projects"],
@@ -121,6 +313,18 @@ export default function CryptoDashboard() {
     queryKey: ["/api/crypto/dashboard-summary"],
     enabled: !!projects && projects.length > 0,
   });
+
+  useEffect(() => {
+    if (projects && projects.length > 0) {
+      setLocalOrder(prev => {
+        if (prev.length === 0) return projects.map(p => p.id);
+        const projectIds = new Set(projects.map(p => p.id));
+        const existing = prev.filter(id => projectIds.has(id));
+        const newIds = projects.filter(p => !prev.includes(p.id)).map(p => p.id);
+        return [...existing, ...newIds];
+      });
+    }
+  }, [projects]);
 
   const nextUnlockByProject = useMemo(() => {
     if (!summary?.allSchedules) return {};
@@ -154,8 +358,12 @@ export default function CryptoDashboard() {
       .slice(0, 4);
   }, [projects]);
 
-  const sortedProjects = useMemo(() => {
+  const displayProjects = useMemo(() => {
     if (!projects) return [];
+    if (sortKey === "custom") {
+      const projectMap = new Map(projects.map(p => [p.id, p]));
+      return localOrder.map(id => projectMap.get(id)).filter(Boolean) as CryptoProject[];
+    }
     return [...projects].sort((a, b) => {
       let aVal: number | string = 0;
       let bVal: number | string = 0;
@@ -187,7 +395,28 @@ export default function CryptoDashboard() {
       }
       return sortDir === "asc" ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
     });
-  }, [projects, sortKey, sortDir]);
+  }, [projects, sortKey, sortDir, localOrder]);
+
+  const reorderMutation = useMutation({
+    mutationFn: async (orderedIds: string[]) => {
+      await apiRequest("POST", "/api/crypto/projects/reorder", { orderedIds });
+    },
+    onError: () => {
+      toast({ title: "Failed to save order", variant: "destructive" });
+    },
+  });
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setLocalOrder(prev => {
+      const oldIdx = prev.indexOf(active.id as string);
+      const newIdx = prev.indexOf(over.id as string);
+      const updated = arrayMove(prev, oldIdx, newIdx);
+      reorderMutation.mutate(updated);
+      return updated;
+    });
+  }, [reorderMutation]);
 
   useEffect(() => {
     if (!searchTerm.trim()) {
@@ -299,8 +528,14 @@ export default function CryptoDashboard() {
   });
 
   const hasProjects = projects && projects.length > 0;
+  const isCustomSort = sortKey === "custom";
 
   function handleSort(key: SortKey) {
+    if (key === "custom") {
+      setSortKey("custom");
+      setSortDir("asc");
+      return;
+    }
     if (sortKey === key) {
       setSortDir(d => d === "asc" ? "desc" : "asc");
     } else {
@@ -476,188 +711,79 @@ export default function CryptoDashboard() {
 
       {hasProjects && (
         <Card>
+          <div className="flex items-center justify-between gap-2 px-4 py-2 border-b">
+            <div className="flex items-center gap-1">
+              <Button
+                variant={isCustomSort ? "default" : "ghost"}
+                size="sm"
+                onClick={() => handleSort("custom")}
+                data-testid="sort-custom"
+              >
+                <GripVertical className="h-3.5 w-3.5 mr-1" />
+                Custom
+              </Button>
+            </div>
+            {isCustomSort && (
+              <span className="text-xs text-muted-foreground">Drag rows to reorder</span>
+            )}
+          </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" data-testid="table-watchlist">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left font-medium text-muted-foreground px-4 py-3">
-                    <button className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => handleSort("name")} data-testid="sort-name">
-                      Token <SortIcon columnKey="name" />
-                    </button>
-                  </th>
-                  <th className="text-right font-medium text-muted-foreground px-4 py-3">
-                    <button className="inline-flex items-center gap-1 hover:text-foreground ml-auto" onClick={() => handleSort("currentPrice")} data-testid="sort-price">
-                      Price <SortIcon columnKey="currentPrice" />
-                    </button>
-                  </th>
-                  <th className="text-right font-medium text-muted-foreground px-4 py-3">
-                    <button className="inline-flex items-center gap-1 hover:text-foreground ml-auto" onClick={() => handleSort("priceChange24h")} data-testid="sort-24h">
-                      24h % <SortIcon columnKey="priceChange24h" />
-                    </button>
-                  </th>
-                  <th className="text-right font-medium text-muted-foreground px-4 py-3 hidden sm:table-cell">
-                    <button className="inline-flex items-center gap-1 hover:text-foreground ml-auto" onClick={() => handleSort("priceChange7d")} data-testid="sort-7d">
-                      7d % <SortIcon columnKey="priceChange7d" />
-                    </button>
-                  </th>
-                  <th className="text-right font-medium text-muted-foreground px-4 py-3 hidden md:table-cell">
-                    <button className="inline-flex items-center gap-1 hover:text-foreground ml-auto" onClick={() => handleSort("marketCap")} data-testid="sort-mcap">
-                      Market Cap <SortIcon columnKey="marketCap" />
-                    </button>
-                  </th>
-                  <th className="text-right font-medium text-muted-foreground px-4 py-3 hidden lg:table-cell">
-                    <button className="inline-flex items-center gap-1 hover:text-foreground ml-auto" onClick={() => handleSort("circulatingSupply")} data-testid="sort-supply">
-                      Supply <SortIcon columnKey="circulatingSupply" />
-                    </button>
-                  </th>
-                  <th className="text-right font-medium text-muted-foreground px-4 py-3 hidden xl:table-cell">
-                    7d Chart
-                  </th>
-                  <th className="px-2 py-3 w-10"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedProjects.map((project) => {
-                  const sparkData = Array.isArray(project.sparklineData)
-                    ? (project.sparklineData as number[]).map((v) => ({ v }))
-                    : null;
-
-                  const unlockedPct = project.circulatingSupply && project.totalSupply && project.totalSupply > 0
-                    ? Math.min((project.circulatingSupply / project.totalSupply) * 100, 100)
-                    : null;
-
-                  return (
-                    <tr
-                      key={project.id}
-                      className="border-b last:border-b-0 cursor-pointer hover-elevate"
-                      onClick={() => navigate(`/crypto/valuation/${project.id}`)}
-                      data-testid={`row-project-${project.id}`}
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2.5">
-                          {project.image && (
-                            <img
-                              src={project.image}
-                              alt={project.name}
-                              className="h-7 w-7 rounded-full flex-shrink-0"
-                              data-testid={`img-project-${project.id}`}
-                            />
-                          )}
-                          <div className="min-w-0">
-                            <div className="font-medium truncate" data-testid={`text-name-${project.id}`}>{project.name}</div>
-                            <div className="text-xs text-muted-foreground uppercase" data-testid={`badge-symbol-${project.id}`}>{project.symbol}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="text-right px-4 py-3">
-                        <span className="font-semibold" data-testid={`text-price-${project.id}`}>{formatPrice(project.currentPrice)}</span>
-                      </td>
-                      <td className="text-right px-4 py-3">
-                        <ChangeCell value={project.priceChange24h} />
-                      </td>
-                      <td className="text-right px-4 py-3 hidden sm:table-cell">
-                        <ChangeCell value={project.priceChange7d} />
-                      </td>
-                      <td className="text-right px-4 py-3 hidden md:table-cell" data-testid={`text-mcap-${project.id}`}>
-                        <div className="font-medium">{formatCompact(project.marketCap)}</div>
-                        <div className="text-[10px] text-muted-foreground">Vol: {formatCompact(project.volume24h)}</div>
-                      </td>
-                      <td className="text-right px-4 py-3 hidden lg:table-cell">
-                        <div className="font-medium">{formatSupply(project.circulatingSupply)}</div>
-                        {unlockedPct != null && (
-                          <div className="flex items-center gap-1.5 justify-end mt-0.5">
-                            <Progress value={unlockedPct} className="h-1 w-12" />
-                            <span className="text-[10px] text-muted-foreground">{unlockedPct.toFixed(0)}%</span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="text-right px-4 py-3 hidden xl:table-cell" data-testid={`chart-sparkline-${project.id}`}>
-                        {sparkData && sparkData.length > 0 ? (
-                          <div className="w-24 ml-auto">
-                            <ResponsiveContainer width="100%" height={32}>
-                              <AreaChart data={sparkData}>
-                                <Area
-                                  type="monotone"
-                                  dataKey="v"
-                                  stroke={(project.priceChange7d || 0) >= 0 ? "hsl(142, 71%, 45%)" : "hsl(0, 84%, 60%)"}
-                                  fill={(project.priceChange7d || 0) >= 0 ? "hsl(142, 71%, 45%)" : "hsl(0, 84%, 60%)"}
-                                  fillOpacity={0.1}
-                                  strokeWidth={1.5}
-                                  dot={false}
-                                />
-                              </AreaChart>
-                            </ResponsiveContainer>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">--</span>
-                        )}
-                      </td>
-                      <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              aria-label="Project actions"
-                              data-testid={`button-menu-${project.id}`}
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => navigate(`/crypto/tokenomics/${project.id}`)}
-                              data-testid={`link-tokenomics-${project.id}`}
-                            >
-                              <Coins className="h-4 w-4 mr-2" />
-                              Tokenomics
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => navigate(`/crypto/financials/${project.id}`)}
-                              data-testid={`link-financials-${project.id}`}
-                            >
-                              <Activity className="h-4 w-4 mr-2" />
-                              Financials
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => navigate(`/crypto/valuation/${project.id}`)}
-                              data-testid={`link-valuation-${project.id}`}
-                            >
-                              <TrendingUp className="h-4 w-4 mr-2" />
-                              Valuation
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => navigate(`/crypto/revenue/${project.id}`)}
-                              data-testid={`link-revenue-forecast-${project.id}`}
-                            >
-                              <DollarSign className="h-4 w-4 mr-2" />
-                              Revenue Forecast
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => navigate(`/crypto/token-flows/${project.id}`)}
-                              data-testid={`link-token-flows-${project.id}`}
-                            >
-                              <GitBranch className="h-4 w-4 mr-2" />
-                              Token Flows
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => deleteMutation.mutate(project.id)}
-                              disabled={deleteMutation.isPending}
-                              data-testid={`button-delete-${project.id}`}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Remove
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <table className="w-full text-sm" data-testid="table-watchlist">
+                <thead>
+                  <tr className="border-b">
+                    {isCustomSort && <th className="w-8"></th>}
+                    <th className="text-left font-medium text-muted-foreground px-4 py-3">
+                      <button className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => handleSort("name")} data-testid="sort-name">
+                        Token <SortIcon columnKey="name" />
+                      </button>
+                    </th>
+                    <th className="text-right font-medium text-muted-foreground px-4 py-3">
+                      <button className="inline-flex items-center gap-1 hover:text-foreground ml-auto" onClick={() => handleSort("currentPrice")} data-testid="sort-price">
+                        Price <SortIcon columnKey="currentPrice" />
+                      </button>
+                    </th>
+                    <th className="text-right font-medium text-muted-foreground px-4 py-3">
+                      <button className="inline-flex items-center gap-1 hover:text-foreground ml-auto" onClick={() => handleSort("priceChange24h")} data-testid="sort-24h">
+                        24h % <SortIcon columnKey="priceChange24h" />
+                      </button>
+                    </th>
+                    <th className="text-right font-medium text-muted-foreground px-4 py-3 hidden sm:table-cell">
+                      <button className="inline-flex items-center gap-1 hover:text-foreground ml-auto" onClick={() => handleSort("priceChange7d")} data-testid="sort-7d">
+                        7d % <SortIcon columnKey="priceChange7d" />
+                      </button>
+                    </th>
+                    <th className="text-right font-medium text-muted-foreground px-4 py-3 hidden md:table-cell">
+                      <button className="inline-flex items-center gap-1 hover:text-foreground ml-auto" onClick={() => handleSort("marketCap")} data-testid="sort-mcap">
+                        Market Cap <SortIcon columnKey="marketCap" />
+                      </button>
+                    </th>
+                    <th className="text-right font-medium text-muted-foreground px-4 py-3 hidden lg:table-cell">
+                      <button className="inline-flex items-center gap-1 hover:text-foreground ml-auto" onClick={() => handleSort("circulatingSupply")} data-testid="sort-supply">
+                        Supply <SortIcon columnKey="circulatingSupply" />
+                      </button>
+                    </th>
+                    <th className="text-right font-medium text-muted-foreground px-4 py-3 hidden xl:table-cell">
+                      7d Chart
+                    </th>
+                    <th className="px-2 py-3 w-10"></th>
+                  </tr>
+                </thead>
+                <SortableContext items={displayProjects.map(p => p.id)} strategy={verticalListSortingStrategy}>
+                  <tbody>
+                    {displayProjects.map((project) => (
+                      <SortableRow
+                        key={project.id}
+                        project={project}
+                        navigate={navigate}
+                        deleteMutation={deleteMutation}
+                        isCustomSort={isCustomSort}
+                      />
+                    ))}
+                  </tbody>
+                </SortableContext>
+              </table>
+            </DndContext>
           </div>
         </Card>
       )}

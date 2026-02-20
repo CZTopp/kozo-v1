@@ -120,6 +120,7 @@ export interface IStorage {
   createCryptoProject(data: InsertCryptoProject): Promise<CryptoProject>;
   updateCryptoProject(id: string, userId: string, data: Partial<InsertCryptoProject>): Promise<CryptoProject>;
   deleteCryptoProject(id: string, userId: string): Promise<void>;
+  reorderCryptoProjects(userId: string, orderedIds: string[]): Promise<void>;
 
   getTokenSupplySchedules(projectId: string): Promise<TokenSupplySchedule[]>;
   getAllSupplySchedulesForUser(userId: string): Promise<(TokenSupplySchedule & { projectName?: string })[]>;
@@ -523,7 +524,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCryptoProjects(userId: string) {
-    return db.select().from(cryptoProjects).where(eq(cryptoProjects.userId, userId));
+    return db.select().from(cryptoProjects).where(eq(cryptoProjects.userId, userId)).orderBy(cryptoProjects.sortOrder);
+  }
+
+  async reorderCryptoProjects(userId: string, orderedIds: string[]) {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.update(cryptoProjects)
+        .set({ sortOrder: i })
+        .where(and(eq(cryptoProjects.id, orderedIds[i]), eq(cryptoProjects.userId, userId)));
+    }
   }
 
   async getCryptoProject(id: string, userId: string) {

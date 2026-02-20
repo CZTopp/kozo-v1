@@ -1221,6 +1221,15 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json({ success: true });
   });
 
+  app.post("/api/crypto/projects/reorder", async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub as string;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const { orderedIds } = req.body;
+    if (!Array.isArray(orderedIds)) return res.status(400).json({ message: "orderedIds must be an array" });
+    await storage.reorderCryptoProjects(userId, orderedIds);
+    res.json({ success: true });
+  });
+
   app.post("/api/crypto/projects/:id/parse-pdf", async (req: Request<Params>, res: Response) => {
     const userId = (req as any).user?.claims?.sub as string;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
