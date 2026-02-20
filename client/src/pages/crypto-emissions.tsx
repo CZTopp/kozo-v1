@@ -250,6 +250,8 @@ function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
   );
 }
 
+type MarketTimeframe = "2m" | "6m";
+
 function CryptoMarketEmissionsTab({
   allData,
   unlockMode,
@@ -261,6 +263,9 @@ function CryptoMarketEmissionsTab({
   aggregation: AggregationPeriod;
   onAggregationChange: (a: AggregationPeriod) => void;
 }) {
+  const [marketTimeframe, setMarketTimeframe] = useState<MarketTimeframe>("6m");
+  const monthLimit = parseInt(marketTimeframe);
+
   const monthlyData = useMemo(() => {
     if (allData.length === 0) return [];
 
@@ -290,8 +295,8 @@ function CryptoMarketEmissionsTab({
       }
 
       return { month, total: totalVal, cliff: cliffVal, linear: linearVal };
-    }).filter((_, i) => i > 0);
-  }, [allData]);
+    }).filter((_, i) => i > 0).slice(0, monthLimit);
+  }, [allData, monthLimit]);
 
   const barData = useMemo(() => {
     if (monthlyData.length === 0) return [];
@@ -327,17 +332,33 @@ function CryptoMarketEmissionsTab({
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">{label} — Aggregate Market View</CardTitle>
-          <div className="flex items-center gap-1">
-            {(["week", "month"] as AggregationPeriod[]).map((a) => (
-              <button
-                key={a}
-                onClick={() => onAggregationChange(a)}
-                className={`px-2 py-1 text-xs rounded ${aggregation === a ? "bg-primary text-primary-foreground" : "bg-muted/30 text-muted-foreground hover:bg-muted/50"}`}
-                data-testid={`button-aggregation-${a}`}
-              >
-                {a === "week" ? "Weekly" : "Monthly"}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground mr-1">Range:</span>
+              {(["2m", "6m"] as MarketTimeframe[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setMarketTimeframe(t)}
+                  className={`px-2 py-1 text-xs rounded ${marketTimeframe === t ? "bg-primary text-primary-foreground" : "bg-muted/30 text-muted-foreground hover:bg-muted/50"}`}
+                  data-testid={`button-market-timeframe-${t}`}
+                >
+                  {t === "2m" ? "2M" : "6M"}
+                </button>
+              ))}
+            </div>
+            <div className="w-px h-4 bg-border" />
+            <div className="flex items-center gap-1">
+              {(["week", "month"] as AggregationPeriod[]).map((a) => (
+                <button
+                  key={a}
+                  onClick={() => onAggregationChange(a)}
+                  className={`px-2 py-1 text-xs rounded ${aggregation === a ? "bg-primary text-primary-foreground" : "bg-muted/30 text-muted-foreground hover:bg-muted/50"}`}
+                  data-testid={`button-aggregation-${a}`}
+                >
+                  {a === "week" ? "Weekly" : "Monthly"}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </CardHeader>
@@ -348,8 +369,8 @@ function CryptoMarketEmissionsTab({
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={periodKey} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
-                tickFormatter={(v) => { const parts = v.split("-"); return aggregation === "month" ? (parts[1] === "01" || parts[1] === "07" ? `${parts[0]}-${parts[1]}` : "") : (parts[2] === "01" ? `${parts[0]}-${parts[1]}` : ""); }}
-                interval="preserveStartEnd"
+                tickFormatter={(v) => { const parts = v.split("-"); return aggregation === "month" ? `${parts[0]}-${parts[1]}` : (parts[2] === "01" || parts[2] === "15" ? `${parts[1]}/${parts[2]}` : ""); }}
+                interval={aggregation === "month" ? 0 : "preserveStartEnd"}
               />
               <YAxis
                 tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
