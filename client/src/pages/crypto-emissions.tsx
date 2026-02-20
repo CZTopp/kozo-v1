@@ -95,7 +95,7 @@ interface EmissionsData {
 type UnlockMode = "total" | "cliff" | "linear";
 type SortField = "name" | "circulationPct" | "totalUnlock" | "cliffUnlock" | "linearUnlock" | "marketCap" | "unlockValue";
 type SortDir = "asc" | "desc";
-type TimeframeOption = "12m" | "24m" | "36m" | "60m";
+type TimeframeOption = "7d" | "1m" | "6m" | "1y";
 type PercentOfOption = "circulating" | "total";
 type AggregationPeriod = "week" | "month";
 
@@ -403,6 +403,24 @@ function CryptoMarketEmissionsTab({
   );
 }
 
+function timeframeToMonths(tf: TimeframeOption): number {
+  switch (tf) {
+    case "7d": return 1;
+    case "1m": return 1;
+    case "6m": return 6;
+    case "1y": return 12;
+  }
+}
+
+const TIMEFRAME_LABELS: Record<TimeframeOption, string> = {
+  "7d": "+7D",
+  "1m": "+1M",
+  "6m": "+6M",
+  "1y": "+1Y",
+};
+
+const PRO_TIMEFRAMES: TimeframeOption[] = ["6m", "1y"];
+
 function CompareEmissionTab({
   allData,
   unlockMode,
@@ -410,6 +428,8 @@ function CompareEmissionTab({
   percentOf,
   onTimeframeChange,
   onPercentOfChange,
+  isFreePlan,
+  onUpgrade,
 }: {
   allData: EmissionsData[];
   unlockMode: UnlockMode;
@@ -417,8 +437,10 @@ function CompareEmissionTab({
   percentOf: PercentOfOption;
   onTimeframeChange: (t: TimeframeOption) => void;
   onPercentOfChange: (p: PercentOfOption) => void;
+  isFreePlan: boolean;
+  onUpgrade: () => void;
 }) {
-  const monthLimit = parseInt(timeframe);
+  const monthLimit = timeframeToMonths(timeframe);
 
   const metrics = useMemo(() => {
     return allData.map(computeTokenMetrics)
@@ -436,7 +458,7 @@ function CompareEmissionTab({
     const refData = top7.reduce((best, m) => m.data.months.length > best.data.months.length ? m : best, top7[0]);
     const limit = Math.min(monthLimit, refData.data.months.length);
 
-    return refData.data.months.slice(0, limit).map((month, i) => {
+    const getRow = (month: string, i: number, fraction: number) => {
       const row: Record<string, any> = { month };
       for (const m of top7) {
         const d = m.data;
@@ -444,7 +466,9 @@ function CompareEmissionTab({
 
         if (unlockMode === "total") {
           const total = d.totalSupplyTimeSeries[i] || 0;
-          row[d.token.symbol] = (total / supply) * 100;
+          const prev = i > 0 ? (d.totalSupplyTimeSeries[i - 1] || 0) : 0;
+          const value = fraction < 1 ? prev + (total - prev) * fraction : total;
+          row[d.token.symbol] = (value / supply) * 100;
         } else {
           let sum = 0;
           for (const a of d.allocations) {
@@ -452,15 +476,28 @@ function CompareEmissionTab({
             const isCliff = a.vestingType === "cliff" || (a.cliffMonths > 0 && a.vestingType !== "linear");
             const isLinear = a.vestingType === "linear" || a.vestingMonths > 0;
             if ((unlockMode === "cliff" && isCliff) || (unlockMode === "linear" && isLinear)) {
-              sum += a.monthlyValues[i] || 0;
+              const val = a.monthlyValues[i] || 0;
+              const prevVal = i > 0 ? (a.monthlyValues[i - 1] || 0) : 0;
+              sum += fraction < 1 ? prevVal + (val - prevVal) * fraction : val;
             }
           }
           row[d.token.symbol] = (sum / supply) * 100;
         }
       }
       return row;
-    });
-  }, [top7, monthLimit, percentOf, unlockMode]);
+    };
+
+    if (timeframe === "7d") {
+      const days = [1, 2, 3, 4, 5, 6, 7];
+      return days.map((day) => {
+        const fraction = day / 30;
+        const label = `Day ${day}`;
+        return getRow(label, 1, fraction);
+      });
+    }
+
+    return refData.data.months.slice(0, limit).map((month, i) => getRow(month, i, 1));
+  }, [top7, monthLimit, percentOf, unlockMode, timeframe]);
 
   if (allData.length === 0) return <EmptyState icon={TrendingUp} message="Add tokens above to compare emission schedules" />;
 
@@ -470,16 +507,21 @@ function CompareEmissionTab({
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span>Timeframe:</span>
           <div className="flex border rounded-md overflow-hidden">
-            {(["12m", "24m", "36m", "60m"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => onTimeframeChange(t)}
-                className={`px-2 py-1 text-xs ${timeframe === t ? "bg-primary text-primary-foreground" : "bg-muted/30 text-muted-foreground hover:bg-muted/50"}`}
-                data-testid={`button-timeframe-${t}`}
-              >
-                {t}
-              </button>
-            ))}
+            {(["7d", "1m", "6m", "1y"] as const).map((t) => {
+              const isPro = PRO_TIMEFRAMES.includes(t);
+              const locked = isPro && isFreePlan;
+              return (
+                <button
+                  key={t}
+                  onClick={() => locked ? onUpgrade() : onTimeframeChange(t)}
+                  className={`px-2 py-1 text-xs flex items-center gap-0.5 ${timeframe === t ? "bg-primary text-primary-foreground" : locked ? "bg-muted/20 text-muted-foreground/50" : "bg-muted/30 text-muted-foreground hover:bg-muted/50"}`}
+                  data-testid={`button-timeframe-${t}`}
+                >
+                  {TIMEFRAME_LABELS[t]}
+                  {locked && <Lock className="h-2.5 w-2.5 ml-0.5" />}
+                </button>
+              );
+            })}
           </div>
         </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -541,7 +583,7 @@ function CompareEmissionTab({
               <CardTitle className="text-base">
                 {unlockMode === "total" ? "Total" : unlockMode === "cliff" ? "Cliff" : "Linear"} Supply Projection (% of {percentOf} supply)
               </CardTitle>
-              <Badge variant="outline"><Clock className="h-3 w-3 mr-1" />{timeframe}</Badge>
+              <Badge variant="outline"><Clock className="h-3 w-3 mr-1" />{TIMEFRAME_LABELS[timeframe]}</Badge>
             </div>
           </CardHeader>
           <CardContent>
@@ -551,7 +593,12 @@ function CompareEmissionTab({
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis
                     dataKey="month" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
-                    tickFormatter={(v) => { const [y, m] = v.split("-"); return m === "01" || m === "07" ? `${y}-${m}` : ""; }}
+                    tickFormatter={(v: string) => {
+                      if (v.startsWith("Day")) return v;
+                      if (timeframe === "1m") return v;
+                      const parts = v.split("-");
+                      return parts[1] === "01" || parts[1] === "07" ? v : "";
+                    }}
                   />
                   <YAxis
                     tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
@@ -560,7 +607,7 @@ function CompareEmissionTab({
                   <Tooltip
                     contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
                     formatter={(value: number, name: string) => [`${value.toFixed(2)}%`, name]}
-                    labelFormatter={(l) => `Month: ${l}`}
+                    labelFormatter={(l) => timeframe === "7d" ? l : `Month: ${l}`}
                   />
                   <Legend />
                   {top7.map((m, i) => (
@@ -1006,7 +1053,7 @@ export default function CryptoEmissions() {
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [unlockMode, setUnlockMode] = useState<UnlockMode>("total");
   const [aggregation, setAggregation] = useState<AggregationPeriod>("week");
-  const [timeframe, setTimeframe] = useState<TimeframeOption>("60m");
+  const [timeframe, setTimeframe] = useState<TimeframeOption>("1m");
   const [percentOf, setPercentOf] = useState<PercentOfOption>("total");
   const [initialized, setInitialized] = useState(false);
 
@@ -1084,6 +1131,12 @@ export default function CryptoEmissions() {
 
   const emissionsLimit = subInfo?.limits?.emissionsTokens ?? 5;
   const isFreePlan = !subInfo || subInfo.plan === "free";
+
+  useEffect(() => {
+    if (isFreePlan && PRO_TIMEFRAMES.includes(timeframe)) {
+      setTimeframe("1m");
+    }
+  }, [isFreePlan, timeframe]);
 
   const handleAddToken = useCallback((result: SearchResult) => {
     if (selectedTokens.find((t) => t.id === result.id)) return;
@@ -1176,6 +1229,8 @@ export default function CryptoEmissions() {
             percentOf={percentOf}
             onTimeframeChange={setTimeframe}
             onPercentOfChange={setPercentOf}
+            isFreePlan={isFreePlan}
+            onUpgrade={() => setLocation("/subscription")}
           />
         </TabsContent>
 
