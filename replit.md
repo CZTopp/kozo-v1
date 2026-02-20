@@ -34,6 +34,7 @@ Kozo is a comprehensive financial modeling and valuation platform designed to de
 - **IPO/INVEST Mode**: Financial models can operate in 'ipo' mode for bottom-up forecasting or 'invest' mode for SEC-aligned structures with 10-K import.
 - **Crypto Analysis Module**: Includes a dedicated dashboard, Tokenomics Modeler (supply schedules, vesting, incentives), Protocol Financials (TVL/fees/revenue), and Crypto Valuation (Discounted Fee Revenue, Comparable Analysis).
 - **AI-Powered Research**: Integrates AI (OpenAI gpt-4o-mini) for researching token allocations, fundraising rounds, and supply schedules for crypto projects, with a priority chain including curated data and industry templates.
+- **Copilot (ChatKit)**: The AI copilot slide-out panel uses OpenAI ChatKit (`@openai/chatkit-react`) connected to a published agent workflow (ID in `OPENAI_CHATKIT_WORKFLOW_ID` env var). Backend endpoint `POST /api/chatkit/session` creates sessions with user-specific financial/crypto context injection and multi-user isolation via authenticated `userId`. The ChatKit JS script is loaded from CDN in `client/index.html`. Domain public key is stored as `OPENAI_CHATKIT_DOMAIN_PK` secret. The legacy streaming copilot endpoint (`POST /api/copilot`) remains as fallback.
 - **Admin Panel**: Provides system statistics, user management, and admin grant/revoke functionalities, accessible only to authenticated administrators.
 
 ## External Dependencies

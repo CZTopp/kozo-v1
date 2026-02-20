@@ -1975,6 +1975,73 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json({ success: true });
   });
 
+  app.post("/api/chatkit/session", async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const apiKey = process.env.OPENAI_API_KEY;
+      const workflowId = process.env.OPENAI_CHATKIT_WORKFLOW_ID;
+      if (!apiKey || !workflowId) {
+        return res.status(500).json({ message: "ChatKit not configured" });
+      }
+
+      const { modelId, cryptoProjectId, contextType } = req.body;
+
+      let contextMessage = "";
+      if (cryptoProjectId) {
+        const { gatherCryptoProjectContext } = await import("./copilot");
+        const ctx = await gatherCryptoProjectContext(cryptoProjectId, userId);
+        if (ctx) {
+          contextMessage = `The user is analyzing ${ctx.project.name} (${ctx.project.symbol}). Here is the project data:\n${JSON.stringify(ctx, null, 2)}`;
+        }
+      } else if (contextType === "crypto-dashboard") {
+        const { gatherCryptoDashboardContext } = await import("./copilot");
+        const ctx = await gatherCryptoDashboardContext(userId);
+        if (ctx) {
+          contextMessage = `The user is viewing their crypto watchlist (${ctx.totalTracked} projects, combined market cap $${(ctx.totalMarketCap / 1e9).toFixed(2)}B):\n${JSON.stringify(ctx, null, 2)}`;
+        }
+      } else if (modelId) {
+        const { gatherModelContext } = await import("./copilot");
+        const ctx = await gatherModelContext(modelId, userId);
+        if (ctx) {
+          contextMessage = `The user is analyzing ${ctx.company.name} (${ctx.company.ticker || "no ticker"}). Here is the financial model data:\n${JSON.stringify(ctx, null, 2)}`;
+        }
+      }
+
+      const sessionBody: Record<string, any> = {
+        workflow: { id: workflowId },
+        user: userId,
+      };
+
+      if (contextMessage) {
+        sessionBody.context = { messages: [{ role: "user", content: contextMessage }] };
+      }
+
+      const response = await fetch("https://api.openai.com/v1/chatkit/sessions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+          "OpenAI-Beta": "chatkit_beta=v1",
+        },
+        body: JSON.stringify(sessionBody),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        console.error("ChatKit session error:", err);
+        return res.status(response.status).json({ message: err.error?.message || "Failed to create ChatKit session" });
+      }
+
+      const session = await response.json();
+      res.json({ client_secret: session.client_secret });
+    } catch (err: any) {
+      console.error("ChatKit session error:", err);
+      res.status(500).json({ message: err.message || "Failed to create session" });
+    }
+  });
+
   app.post("/api/copilot", async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user?.claims?.sub as string;

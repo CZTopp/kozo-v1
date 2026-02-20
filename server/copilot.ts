@@ -115,7 +115,7 @@ export async function gatherModelContext(modelId: string, userId: string) {
   };
 }
 
-async function gatherCryptoProjectContext(projectId: string, userId: string) {
+export async function gatherCryptoProjectContext(projectId: string, userId: string) {
   const project = await storage.getCryptoProject(projectId, userId);
   if (!project) return null;
 
@@ -198,7 +198,7 @@ async function gatherCryptoProjectContext(projectId: string, userId: string) {
   };
 }
 
-async function gatherCryptoDashboardContext(userId: string) {
+export async function gatherCryptoDashboardContext(userId: string) {
   const projects = await storage.getCryptoProjects(userId);
   if (!projects || projects.length === 0) return null;
 
