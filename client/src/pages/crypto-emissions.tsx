@@ -458,17 +458,35 @@ function CompareEmissionTab({
     const refData = top7.reduce((best, m) => m.data.months.length > best.data.months.length ? m : best, top7[0]);
     const limit = Math.min(monthLimit, refData.data.months.length);
 
+    const getBaseline = (m: TokenMetrics) => {
+      const d = m.data;
+      if (unlockMode === "total") {
+        return d.totalSupplyTimeSeries[0] || 0;
+      }
+      let sum = 0;
+      for (const a of d.allocations) {
+        if (a.monthlyValues.length === 0) continue;
+        const isCliff = a.vestingType === "cliff" || (a.cliffMonths > 0 && a.vestingType !== "linear");
+        const isLinear = a.vestingType === "linear" || a.vestingMonths > 0;
+        if ((unlockMode === "cliff" && isCliff) || (unlockMode === "linear" && isLinear)) {
+          sum += a.monthlyValues[0] || 0;
+        }
+      }
+      return sum;
+    };
+
     const getRow = (month: string, i: number, fraction: number) => {
       const row: Record<string, any> = { month };
       for (const m of top7) {
         const d = m.data;
         const supply = percentOf === "circulating" ? (d.token.circulatingSupply || 1) : (d.token.totalSupply || 1);
+        const baseline = getBaseline(m);
 
         if (unlockMode === "total") {
           const total = d.totalSupplyTimeSeries[i] || 0;
-          const prev = i > 0 ? (d.totalSupplyTimeSeries[i - 1] || 0) : 0;
+          const prev = i > 0 ? (d.totalSupplyTimeSeries[i - 1] || 0) : baseline;
           const value = fraction < 1 ? prev + (total - prev) * fraction : total;
-          row[d.token.symbol] = (value / supply) * 100;
+          row[d.token.symbol] = ((value - baseline) / supply) * 100;
         } else {
           let sum = 0;
           for (const a of d.allocations) {
@@ -477,26 +495,33 @@ function CompareEmissionTab({
             const isLinear = a.vestingType === "linear" || a.vestingMonths > 0;
             if ((unlockMode === "cliff" && isCliff) || (unlockMode === "linear" && isLinear)) {
               const val = a.monthlyValues[i] || 0;
-              const prevVal = i > 0 ? (a.monthlyValues[i - 1] || 0) : 0;
+              const prevVal = i > 0 ? (a.monthlyValues[i - 1] || 0) : (a.monthlyValues[0] || 0);
               sum += fraction < 1 ? prevVal + (val - prevVal) * fraction : val;
             }
           }
-          row[d.token.symbol] = (sum / supply) * 100;
+          row[d.token.symbol] = ((sum - baseline) / supply) * 100;
         }
       }
       return row;
     };
 
+    const startRow: Record<string, any> = { month: "Now" };
+    for (const m of top7) startRow[m.data.token.symbol] = 0;
+
     if (timeframe === "7d") {
-      const days = [1, 2, 3, 4, 5, 6, 7];
-      return days.map((day) => {
-        const fraction = day / 30;
-        const label = `Day ${day}`;
-        return getRow(label, 1, fraction);
-      });
+      const rows: Record<string, any>[] = [startRow];
+      for (let day = 1; day <= 7; day++) {
+        rows.push(getRow(`Day ${day}`, 1, day / 30));
+      }
+      return rows;
     }
 
-    return refData.data.months.slice(0, limit).map((month, i) => getRow(month, i, 1));
+    const rows: Record<string, any>[] = [startRow];
+    for (let i = 1; i <= limit; i++) {
+      if (i >= refData.data.months.length) break;
+      rows.push(getRow(refData.data.months[i], i, 1));
+    }
+    return rows;
   }, [top7, monthLimit, percentOf, unlockMode, timeframe]);
 
   if (allData.length === 0) return <EmptyState icon={TrendingUp} message="Add tokens above to compare emission schedules" />;
@@ -581,7 +606,7 @@ function CompareEmissionTab({
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">
-                {unlockMode === "total" ? "Total" : unlockMode === "cliff" ? "Cliff" : "Linear"} Supply Projection (% of {percentOf} supply)
+                {unlockMode === "total" ? "Total" : unlockMode === "cliff" ? "Cliff" : "Linear"} New Emissions (% of {percentOf === "circulating" ? "cir." : "total"} supply)
               </CardTitle>
               <Badge variant="outline"><Clock className="h-3 w-3 mr-1" />{TIMEFRAME_LABELS[timeframe]}</Badge>
             </div>
@@ -594,7 +619,7 @@ function CompareEmissionTab({
                   <XAxis
                     dataKey="month" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
                     tickFormatter={(v: string) => {
-                      if (v.startsWith("Day")) return v;
+                      if (v === "Now" || v.startsWith("Day")) return v;
                       if (timeframe === "1m") return v;
                       const parts = v.split("-");
                       return parts[1] === "01" || parts[1] === "07" ? v : "";
@@ -602,12 +627,12 @@ function CompareEmissionTab({
                   />
                   <YAxis
                     tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
-                    tickFormatter={(v) => `${v.toFixed(0)}%`}
+                    tickFormatter={(v) => `${v.toFixed(2)}%`}
                   />
                   <Tooltip
                     contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
-                    formatter={(value: number, name: string) => [`${value.toFixed(2)}%`, name]}
-                    labelFormatter={(l) => timeframe === "7d" ? l : `Month: ${l}`}
+                    formatter={(value: number, name: string) => [`${value.toFixed(4)}%`, name]}
+                    labelFormatter={(l) => l === "Now" ? "Now" : timeframe === "7d" ? l : `Month: ${l}`}
                   />
                   <Legend />
                   {top7.map((m, i) => (
