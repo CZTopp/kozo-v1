@@ -603,38 +603,35 @@ function CompareEmissionTab({
             <span>{unlockMode === "total" ? "Total" : unlockMode === "cliff" ? "Cliff" : "Linear"} Unlock Ranking</span>
             <span className="text-[10px]">{TIMEFRAME_LABELS[timeframe]} window</span>
           </div>
-          <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-2 px-1 text-[10px] text-muted-foreground mb-1">
+          <div className="grid grid-cols-[24px_20px_1fr_72px_56px] gap-x-2 items-center px-2 text-[10px] text-muted-foreground mb-1">
+            <span></span>
             <span></span>
             <span>Project</span>
             <span className="text-right">Unlock Value</span>
-            <span className="text-right">% Cir. Supply</span>
+            <span className="text-right">% Cir.</span>
           </div>
           {metrics.map((m, i) => {
             return (
               <div
                 key={m.data.token.coingeckoId}
-                className="flex items-center gap-2 p-2 rounded-md bg-muted/20 hover:bg-muted/30 transition-colors"
+                className="grid grid-cols-[24px_20px_1fr_72px_56px] gap-x-2 items-center p-2 rounded-md bg-muted/20 hover:bg-muted/30 transition-colors"
                 data-testid={`list-compare-item-${i}`}
               >
-                <div className="w-5 text-center text-xs text-muted-foreground font-mono">{i + 1}</div>
-                {m.data.token.image && <img src={m.data.token.image} alt="" className="h-5 w-5 rounded-full shrink-0" />}
-                <div className="flex-1 min-w-0">
+                <div className="text-center text-xs text-muted-foreground font-mono">{i + 1}</div>
+                <div className="flex items-center justify-center">
+                  {m.data.token.image ? <img src={m.data.token.image} alt="" className="h-5 w-5 rounded-full" /> : <div className="h-5 w-5" />}
+                </div>
+                <div className="min-w-0">
                   <div className="text-xs font-medium truncate">{m.data.token.symbol}</div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{ width: `${Math.min(m.tfPctCirc * 10, 100)}%`, backgroundColor: TOKEN_COLORS[i % TOKEN_COLORS.length] }}
-                      />
-                    </div>
+                  <div className="mt-0.5 h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${Math.min(m.tfPctCirc * 10, 100)}%`, backgroundColor: TOKEN_COLORS[i % TOKEN_COLORS.length] }}
+                    />
                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <div className="text-xs font-medium">{formatCompact(m.tfValue)}</div>
-                </div>
-                <div className="text-right shrink-0 w-14">
-                  <div className="text-xs font-medium">{m.tfPctCirc.toFixed(2)}%</div>
-                </div>
+                <div className="text-right text-xs font-medium">{formatCompact(m.tfValue)}</div>
+                <div className="text-right text-xs font-medium">{m.tfPctCirc.toFixed(2)}%</div>
               </div>
             );
           })}
