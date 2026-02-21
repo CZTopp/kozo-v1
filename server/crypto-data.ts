@@ -734,6 +734,7 @@ export function mapCuratedToAllocations(data: TokenAllocationData, projectId: st
 interface AIAllocationResult {
   allocations: AllocationEntry[];
   totalSupply: number | null;
+  tgeDate: string | null;
   confidence: "high" | "medium" | "low";
   notes: string;
 }
@@ -843,7 +844,7 @@ Return a JSON object with this exact structure:
 {
   "allocations": [
     {
-      "category": "Category Name (e.g. Team, Investors, Community)",
+      "category": "Category Name",
       "standardGroup": "one of: team, investors, public, treasury, community",
       "percentage": 20.0,
       "vestingMonths": 48 or null,
@@ -855,6 +856,7 @@ Return a JSON object with this exact structure:
     }
   ],
   "totalSupply": 1000000000 or null,
+  "tgeDate": "YYYY-MM-DD or null if unknown",
   "confidence": "high if well-documented major token, medium if publicly known but less documented, low if uncertain",
   "notes": "Brief note about data quality and any caveats"
 }
@@ -863,8 +865,10 @@ Rules:
 - Percentages MUST sum to exactly 100%
 - If reference source content is provided above, extract allocation data directly from it -- this is the most reliable data
 - Otherwise, use data from the project's whitepaper, documentation, ICO/token sale details, and public announcements
-- Include vesting schedules if known (vestingMonths = total vesting duration, cliffMonths = initial lockup before any tokens release)
+- Use the ACTUAL allocation category names from the project's documentation (e.g. "Ecosystem Growth & Rewards", "Marketing & Development", "Contributors & Advisors", "Strategic Sale", "Liquidity Mining"). Do NOT use generic names -- use the real names the project published.
+- Include vesting schedules if known (vestingMonths = total vesting duration AFTER the cliff ends, cliffMonths = initial lockup before any tokens release)
 - tgePercent = percentage of that allocation released at Token Generation Event (launch)
+- tgeDate = the date when the token was first launched/generated (Token Generation Event). This is critical for accurate vesting schedule calculations. Use YYYY-MM-DD format. If unknown, set to null.
 - standardGroup must be one of: team, investors, public, treasury, community
 - If you don't have reliable data for this token, set confidence to "low" and provide your best estimate based on similar projects
 - For references, include specific URLs when known (whitepaper, blog posts, official docs)

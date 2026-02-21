@@ -187,6 +187,57 @@ export async function getTokenEmissions(coingeckoId: string): Promise<EmissionsD
   return result;
 }
 
+function calibrateBySupply(
+  totalCumulativeSupply: number[],
+  circulatingSupply: number,
+): number {
+  if (circulatingSupply <= 0 || totalCumulativeSupply.length === 0) return -1;
+
+  if (circulatingSupply <= totalCumulativeSupply[0]) return -1;
+
+  const lastVal = totalCumulativeSupply[totalCumulativeSupply.length - 1];
+  if (circulatingSupply >= lastVal) return totalCumulativeSupply.length - 1;
+
+  for (let i = 0; i < totalCumulativeSupply.length - 1; i++) {
+    const cur = totalCumulativeSupply[i];
+    const next = totalCumulativeSupply[i + 1];
+    if (circulatingSupply >= cur && circulatingSupply <= next) {
+      if (next === cur) return i;
+      const frac = (circulatingSupply - cur) / (next - cur);
+      return frac >= 0.5 ? i + 1 : i;
+    }
+  }
+
+  return -1;
+}
+
+function calibrateByDate(marketData: any, aiResult: any): { tgeDate: Date; monthsElapsed: number } | null {
+  let tgeDate: Date | null = null;
+
+  if (aiResult.tgeDate) {
+    const parsed = new Date(aiResult.tgeDate);
+    if (!isNaN(parsed.getTime())) {
+      tgeDate = parsed;
+    }
+  }
+
+  if (!tgeDate) {
+    const athDate = marketData.ath_date ? new Date(marketData.ath_date) : null;
+    if (athDate && !isNaN(athDate.getTime())) {
+      tgeDate = athDate;
+    }
+  }
+
+  if (!tgeDate) return null;
+
+  const now = new Date();
+  tgeDate.setDate(1);
+  if (tgeDate > now) return null;
+
+  const monthsElapsed = (now.getFullYear() - tgeDate.getFullYear()) * 12 + (now.getMonth() - tgeDate.getMonth());
+  return { tgeDate, monthsElapsed: Math.max(0, monthsElapsed) };
+}
+
 function buildEmissionsResult(
   coingeckoId: string,
   tokenName: string,
@@ -196,24 +247,43 @@ function buildEmissionsResult(
   marketData: any,
   aiResult: any
 ): EmissionsData {
-  const MONTHS = 60;
+  const SCHEDULE_MONTHS = 120;
+  const OUTPUT_MONTHS = 60;
   const now = new Date();
-  const tgeGuess = new Date(marketData.ath_date || now);
-  tgeGuess.setDate(1);
-  if (tgeGuess > now) tgeGuess.setFullYear(now.getFullYear() - 2);
-
-  const timeSeriesMonths: string[] = [];
-  for (let m = 0; m < MONTHS; m++) {
-    const d = new Date(tgeGuess);
-    d.setMonth(d.getMonth() + m);
-    timeSeriesMonths.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
-  }
 
   const inputs: AllocationInput[] = aiResult.allocations.map((a: any) =>
     toAllocationInput(a, totalSupply)
   );
 
-  const project = aggregateProjectEmissions(inputs, MONTHS);
+  const project = aggregateProjectEmissions(inputs, SCHEDULE_MONTHS);
+
+  let scheduleNowIdx = calibrateBySupply(project.totalCumulativeSupply, circulatingSupply);
+
+  let anchorMonth: Date;
+
+  if (scheduleNowIdx >= 0) {
+    anchorMonth = new Date(now.getFullYear(), now.getMonth() - scheduleNowIdx, 1);
+  } else {
+    const dateCalibration = calibrateByDate(marketData, aiResult);
+    if (dateCalibration && dateCalibration.monthsElapsed > 0) {
+      scheduleNowIdx = Math.min(dateCalibration.monthsElapsed, SCHEDULE_MONTHS - 1);
+      anchorMonth = new Date(dateCalibration.tgeDate);
+    } else {
+      scheduleNowIdx = 0;
+      anchorMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+  }
+
+  const endIdx = Math.min(scheduleNowIdx + OUTPUT_MONTHS, SCHEDULE_MONTHS);
+  const startIdx = Math.max(0, endIdx - OUTPUT_MONTHS);
+  const sliceLen = endIdx - startIdx;
+
+  const timeSeriesMonths: string[] = [];
+  for (let m = 0; m < sliceLen; m++) {
+    const d = new Date(anchorMonth);
+    d.setMonth(d.getMonth() + startIdx + m);
+    timeSeriesMonths.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
 
   const allocations: EmissionAllocation[] = project.allocations.map((s) => ({
     category: s.category,
@@ -224,14 +294,19 @@ function buildEmissionsResult(
     cliffMonths: s.cliffMonths,
     vestingMonths: s.vestingMonths,
     tgePercent: s.tgePercent,
-    monthlyValues: s.cumulativeSupply,
+    monthlyValues: s.cumulativeSupply.slice(startIdx, endIdx),
   }));
 
-  const cliffEvents = project.cliffEvents.map((e) => ({
-    month: timeSeriesMonths[e.monthIndex] || "",
-    label: e.label,
-    amount: e.amount,
-  }));
+  const cliffEvents = project.cliffEvents
+    .filter((e) => e.monthIndex >= startIdx && e.monthIndex < endIdx)
+    .map((e) => ({
+      month: timeSeriesMonths[e.monthIndex - startIdx] || "",
+      label: e.label,
+      amount: e.amount,
+    }));
+
+  const totalSupplySlice = project.totalCumulativeSupply.slice(startIdx, endIdx);
+  const inflationSlice = project.monthlyInflationRate.slice(startIdx, endIdx);
 
   return {
     token: {
@@ -248,8 +323,8 @@ function buildEmissionsResult(
     },
     months: timeSeriesMonths,
     allocations,
-    totalSupplyTimeSeries: project.totalCumulativeSupply,
-    inflationRate: project.monthlyInflationRate,
+    totalSupplyTimeSeries: totalSupplySlice,
+    inflationRate: inflationSlice,
     cliffEvents,
     confidence: aiResult.confidence,
     notes: aiResult.notes,
