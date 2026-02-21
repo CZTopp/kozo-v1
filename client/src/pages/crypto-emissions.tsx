@@ -412,6 +412,35 @@ function timeframeToMonths(tf: TimeframeOption): number {
   }
 }
 
+function findNowIndex(months: string[]): number {
+  if (months.length === 0) return -1;
+  const now = new Date();
+  const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  if (nowKey < months[0]) return -1;
+  const idx = months.indexOf(nowKey);
+  if (idx >= 0) return idx;
+  for (let i = 0; i < months.length; i++) {
+    if (months[i] > nowKey) return i - 1;
+  }
+  return months.length - 1;
+}
+
+function getBaselineValue(arr: number[], nowIdx: number): number {
+  if (nowIdx < 0) return 0;
+  return nowIdx < arr.length ? arr[nowIdx] : (arr[arr.length - 1] || 0);
+}
+
+function getValueAt(arr: number[], idx: number): number {
+  if (idx < 0) return 0;
+  return idx < arr.length ? arr[idx] : (arr[arr.length - 1] || 0);
+}
+
+function formatDayLabel(daysFromNow: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromNow);
+  return d.toLocaleDateString("en-US", { day: "numeric", month: "short" });
+}
+
 const TIMEFRAME_LABELS: Record<TimeframeOption, string> = {
   "7d": "+7D",
   "1m": "+1M",
@@ -447,37 +476,38 @@ function CompareEmissionTab({
       const base = computeTokenMetrics(d);
       const circSupply = d.token.circulatingSupply || 1;
       const price = d.token.currentPrice || 0;
-
-      const endIdx = timeframe === "7d" ? 1 : monthLimit;
+      const nowIdx = findNowIndex(d.months);
+      const endOffset = timeframe === "7d" ? 1 : monthLimit;
+      const endIdx = nowIdx + endOffset;
       const fraction = timeframe === "7d" ? 7 / 30 : 1;
 
       let tfUnlockTokens = 0;
       let tfCliffTokens = 0;
       let tfLinearTokens = 0;
 
-      if (unlockMode === "total" || unlockMode === "cliff" || unlockMode === "linear") {
-        for (const a of d.allocations) {
-          const baseline = a.monthlyValues[0] || 0;
-          const endVal = endIdx < a.monthlyValues.length ? a.monthlyValues[endIdx] : (a.monthlyValues[a.monthlyValues.length - 1] || 0);
-          const prevVal = endIdx > 1 && (endIdx - 1) < a.monthlyValues.length ? a.monthlyValues[endIdx - 1] : baseline;
-          const fullDelta = endVal - baseline;
-          const lastMonthDelta = endVal - prevVal;
-          const delta = fraction < 1 ? (fullDelta - lastMonthDelta) + lastMonthDelta * fraction : fullDelta;
+      for (const a of d.allocations) {
+        const baseline = getBaselineValue(a.monthlyValues, nowIdx);
+        const endVal = getValueAt(a.monthlyValues, endIdx);
+        const prevVal = getValueAt(a.monthlyValues, endIdx - 1);
+        const fullDelta = endVal - baseline;
+        const lastMonthDelta = endVal - prevVal;
+        const delta = fraction < 1 ? (fullDelta - lastMonthDelta) + lastMonthDelta * fraction : fullDelta;
 
-          const isCliff = a.vestingType === "cliff" || (a.cliffMonths > 0 && a.vestingType !== "linear");
-          const isLinear = a.vestingType === "linear" || a.vestingMonths > 0;
+        if (delta <= 0) continue;
 
-          if (isCliff) tfCliffTokens += delta;
-          if (isLinear) tfLinearTokens += delta;
-          tfUnlockTokens += delta;
-        }
+        const isCliff = a.vestingType === "cliff" || (a.cliffMonths > 0 && a.vestingType !== "linear");
+        const isLinear = a.vestingType === "linear" || a.vestingMonths > 0;
+
+        if (isCliff) tfCliffTokens += delta;
+        if (isLinear) tfLinearTokens += delta;
+        tfUnlockTokens += delta;
       }
 
       const tfTokens = unlockMode === "cliff" ? tfCliffTokens : unlockMode === "linear" ? tfLinearTokens : tfUnlockTokens;
       const tfPctCirc = (tfTokens / circSupply) * 100;
       const tfValue = tfTokens * price;
 
-      return { ...base, tfPctCirc, tfValue, tfTokens };
+      return { ...base, tfPctCirc, tfValue, tfTokens, nowIdx };
     })
     .sort((a, b) => b.tfPctCirc - a.tfPctCirc);
   }, [allData, unlockMode, timeframe, monthLimit]);
@@ -486,71 +516,63 @@ function CompareEmissionTab({
 
   const chartData = useMemo(() => {
     if (top7.length === 0) return [];
-    const refData = top7.reduce((best, m) => m.data.months.length > best.data.months.length ? m : best, top7[0]);
-    const limit = Math.min(monthLimit, refData.data.months.length);
 
-    const getBaseline = (m: TokenMetrics) => {
+    const getValueAtIndex = (m: typeof top7[0], absIdx: number, fraction: number) => {
       const d = m.data;
+      const nIdx = m.nowIdx;
+      const supply = percentOf === "circulating" ? (d.token.circulatingSupply || 1) : (d.token.totalSupply || 1);
+
       if (unlockMode === "total") {
-        return d.totalSupplyTimeSeries[0] || 0;
+        const baseline = getBaselineValue(d.totalSupplyTimeSeries, nIdx);
+        const total = getValueAt(d.totalSupplyTimeSeries, absIdx);
+        const prev = getValueAt(d.totalSupplyTimeSeries, absIdx - 1);
+        const value = fraction < 1 ? prev + (total - prev) * fraction : total;
+        return Math.max(0, ((value - baseline) / supply) * 100);
       }
-      let sum = 0;
+
+      let delta = 0;
       for (const a of d.allocations) {
-        if (a.monthlyValues.length === 0) continue;
         const isCliff = a.vestingType === "cliff" || (a.cliffMonths > 0 && a.vestingType !== "linear");
         const isLinear = a.vestingType === "linear" || a.vestingMonths > 0;
-        if ((unlockMode === "cliff" && isCliff) || (unlockMode === "linear" && isLinear)) {
-          sum += a.monthlyValues[0] || 0;
-        }
+        if (!((unlockMode === "cliff" && isCliff) || (unlockMode === "linear" && isLinear))) continue;
+
+        const baseline = getBaselineValue(a.monthlyValues, nIdx);
+        const val = getValueAt(a.monthlyValues, absIdx);
+        const prevVal = getValueAt(a.monthlyValues, absIdx - 1);
+        const interpolated = fraction < 1 ? prevVal + (val - prevVal) * fraction : val;
+        delta += Math.max(0, interpolated - baseline);
       }
-      return sum;
+      return (delta / supply) * 100;
     };
 
-    const getRow = (month: string, i: number, fraction: number) => {
-      const row: Record<string, any> = { month };
-      for (const m of top7) {
-        const d = m.data;
-        const supply = percentOf === "circulating" ? (d.token.circulatingSupply || 1) : (d.token.totalSupply || 1);
-        const baseline = getBaseline(m);
-
-        if (unlockMode === "total") {
-          const total = d.totalSupplyTimeSeries[i] || 0;
-          const prev = i > 0 ? (d.totalSupplyTimeSeries[i - 1] || 0) : baseline;
-          const value = fraction < 1 ? prev + (total - prev) * fraction : total;
-          row[d.token.symbol] = ((value - baseline) / supply) * 100;
-        } else {
-          let sum = 0;
-          for (const a of d.allocations) {
-            if (i >= a.monthlyValues.length) continue;
-            const isCliff = a.vestingType === "cliff" || (a.cliffMonths > 0 && a.vestingType !== "linear");
-            const isLinear = a.vestingType === "linear" || a.vestingMonths > 0;
-            if ((unlockMode === "cliff" && isCliff) || (unlockMode === "linear" && isLinear)) {
-              const val = a.monthlyValues[i] || 0;
-              const prevVal = i > 0 ? (a.monthlyValues[i - 1] || 0) : (a.monthlyValues[0] || 0);
-              sum += fraction < 1 ? prevVal + (val - prevVal) * fraction : val;
-            }
-          }
-          row[d.token.symbol] = ((sum - baseline) / supply) * 100;
-        }
-      }
-      return row;
-    };
-
-    const startRow: Record<string, any> = { month: "Now" };
+    const startRow: Record<string, any> = { month: "Today" };
     for (const m of top7) startRow[m.data.token.symbol] = 0;
 
     if (timeframe === "7d") {
       const rows: Record<string, any>[] = [startRow];
       for (let day = 1; day <= 7; day++) {
-        rows.push(getRow(`Day ${day}`, 1, day / 30));
+        const row: Record<string, any> = { month: formatDayLabel(day) };
+        for (const m of top7) {
+          row[m.data.token.symbol] = getValueAtIndex(m, m.nowIdx + 1, day / 30);
+        }
+        rows.push(row);
       }
       return rows;
     }
 
     const rows: Record<string, any>[] = [startRow];
-    for (let i = 1; i <= limit; i++) {
-      if (i >= refData.data.months.length) break;
-      rows.push(getRow(refData.data.months[i], i, 1));
+    for (let offset = 1; offset <= monthLimit; offset++) {
+      const row: Record<string, any> = {};
+      let hasLabel = false;
+      for (const m of top7) {
+        const absIdx = m.nowIdx + offset;
+        if (!hasLabel) {
+          row.month = absIdx < m.data.months.length ? m.data.months[absIdx] : `+${offset}m`;
+          hasLabel = true;
+        }
+        row[m.data.token.symbol] = getValueAtIndex(m, absIdx, 1);
+      }
+      rows.push(row);
     }
     return rows;
   }, [top7, monthLimit, percentOf, unlockMode, timeframe]);
@@ -654,10 +676,13 @@ function CompareEmissionTab({
                   <XAxis
                     dataKey="month" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))"
                     tickFormatter={(v: string) => {
-                      if (v === "Now" || v.startsWith("Day")) return v;
-                      if (timeframe === "1m") return v;
+                      if (v === "Today") return v;
+                      if (timeframe === "7d" || timeframe === "1m") return v;
                       const parts = v.split("-");
-                      return parts[1] === "01" || parts[1] === "07" ? v : "";
+                      if (parts.length === 2) {
+                        return parts[1] === "01" || parts[1] === "07" ? v : "";
+                      }
+                      return v;
                     }}
                   />
                   <YAxis
@@ -667,7 +692,7 @@ function CompareEmissionTab({
                   <Tooltip
                     contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
                     formatter={(value: number, name: string) => [`${value.toFixed(4)}%`, name]}
-                    labelFormatter={(l) => l === "Now" ? "Now" : timeframe === "7d" ? l : `Month: ${l}`}
+                    labelFormatter={(l) => l === "Today" ? "Today" : l}
                   />
                   <Legend />
                   {top7.map((m, i) => (
