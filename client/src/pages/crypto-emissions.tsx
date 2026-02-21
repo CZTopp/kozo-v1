@@ -443,13 +443,44 @@ function CompareEmissionTab({
   const monthLimit = timeframeToMonths(timeframe);
 
   const metrics = useMemo(() => {
-    return allData.map(computeTokenMetrics)
-      .sort((a, b) => {
-        if (unlockMode === "cliff") return b.cliffUnlockPct - a.cliffUnlockPct;
-        if (unlockMode === "linear") return b.linearUnlockPct - a.linearUnlockPct;
-        return b.totalUnlockPct - a.totalUnlockPct;
-      });
-  }, [allData, unlockMode]);
+    return allData.map((d) => {
+      const base = computeTokenMetrics(d);
+      const circSupply = d.token.circulatingSupply || 1;
+      const price = d.token.currentPrice || 0;
+
+      const endIdx = timeframe === "7d" ? 1 : monthLimit;
+      const fraction = timeframe === "7d" ? 7 / 30 : 1;
+
+      let tfUnlockTokens = 0;
+      let tfCliffTokens = 0;
+      let tfLinearTokens = 0;
+
+      if (unlockMode === "total" || unlockMode === "cliff" || unlockMode === "linear") {
+        for (const a of d.allocations) {
+          const baseline = a.monthlyValues[0] || 0;
+          const endVal = endIdx < a.monthlyValues.length ? a.monthlyValues[endIdx] : (a.monthlyValues[a.monthlyValues.length - 1] || 0);
+          const prevVal = endIdx > 1 && (endIdx - 1) < a.monthlyValues.length ? a.monthlyValues[endIdx - 1] : baseline;
+          const fullDelta = endVal - baseline;
+          const lastMonthDelta = endVal - prevVal;
+          const delta = fraction < 1 ? (fullDelta - lastMonthDelta) + lastMonthDelta * fraction : fullDelta;
+
+          const isCliff = a.vestingType === "cliff" || (a.cliffMonths > 0 && a.vestingType !== "linear");
+          const isLinear = a.vestingType === "linear" || a.vestingMonths > 0;
+
+          if (isCliff) tfCliffTokens += delta;
+          if (isLinear) tfLinearTokens += delta;
+          tfUnlockTokens += delta;
+        }
+      }
+
+      const tfTokens = unlockMode === "cliff" ? tfCliffTokens : unlockMode === "linear" ? tfLinearTokens : tfUnlockTokens;
+      const tfPctCirc = (tfTokens / circSupply) * 100;
+      const tfValue = tfTokens * price;
+
+      return { ...base, tfPctCirc, tfValue, tfTokens };
+    })
+    .sort((a, b) => b.tfPctCirc - a.tfPctCirc);
+  }, [allData, unlockMode, timeframe, monthLimit]);
 
   const top7 = metrics.slice(0, 7);
 
@@ -568,11 +599,17 @@ function CompareEmissionTab({
 
       <div className="flex gap-4">
         <div className="w-[340px] shrink-0 space-y-1 max-h-[480px] overflow-auto pr-1">
-          <div className="text-xs font-medium text-muted-foreground mb-2 px-1">
-            {unlockMode === "total" ? "Total" : unlockMode === "cliff" ? "Cliff" : "Linear"} Unlock Ranking
+          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground mb-2 px-1">
+            <span>{unlockMode === "total" ? "Total" : unlockMode === "cliff" ? "Cliff" : "Linear"} Unlock Ranking</span>
+            <span className="text-[10px]">{TIMEFRAME_LABELS[timeframe]} window</span>
+          </div>
+          <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-2 px-1 text-[10px] text-muted-foreground mb-1">
+            <span></span>
+            <span>Project</span>
+            <span className="text-right">Unlock Value</span>
+            <span className="text-right">% Cir. Supply</span>
           </div>
           {metrics.map((m, i) => {
-            const pct = unlockMode === "cliff" ? m.cliffUnlockPct : unlockMode === "linear" ? m.linearUnlockPct : m.totalUnlockPct;
             return (
               <div
                 key={m.data.token.coingeckoId}
@@ -582,20 +619,21 @@ function CompareEmissionTab({
                 <div className="w-5 text-center text-xs text-muted-foreground font-mono">{i + 1}</div>
                 {m.data.token.image && <img src={m.data.token.image} alt="" className="h-5 w-5 rounded-full shrink-0" />}
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium truncate">{m.data.token.name}</div>
+                  <div className="text-xs font-medium truncate">{m.data.token.symbol}</div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
                       <div
                         className="h-full rounded-full transition-all"
-                        style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: TOKEN_COLORS[i % TOKEN_COLORS.length] }}
+                        style={{ width: `${Math.min(m.tfPctCirc * 10, 100)}%`, backgroundColor: TOKEN_COLORS[i % TOKEN_COLORS.length] }}
                       />
                     </div>
-                    <span className="text-[10px] text-muted-foreground w-10 text-right">{pct.toFixed(1)}%</span>
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="text-xs font-medium">{formatCompact(m.unlockValue)}</div>
-                  <div className="text-[10px] text-muted-foreground">{m.circulationPct.toFixed(0)}% circ</div>
+                  <div className="text-xs font-medium">{formatCompact(m.tfValue)}</div>
+                </div>
+                <div className="text-right shrink-0 w-14">
+                  <div className="text-xs font-medium">{m.tfPctCirc.toFixed(2)}%</div>
                 </div>
               </div>
             );
