@@ -520,7 +520,7 @@ export const emissionsCache = pgTable("emissions_cache", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const insertEmissionsCacheSchema = createInsertSchema(emissionsCache).omit({ id: true, updatedAt: true });
+export const insertEmissionsCacheSchema = createInsertSchema(emissionsCache).omit({ id: true });
 
 export const aiResearchCache = pgTable("ai_research_cache", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),

@@ -1,154 +1,182 @@
-import { Switch, Route } from "wouter";
-import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
-import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { CopilotPanel, CopilotTrigger, CopilotProvider } from "@/components/copilot-panel";
-import { ModelProvider } from "@/lib/model-context";
-import { useAuth } from "@/hooks/use-auth";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { LogOut, Loader2, CreditCard, Zap, ChevronDown } from "lucide-react";
+import { Switch, Route } from 'wouter'
+import { queryClient } from './lib/queryClient'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { Toaster } from '@/components/ui/toaster'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
+import { AppSidebar } from '@/components/app-sidebar'
+import { ThemeProvider } from '@/components/theme-provider'
+import { ThemeToggle } from '@/components/theme-toggle'
+import {
+  CopilotPanel,
+  CopilotTrigger,
+  CopilotProvider,
+} from '@/components/copilot-panel'
+import { ModelProvider } from '@/lib/model-context'
+import { useAuth } from '@/hooks/use-auth'
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import { LogOut, Loader2, CreditCard, Zap, ChevronDown } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Link } from "wouter";
-import NotFound from "@/pages/not-found";
-import Dashboard from "@/pages/dashboard";
-import RevenueForecast from "@/pages/revenue-forecast";
-import IncomeStatement from "@/pages/income-statement";
-import BalanceSheet from "@/pages/balance-sheet";
-import CashFlow from "@/pages/cash-flow";
-import DCFValuation from "@/pages/dcf-valuation";
-import ValuationComparison from "@/pages/valuation-comparison";
-import Portfolio from "@/pages/portfolio";
-import MarketDataPage from "@/pages/market-data";
-import AnalysisGuide from "@/pages/analysis-guide";
-import CompanyChart from "@/pages/company-chart";
-import CryptoDashboard from "@/pages/crypto-dashboard";
-import CryptoTokenomics from "@/pages/crypto-tokenomics";
-import CryptoFinancials from "@/pages/crypto-financials";
-import CryptoValuation from "@/pages/crypto-valuation";
-import CryptoRevenueForecast from "@/pages/crypto-revenue-forecast";
-import CryptoTokenFlows from "@/pages/crypto-token-flows";
-import CryptoSettings from "@/pages/crypto-settings";
-import CryptoEmissions from "@/pages/crypto-emissions";
-import AdminPage from "@/pages/admin";
-import PricingPage from "@/pages/pricing";
-import SubscriptionPage from "@/pages/subscription";
-import Landing from "@/pages/landing";
+} from '@/components/ui/dropdown-menu'
+import { Link } from 'wouter'
+import NotFound from '@/pages/not-found'
+import Dashboard from '@/pages/dashboard'
+import RevenueForecast from '@/pages/revenue-forecast'
+import IncomeStatement from '@/pages/income-statement'
+import BalanceSheet from '@/pages/balance-sheet'
+import CashFlow from '@/pages/cash-flow'
+import DCFValuation from '@/pages/dcf-valuation'
+import ValuationComparison from '@/pages/valuation-comparison'
+import Portfolio from '@/pages/portfolio'
+import MarketDataPage from '@/pages/market-data'
+import AnalysisGuide from '@/pages/analysis-guide'
+import CompanyChart from '@/pages/company-chart'
+import CryptoDashboard from '@/pages/crypto-dashboard'
+import CryptoTokenomics from '@/pages/crypto-tokenomics'
+import CryptoFinancials from '@/pages/crypto-financials'
+import CryptoValuation from '@/pages/crypto-valuation'
+import CryptoRevenueForecast from '@/pages/crypto-revenue-forecast'
+import CryptoTokenFlows from '@/pages/crypto-token-flows'
+import CryptoSettings from '@/pages/crypto-settings'
+import CryptoEmissions from '@/pages/crypto-emissions'
+import AdminPage from '@/pages/admin'
+import PricingPage from '@/pages/pricing'
+import SubscriptionPage from '@/pages/subscription'
+import Landing from '@/pages/landing'
+import { ThirdwebProvider } from 'thirdweb/react'
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/revenue" component={RevenueForecast} />
-      <Route path="/income-statement" component={IncomeStatement} />
-      <Route path="/balance-sheet" component={BalanceSheet} />
-      <Route path="/cash-flow" component={CashFlow} />
-      <Route path="/dcf" component={DCFValuation} />
-      <Route path="/valuation" component={ValuationComparison} />
-      <Route path="/portfolio" component={Portfolio} />
-      <Route path="/market-data" component={MarketDataPage} />
-      <Route path="/chart" component={CompanyChart} />
-      <Route path="/guide" component={AnalysisGuide} />
-      <Route path="/crypto" component={CryptoDashboard} />
-      <Route path="/crypto/tokenomics/:id" component={CryptoTokenomics} />
-      <Route path="/crypto/financials/:id" component={CryptoFinancials} />
-      <Route path="/crypto/valuation/:id" component={CryptoValuation} />
-      <Route path="/crypto/revenue/:id" component={CryptoRevenueForecast} />
-      <Route path="/crypto/token-flows/:id" component={CryptoTokenFlows} />
-      <Route path="/crypto/settings/:id" component={CryptoSettings} />
-      <Route path="/crypto/emissions" component={CryptoEmissions} />
-      <Route path="/admin" component={AdminPage} />
-      <Route path="/pricing" component={PricingPage} />
-      <Route path="/subscription" component={SubscriptionPage} />
+      <Route path='/' component={Dashboard} />
+      <Route path='/revenue' component={RevenueForecast} />
+      <Route path='/income-statement' component={IncomeStatement} />
+      <Route path='/balance-sheet' component={BalanceSheet} />
+      <Route path='/cash-flow' component={CashFlow} />
+      <Route path='/dcf' component={DCFValuation} />
+      <Route path='/valuation' component={ValuationComparison} />
+      <Route path='/portfolio' component={Portfolio} />
+      <Route path='/market-data' component={MarketDataPage} />
+      <Route path='/chart' component={CompanyChart} />
+      <Route path='/guide' component={AnalysisGuide} />
+      <Route path='/crypto' component={CryptoDashboard} />
+      <Route path='/crypto/tokenomics/:id' component={CryptoTokenomics} />
+      <Route path='/crypto/financials/:id' component={CryptoFinancials} />
+      <Route path='/crypto/valuation/:id' component={CryptoValuation} />
+      <Route path='/crypto/revenue/:id' component={CryptoRevenueForecast} />
+      <Route path='/crypto/token-flows/:id' component={CryptoTokenFlows} />
+      <Route path='/crypto/settings/:id' component={CryptoSettings} />
+      <Route path='/crypto/emissions' component={CryptoEmissions} />
+      <Route path='/admin' component={AdminPage} />
+      <Route path='/pricing' component={PricingPage} />
+      <Route path='/subscription' component={SubscriptionPage} />
       <Route component={NotFound} />
     </Switch>
-  );
+  )
 }
 
 function AuthenticatedApp() {
-  const { user } = useAuth();
+  const { user } = useAuth()
 
   const style = {
-    "--sidebar-width": "16rem",
-    "--sidebar-width-icon": "3rem",
-    "--copilot-width": "22rem",
-  };
+    '--sidebar-width': '16rem',
+    '--sidebar-width-icon': '3rem',
+    '--copilot-width': '22rem',
+  }
 
-  const initials = [user?.firstName, user?.lastName]
-    .filter(Boolean)
-    .map((n) => n?.[0])
-    .join("")
-    .toUpperCase() || "U";
+  const initials =
+    [user?.firstName, user?.lastName]
+      .filter(Boolean)
+      .map((n) => n?.[0])
+      .join('')
+      .toUpperCase() || 'U'
 
-  const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.email || "User";
+  const displayName =
+    [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
+    user?.email ||
+    'User'
+
+  const { logout, isLoggingOut } = useAuth()
 
   return (
     <ModelProvider>
       <CopilotProvider>
         <SidebarProvider style={style as React.CSSProperties}>
-          <div className="flex h-screen w-full">
+          <div className='flex h-screen w-full'>
             <AppSidebar />
-            <div className="flex flex-col flex-1 min-w-0">
-              <header className="flex items-center justify-between gap-2 p-2 border-b sticky top-0 z-50 bg-background">
-                <SidebarTrigger data-testid="button-sidebar-toggle" />
-                <div className="flex items-center gap-2">
+            <div className='flex flex-col flex-1 min-w-0'>
+              <header className='flex items-center justify-between gap-2 p-2 border-b sticky top-0 z-50 bg-background'>
+                <SidebarTrigger data-testid='button-sidebar-toggle' />
+                <div className='flex items-center gap-2'>
                   <CopilotTrigger />
                   <ThemeToggle />
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
-                        variant="ghost"
-                        className="flex items-center gap-2 pl-2 border-l"
-                        data-testid="button-user-profile"
+                        variant='ghost'
+                        className='flex items-center gap-2 pl-2 border-l'
+                        data-testid='button-user-profile'
                       >
-                        <Avatar className="h-7 w-7">
-                          <AvatarImage src={user?.profileImageUrl || undefined} alt={displayName} />
-                          <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                        <Avatar className='h-7 w-7'>
+                          <AvatarImage
+                            src={user?.profileImageUrl || undefined}
+                            alt={displayName}
+                          />
+                          <AvatarFallback className='text-xs'>
+                            {initials}
+                          </AvatarFallback>
                         </Avatar>
-                        <span className="text-sm text-muted-foreground hidden sm:inline" data-testid="text-user-name">
+                        <span
+                          className='text-sm text-muted-foreground hidden sm:inline'
+                          data-testid='text-user-name'
+                        >
                           {displayName}
                         </span>
-                        <ChevronDown className="h-3 w-3 text-muted-foreground hidden sm:inline" />
+                        <ChevronDown className='h-3 w-3 text-muted-foreground hidden sm:inline' />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuContent align='end' className='w-48'>
                       <DropdownMenuItem asChild>
-                        <Link href="/subscription" className="flex items-center gap-2 cursor-pointer" data-testid="link-dropdown-subscription">
-                          <CreditCard className="h-4 w-4" />
+                        <Link
+                          href='/subscription'
+                          className='flex items-center gap-2 cursor-pointer'
+                          data-testid='link-dropdown-subscription'
+                        >
+                          <CreditCard className='h-4 w-4' />
                           <span>Subscription</span>
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
-                        <Link href="/pricing" className="flex items-center gap-2 cursor-pointer" data-testid="link-dropdown-pricing">
-                          <Zap className="h-4 w-4" />
+                        <Link
+                          href='/pricing'
+                          className='flex items-center gap-2 cursor-pointer'
+                          data-testid='link-dropdown-pricing'
+                        >
+                          <Zap className='h-4 w-4' />
                           <span>Pricing</span>
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        onClick={() => { window.location.href = "/api/logout"; }}
-                        className="flex items-center gap-2 cursor-pointer text-destructive focus:text-destructive"
-                        data-testid="button-logout"
+                        onClick={() => logout()}
+                        disabled={isLoggingOut}
+                        className='flex items-center gap-2 cursor-pointer text-destructive focus:text-destructive'
+                        data-testid='button-logout'
                       >
-                        <LogOut className="h-4 w-4" />
+                        <LogOut className='h-4 w-4' />
                         <span>Log Out</span>
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
               </header>
-              <main className="flex-1 overflow-auto">
+              <main className='flex-1 overflow-auto'>
                 <Router />
               </main>
             </div>
@@ -157,38 +185,40 @@ function AuthenticatedApp() {
         </SidebarProvider>
       </CopilotProvider>
     </ModelProvider>
-  );
+  )
 }
 
 function AppContent() {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated } = useAuth()
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className='flex items-center justify-center h-screen bg-background'>
+        <Loader2 className='h-8 w-8 animate-spin text-muted-foreground' />
       </div>
-    );
+    )
   }
 
   if (!isAuthenticated) {
-    return <Landing />;
+    return <Landing />
   }
 
-  return <AuthenticatedApp />;
+  return <AuthenticatedApp />
 }
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <TooltipProvider>
-          <AppContent />
-          <Toaster />
-        </TooltipProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
-  );
+    <ThirdwebProvider>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <TooltipProvider>
+            <AppContent />
+            <Toaster />
+          </TooltipProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ThirdwebProvider>
+  )
 }
 
-export default App;
+export default App
